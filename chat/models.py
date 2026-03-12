@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from users.models import Client
 
 class ChatSession(models.Model):
     TREND_CHOICES = [
@@ -17,6 +18,7 @@ class ChatSession(models.Model):
     ]
 
     session_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_index=True)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='sessions', null=True, blank=True)
     visitor_id = models.CharField(max_length=255, db_index=True)
 
     current_intent_ema = models.FloatField(default=0.0)

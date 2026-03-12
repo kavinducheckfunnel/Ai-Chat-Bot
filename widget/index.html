@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,36 +12,43 @@
             padding: 0;
             background: #f4f7f6;
             color: #333;
-            height: 2000px; /* Simulate long page to test scroll depth tracking */
+            height: 2000px;
+            /* Simulate long page to test scroll depth tracking */
         }
+
         .header {
             background: linear-gradient(135deg, #1e3c72, #2a5298);
             color: white;
             padding: 60px 20px;
             text-align: center;
         }
+
         .header h1 {
             margin: 0;
             font-size: 42px;
             font-weight: 700;
             margin-bottom: 10px;
         }
+
         .header p {
             font-size: 18px;
             opacity: 0.9;
         }
+
         .content {
             max-width: 900px;
             margin: 40px auto;
             padding: 0 20px;
             text-align: center;
         }
+
         .btn-group {
             display: flex;
             gap: 20px;
             justify-content: center;
             margin-top: 50px;
         }
+
         .btn {
             background: #ffffff;
             color: #1e3c72;
@@ -53,19 +61,22 @@
             transition: all 0.3s ease;
             text-decoration: none;
         }
+
         .btn:hover {
             background: #1e3c72;
             color: white;
         }
+
         .card {
             background: white;
             padding: 30px;
             border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
             margin-top: 40px;
         }
     </style>
 </head>
+
 <body>
 
     <div class="header">
@@ -76,23 +87,29 @@
     <div class="content">
         <div class="card">
             <h2>Track User Intent in Real-Time</h2>
-            <p>Scroll down this page to simulate a "High-Intent" reader, or hover over the buttons below. These actions are silently captured by the tracker script and sent to the Django backend to influence the AI's 3-EMA scores.</p>
-            
+            <p>Scroll down this page to simulate a "High-Intent" reader, or hover over the buttons below. These actions
+                are silently captured by the tracker script and sent to the Django backend to influence the AI's 3-EMA
+                scores.</p>
+
             <div class="btn-group">
                 <button class="btn" id="features-btn">Explore Features</button>
                 <button class="btn" id="pricing-btn">View Pricing structure</button>
                 <button class="btn" id="demo-btn">Book an Enterprise Demo</button>
             </div>
         </div>
-        
+
         <div style="margin-top: 100px;">
             <h3>Scroll Tracker Activation Zone</h3>
             <p>Reading past this point triggers the scrollDepth metric to exceed 50%, altering the Behavior Matrix.</p>
         </div>
     </div>
 
-    <!-- Inject Chat Widget Scripts -->
-    <script src="src/tracker.js"></script>
-    <script src="src/widget.js"></script>
+    <!-- Vue Mounting Point -->
+    <div id="app"></div>
+
+    <!-- Inject Chat Widget Scripts (Vue Vite Dist) -->
+    <script type="module" crossorigin src="../widget-vue/dist/assets/index.js"></script>
+    <link rel="stylesheet" crossorigin href="../widget-vue/dist/assets/index.css">
 </body>
+
 </html>

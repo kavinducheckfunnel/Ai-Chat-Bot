@@ -7,6 +7,7 @@ from .ai_service import generate_ai_response
 class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.session_id = self.scope['url_route']['kwargs'].get('session_id')
+        self.client_id = self.scope['url_route']['kwargs'].get('client_id')
         self.room_group_name = f'chat_{self.session_id}'
 
         await self.channel_layer.group_add(
@@ -27,7 +28,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         message = data.get('message')
         behavior_matrix = data.get('behavior_matrix', {})
         
-        session = await self.get_session(self.session_id)
+        session = await self.get_session(self.client_id, self.session_id)
         
         # Generates AI response synchronously in a database_sync_to_async thread
         ai_response = await database_sync_to_async(generate_ai_response)(
@@ -41,6 +42,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     @database_sync_to_async
-    def get_session(self, session_id):
-        session, _ = ChatSession.objects.get_or_create(session_id=session_id)
+    def get_session(self, client_id, session_id):
+        from users.models import Client
+        try:
+            client = Client.objects.get(id=client_id)
+        except (Client.DoesNotExist, ValueError):
+            client = None
+            
+        session, _ = ChatSession.objects.get_or_create(
+            session_id=session_id,
+            defaults={'client': client}
+        )
         return session

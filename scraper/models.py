@@ -1,8 +1,10 @@
 from django.db import models
 from pgvector.django import VectorField
+from users.models import Client
 
 class DocumentChunk(models.Model):
     id = models.BigAutoField(primary_key=True)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='documents', null=True, blank=True)
     content = models.TextField()
     embedding = VectorField(dimensions=1536)
     source_url = models.URLField(max_length=1000)
