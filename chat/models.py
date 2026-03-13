@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from users.models import Client
 
+
 class ChatSession(models.Model):
     TREND_CHOICES = [
         ('UP', 'Up'),
@@ -34,10 +35,24 @@ class ChatSession(models.Model):
     urgency_trend = models.CharField(max_length=10, choices=TREND_CHOICES, default='FLAT')
 
     conversation_state = models.CharField(max_length=20, choices=STATE_CHOICES, default='RESEARCH')
-    
+
     message_count = models.IntegerField(default=0)
     chat_history = models.JSONField(default=list)
     behavioral_context = models.JSONField(default=dict)
+
+    # ── Heat score (derived from EMA scores) ──────────────────────────────
+    heat_score = models.FloatField(default=0.0)
+
+    # ── God View / Human Takeover ─────────────────────────────────────────
+    taken_over_by = models.ForeignKey(
+        'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='taken_sessions'
+    )
+    takeover_active = models.BooleanField(default=False)
+
+    # ── Engagement triggers ───────────────────────────────────────────────
+    closing_triggered = models.BooleanField(default=False)
+    last_nudge_at = models.DateTimeField(null=True, blank=True)
+    nudge_count = models.IntegerField(default=0)
 
     lead_email = models.EmailField(null=True, blank=True)
     lead_phone = models.CharField(max_length=50, null=True, blank=True)
