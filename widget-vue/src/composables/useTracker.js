@@ -1,7 +1,7 @@
-import { reactive, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
 
 export function useTracker() {
-    const sessionId = crypto.randomUUID();
+    const sessionId = ref(crypto.randomUUID());
     const events = [];
 
     const behaviorMatrix = reactive({
@@ -70,7 +70,7 @@ export function useTracker() {
         const host = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? '127.0.0.1:8000' : window.location.host;
         const url = `http://${host}/api/analytics/beacon/`;
         const payload = JSON.stringify({
-            sessionId,
+            sessionId: sessionId.value,
             behaviorMatrix,
             events
         });

@@ -44,13 +44,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def get_session(self, client_id, session_id):
         from users.models import Client
+        from django.core.exceptions import ValidationError
         try:
             client = Client.objects.get(id=client_id)
-        except (Client.DoesNotExist, ValueError):
+        except (Client.DoesNotExist, ValueError, ValidationError):
             client = None
             
-        session, _ = ChatSession.objects.get_or_create(
-            session_id=session_id,
-            defaults={'client': client}
-        )
-        return session
+        import uuid
+        try:
+            # Ensure session_id is a valid UUID
+            if isinstance(session_id, str):
+                try:
+                    uuid.UUID(session_id)
+                except ValueError:
+                    return None
+            
+            session, _ = ChatSession.objects.get_or_create(
+                session_id=session_id,
+                defaults={'client': client}
+            )
+            return session
+        except (ValidationError, ValueError):
+            return None

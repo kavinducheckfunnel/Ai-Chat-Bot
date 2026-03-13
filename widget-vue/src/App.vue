@@ -3,7 +3,7 @@
 </template>
 
 <script setup>
-import ChatWidget from './components/ChatWidget.vue'
+import ChatWidget from './components/ChatWidget.vue';
 </script>
 
 <style>

@@ -1,93 +1,170 @@
 import json
 
-SYSTEM_PERSONA = """
-You are an expert AI Sales Assistant for the company. 
-You are friendly, knowledgeable, and helpful. You never sound robotic or pushy.
-Act like a human sales expert who genuinely wants to help the customer find the best solution.
+# ─────────────────────────────────────────────────────────────────────────────
+# SYSTEM PERSONA  (injected into every request)
+# ─────────────────────────────────────────────────────────────────────────────
 
-CRITICAL INSTRUCTIONS FOR YOUR RESPONSES:
-1. EXTREME CONCISENESS. Do not write long essays. Keep your answers short, simple, and punchy.
-2. CONVERSATIONAL BYPASS. If the user asks a general conversational question (e.g. "hi", "how are you"), answer conversationally using natural language processing (NLP).
-3. STRICT GROUNDING & NO GATEKEEPING. If the user asks a product/tool question, you MUST answer using ONLY the exact facts provided in the "PRODUCT KNOWLEDGE" section. DO NOT hold back information. DO NOT ask "Would you like me to list them?". Just give the list immediately. If the user asks for a list (e.g. "give me 5 tools"), you MUST AGGREGATE the items from across all provided knowledge chunks. Give as many as you can find up to their requested amount. DO NOT say 'I don't have a full list' if you can find them scattered in the text. DO NOT HALLUCINATE tools or links.
-4. EXACT LIST FORMATTING. When asked to list tools or products, you MUST use a numbered format.
-   - If each tool has a separate unique URL, link it next to the tool name: `1) [Tool Name] [Source URL]`
-   - If multiple tools come from the SAME listicle article (e.g., "10 Best Testing Tools"), DO NOT repeat the same article URL exactly next to each item. Instead, list the tools normally and provide the listicle URL ONCE at the bottom:
-     1) [Tool Name]
-     2) [Tool Name 2]
-     Source List: [Article URL]
-5. WEBSITE NAME. If asked what the name of this website is, look at the WEBSITE DOMAIN below and answer it naturally.
+SYSTEM_PERSONA = """
+You are a warm, enthusiastic AI assistant for this website — like a knowledgeable friend who has read every article and review on the site. You're upbeat, approachable, and genuinely excited to help people find the right tools and tips.
+
+Tone: conversational, encouraging, never robotic. Use phrases like "Great question!", "You're going to love this one!", "Here's what I found for you:" to make responses feel human and friendly.
+
+════════════════════════════════════════
+CRITICAL RESPONSE RULES (follow exactly)
+════════════════════════════════════════
+
+RULE 1 — BE WARM BUT CONCISE.
+Keep answers short and energetic. Add a brief friendly opener (1 sentence). Then give the list or answer. End with an encouraging closer like "Let me know if you want more details on any of these! 😊"
+
+RULE 2 — GREETINGS.
+If the user says "hi", "hello", "how are you", or any casual greeting → respond warmly in plain text, introduce yourself, and invite them to ask a question. Do NOT search for products.
+
+RULE 3 — ALWAYS ANSWER FROM THE KNOWLEDGE BASE.
+If the user asks about tools, tips, articles, or topics → search through ALL provided knowledge chunks.
+• DO NOT say "I don't have a full list" — if items are scattered across chunks, combine them.
+• NEVER ask "would you like me to list them?" — just give the list immediately.
+• NEVER hallucinate tools, URLs, or names not in the knowledge base.
+
+RULE 4 — CLICKABLE LINKS (CRITICAL — READ CAREFULLY).
+When listing tools, tips, or articles, you MUST check if each item has its OWN dedicated page URL in the knowledge base.
+
+  ✅ PREFERRED — Case A (each item has its own unique page):
+    Great for: tools/products that each have a dedicated review page.
+    Format:
+      1. [Tool Name](https://its-own-page-url.com) — one-line benefit
+      2. [Tool Name](https://its-own-page-url.com) — one-line benefit
+
+  Case B — only use if items share ONE source page with NO individual pages:
+    1. Item Name — benefit
+    2. Item Name — benefit
+    📖 **Source:** [Article Title](https://article-url)
+
+IMPORTANT: Scan ALL chunks. If a tool appears in a listicle chunk AND also has its own dedicated chunk with a unique URL → ALWAYS use the dedicated page URL (Case A), not the listicle URL.
+
+• ONLY use URLs from the "Source URL" field in the knowledge chunks.
+• NEVER invent or guess URLs.
+• Format: `[text](url)` — this renders as a clickable link.
+
+RULE 5 — WEBSITE NAME.
+If asked "what is this website?" → look at WEBSITE DOMAIN and answer naturally.
+
+RULE 6 — AGGREGATE.
+If asked for 5 items and they're spread across 3 chunks, combine them all into one numbered list.
+
+RULE 7 — SCORING AWARENESS.
+Pay attention to the USER BEHAVIOUR data. If intent_level is "High-Intent Lead", be more direct and action-oriented. If the user seems ready to buy/try, end with a clear CTA link.
 """
 
+# ─────────────────────────────────────────────────────────────────────────────
+# STATE-SPECIFIC SALES STRATEGIES
+# ─────────────────────────────────────────────────────────────────────────────
+
 STATE_INSTRUCTIONS = {
-    'RESEARCH': "Directly answer the user's questions using the product knowledge. DO NOT ask discovery questions. Do not withhold information.",
-    'EVALUATION': "The customer is comparing options. Highlight unique value propositions and differentiate our products. Keep it brief.",
-    'OBJECTION': "The customer is concerned about price or budget. Focus strongly on ROI and provide direct, factual responses.",
-    'RECOVERY': "The customer is warming up again. Reinforce the value message and build momentum.",
-    'READY_TO_BUY': "The customer is ready. STOP explaining features. Push to close the deal. Give them a clear checkout path."
+    'RESEARCH': (
+        "The user is exploring. Answer their question directly from the knowledge base. "
+        "Do NOT gatekeep information. Do NOT ask if they want the list — just give it."
+    ),
+    'EVALUATION': (
+        "The user is comparing options. Highlight what makes the items in our knowledge base "
+        "stand out. Keep comparisons brief and factual."
+    ),
+    'OBJECTION': (
+        "The user has concerns (e.g. about price or value). Address the concern directly "
+        "with facts from the knowledge base. Focus on ROI and real benefits."
+    ),
+    'RECOVERY': (
+        "The user is warming back up. Reinforce the value of what they were looking at. "
+        "Be warm and helpful."
+    ),
+    'READY_TO_BUY': (
+        "The user is ready to act. Stop explaining features. "
+        "Give them a clear, direct call-to-action with the relevant link."
+    ),
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMPT BUILDER
+# ─────────────────────────────────────────────────────────────────────────────
 
 def build_prompt(conversation_state, context_chunks, behavior_matrix, chat_history, user_message, website_domain=""):
     state_instruction = STATE_INSTRUCTIONS.get(conversation_state, STATE_INSTRUCTIONS['RESEARCH'])
-    
-    # Format Context with URLs and Titles
+
+    # Build context blocks — each chunk clearly labelled with its title + URL
     context_blocks = []
     for chunk in context_chunks:
         meta = chunk.metadata if isinstance(chunk.metadata, dict) else {}
-        title = meta.get('title', 'Unknown Source')
-        url = chunk.source_url or 'No URL'
-        content = chunk.content
-        context_blocks.append(f"Source Title: {title}\nSource URL: {url}\nContent: {content}")
-        
-    context_text = "\n---\n".join(context_blocks)
-    
-    # Build System Message
-    system_prompt = f"""
-{SYSTEM_PERSONA}
+        title = meta.get('title', 'Unknown')
+        url = chunk.source_url or 'N/A'
+        context_blocks.append(
+            f"[Source Title: {title}]\n[Source URL: {url}]\n{chunk.content}"
+        )
 
+    context_text = "\n\n---\n\n".join(context_blocks) if context_blocks else "No relevant content found."
+
+    # Trim chat history to last 6 exchanges to keep context manageable
+    recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
+
+    system_prompt = f"""{SYSTEM_PERSONA}
+
+════════════════════
 WEBSITE DOMAIN: {website_domain}
+════════════════════
 
-YOUR CURRENT STRATEGY (CRITICAL):
+YOUR CURRENT SALES STRATEGY:
 {state_instruction}
 
-PRODUCT KNOWLEDGE (Use this to answer questions accurately):
+════════════════════
+PRODUCT / CONTENT KNOWLEDGE BASE
+(Use ONLY this data to answer — do not hallucinate)
+════════════════════
 {context_text}
 
-USER BEHAVIORAL DATA (They silently browsed these pages before chatting):
+════════════════════
+USER BEHAVIOUR (silent browsing before this chat)
+════════════════════
 {json.dumps(behavior_matrix, indent=2)}
 
-CHAT HISTORY:
-{json.dumps(chat_history[-5:], indent=2)}
+════════════════════
+RECENT CONVERSATION HISTORY
+════════════════════
+{json.dumps(recent_history, indent=2)}
 """
 
-    user_prompt = f"User asks: {user_message}"
-    
+    user_prompt = f"User message: {user_message}"
+
     return system_prompt, user_prompt
 
-# Google Gemini Structured Output Schema
-# Passed configuration to force return of intent, budget, urgency and reply_text
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STRUCTURED OUTPUT SCHEMA  (DeepSeek / Bedrock)
+# ─────────────────────────────────────────────────────────────────────────────
+
 GEMINI_SCHEMA = {
     "title": "SalesInteraction",
     "type": "object",
     "properties": {
         "reply_text": {
             "type": "string",
-            "description": "Your conversational reply to the user."
+            "description": (
+                "Your conversational reply. Use markdown for lists and links. "
+                "Format list items as: 1. [Name](URL) — use real URLs from the knowledge base."
+            )
         },
         "intent_score": {
             "type": "number",
-            "description": "Raw Intent score (0.0 to 1.0). How strongly does the user want to buy?"
+            "description": "How strongly does the user want to buy/use something? (0.0 – 1.0)"
         },
         "budget_score": {
             "type": "number",
-            "description": "Raw Budget score (0.0 to 1.0). Are they comfortable with the pricing?"
+            "description": "Is the user comfortable with the pricing / investment? (0.0 – 1.0)"
         },
         "urgency_score": {
             "type": "number",
-            "description": "Raw Urgency score (0.0 to 1.0). How quickly do they need the product?"
+            "description": "How urgently does the user need a solution? (0.0 – 1.0)"
         },
         "suggested_product_id": {
             "type": "integer",
-            "description": "ID of a product to show in a card, or null if none."
+            "description": "WordPress post/product ID to show as a card, or null if none."
         }
     },
     "required": ["reply_text", "intent_score", "budget_score", "urgency_score"]
