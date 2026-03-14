@@ -44,6 +44,8 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'corsheaders',
     'rest_framework',
+    'rest_framework_simplejwt',
+    'corsheaders',
     'channels',
     'chat',
     'scraper',
@@ -54,7 +56,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',       # Must be before CommonMiddleware
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -156,7 +158,9 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ── Django REST Framework ────────────────────────────────────────────────────
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -166,27 +170,25 @@ REST_FRAMEWORK = {
     ),
 }
 
-# ── Simple JWT ───────────────────────────────────────────────────────────────
 from datetime import timedelta
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': False,
-    'AUTH_HEADER_TYPES': ('Bearer',),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
-# ── Celery ───────────────────────────────────────────────────────────────────
+# ─── Celery ──────────────────────────────────────────────────────────────────
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
 
-# Celery Beat schedule — AFK nudge runs every 15 seconds
+# Beat schedule for periodic tasks
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
-    'afk-nudge-every-15s': {
-        'task': 'chat.tasks.send_afk_nudges',
-        'schedule': 15.0,  # seconds
+    'reset-monthly-sessions': {
+        'task': 'users.tasks.reset_monthly_sessions',
+        'schedule': crontab(day_of_month='1', hour='0', minute='0'),
     },
 }

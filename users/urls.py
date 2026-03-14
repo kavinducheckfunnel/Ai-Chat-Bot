@@ -1,35 +1,35 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from . import views
 from . import admin_views
+from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
-    # ── Auth ────────────────────────────────────────────────────────────────
-    path('auth/register/', views.register, name='auth-register'),
-    path('auth/login/', TokenObtainPairView.as_view(), name='auth-login'),
-    path('auth/refresh/', TokenRefreshView.as_view(), name='auth-refresh'),
-    path('auth/me/', views.me, name='auth-me'),
+    # Auth
+    path('auth/login/', admin_views.login_view, name='admin-login'),
+    path('auth/refresh/', TokenRefreshView.as_view(), name='admin-token-refresh'),
+    path('auth/me/', admin_views.me_view, name='admin-me'),
 
-    # ── Tenant management (SuperAdmin) ───────────────────────────────────────
-    path('superadmin/tenants/', views.list_tenants, name='tenant-list'),
-    path('superadmin/tenants/<int:user_id>/', views.tenant_detail, name='tenant-detail'),
-    path('superadmin/tenants/<int:user_id>/impersonate/', views.impersonate_tenant, name='tenant-impersonate'),
-    path('superadmin/tenants/<int:user_id>/assign-plan/', views.assign_plan, name='tenant-assign-plan'),
-    path('superadmin/stats/', views.platform_stats, name='platform-stats'),
+    # Plans
+    path('plans/', admin_views.plan_list, name='admin-plans'),
 
-    # ── Plans (SuperAdmin) ───────────────────────────────────────────────────
-    path('superadmin/plans/', views.plan_list, name='plan-list'),
-    path('superadmin/plans/<int:plan_id>/', views.plan_detail, name='plan-detail'),
+    # Clients
+    path('clients/', admin_views.client_list, name='admin-clients'),
+    path('clients/<uuid:client_id>/', admin_views.client_detail, name='admin-client-detail'),
+    path('clients/<uuid:client_id>/sessions/', admin_views.client_sessions, name='admin-client-sessions'),
+    path('clients/<uuid:client_id>/analytics/', admin_views.client_analytics, name='admin-client-analytics'),
+    path('clients/<uuid:client_id>/scrape/', admin_views.trigger_scrape, name='admin-client-scrape'),
 
-    # ── Client / chatbot site management ────────────────────────────────────
-    path('clients/', views.client_list, name='client-list'),
-    path('clients/<uuid:client_id>/', views.client_detail, name='client-detail'),
-    path('clients/<uuid:client_id>/sessions/', admin_views.client_sessions, name='admin_client_sessions'),
-    path('clients/<uuid:client_id>/analytics/', admin_views.client_analytics, name='admin_client_analytics'),
-    path('clients/<uuid:client_id>/config/', admin_views.get_public_config, name='admin_client_config_public'),
-    path('clients/<uuid:client_id>/scrape/', admin_views.trigger_scrape, name='admin_client_scrape'),
+    # Sessions (CRUD + God View)
+    path('sessions/<uuid:session_id>/', admin_views.session_detail, name='admin-session-detail'),
+    path('sessions/<uuid:session_id>/takeover/', admin_views.session_takeover, name='admin-session-takeover'),
+    path('sessions/<uuid:session_id>/release/', admin_views.session_release, name='admin-session-release'),
+    path('sessions/<uuid:session_id>/send/', admin_views.session_send_message, name='admin-session-send'),
 
-    # ── Session detail & global stats ───────────────────────────────────────
-    path('sessions/<uuid:session_id>/', admin_views.session_detail, name='admin_session_detail'),
-    path('stats/', admin_views.global_stats, name='admin_global_stats'),
+    # Platform
+    path('stats/', admin_views.platform_stats, name='admin-platform-stats'),
+    path('kanban/', admin_views.kanban_view, name='admin-kanban'),
+
+    # Tenant Management (superadmin only)
+    path('tenants/', admin_views.tenant_list, name='admin-tenants'),
+    path('tenants/<int:tenant_id>/', admin_views.tenant_detail, name='admin-tenant-detail'),
+    path('tenants/<int:tenant_id>/assign-plan/', admin_views.assign_plan, name='admin-assign-plan'),
 ]

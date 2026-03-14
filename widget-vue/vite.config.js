@@ -3,7 +3,20 @@ import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    {
+      name: 'admin-html-rewrite',
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          if (req.url.startsWith('/admin') && !req.url.includes('.')) {
+            req.url = '/admin.html'
+          }
+          next()
+        })
+      },
+    },
+  ],
   build: {
     rollupOptions: {
       input: {

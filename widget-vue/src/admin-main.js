@@ -1,39 +1,28 @@
-import { createApp } from 'vue'
-import { createRouter, createWebHistory } from 'vue-router'
-import AdminApp from './AdminApp.vue'
+import { createApp, defineComponent, h } from 'vue'
+import { createRouter, createWebHistory, RouterView } from 'vue-router'
 
-// ── Route definitions ─────────────────────────────────────────────────────
+import LoginView from './admin/LoginView.vue'
+import AdminLayout from './admin/AdminLayout.vue'
+import LiveDashboard from './admin/LiveDashboard.vue'
+import ClientList from './admin/ClientList.vue'
+import ClientDetail from './admin/ClientDetail.vue'
+import KanbanView from './admin/KanbanView.vue'
+import GodView from './admin/GodView.vue'
+import TenantManagement from './admin/TenantManagement.vue'
+
 const routes = [
-  {
-    path: '/admin/login',
-    name: 'Login',
-    component: () => import('./admin/LoginView.vue'),
-    meta: { public: true },
-  },
+  { path: '/admin/login', component: LoginView, meta: { public: true } },
   {
     path: '/admin',
-    name: 'Dashboard',
-    component: () => import('./admin/LiveDashboard.vue'),
-  },
-  {
-    path: '/admin/god-view/:sessionId',
-    name: 'GodView',
-    component: () => import('./admin/GodView.vue'),
-  },
-  {
-    path: '/admin/kanban',
-    name: 'Kanban',
-    component: () => import('./admin/LeadKanban.vue'),
-  },
-  {
-    path: '/admin/clients',
-    name: 'ClientList',
-    component: () => import('./admin/ClientList.vue'),
-  },
-  {
-    path: '/admin/clients/:id',
-    name: 'ClientDetail',
-    component: () => import('./admin/ClientDetail.vue'),
+    component: AdminLayout,
+    children: [
+      { path: '', component: LiveDashboard },
+      { path: 'clients', component: ClientList },
+      { path: 'clients/:id', component: ClientDetail },
+      { path: 'kanban', component: KanbanView },
+      { path: 'godview/:id', component: GodView },
+      { path: 'tenants', component: TenantManagement, meta: { superadminOnly: true } },
+    ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/admin' },
 ]
@@ -43,14 +32,22 @@ const router = createRouter({
   routes,
 })
 
-// ── Auth guard ────────────────────────────────────────────────────────────
 router.beforeEach((to) => {
   const token = localStorage.getItem('cf_access_token')
-  if (!to.meta.public && !token) {
-    return { name: 'Login' }
+  if (!to.meta.public && !token) return '/admin/login'
+
+  // Guard superadmin-only routes
+  if (to.meta.superadminOnly) {
+    try {
+      const user = JSON.parse(localStorage.getItem('cf_user') || 'null')
+      if (!user?.is_superuser && user?.role !== 'superadmin') return '/admin'
+    } catch {
+      return '/admin'
+    }
   }
 })
 
-const app = createApp(AdminApp)
+const Root = defineComponent({ render: () => h(RouterView) })
+const app = createApp(Root)
 app.use(router)
 app.mount('#cf-admin-root')

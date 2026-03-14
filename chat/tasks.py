@@ -1,80 +1,94 @@
 from celery import shared_task
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.utils import timezone
 from datetime import timedelta
 
 
-@shared_task
-def send_afk_nudges():
+@shared_task(bind=True, max_retries=1)
+def schedule_afk_nudge(self, session_id):
     """
-    Periodic task (runs every 15s via Celery Beat).
-    For each active session where:
-      - heat_score > 30
-      - no message in last 45 seconds
-      - last nudge was > 2 minutes ago (or never)
-      - takeover_active is False
-    → inject a proactive re-engagement message via WebSocket.
+    Fires 5 minutes after being scheduled.
+    If the visitor hasn't sent a message since the task was queued,
+    we inject an AFK nudge message into their WebSocket.
     """
     from chat.models import ChatSession
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
 
-    now = timezone.now()
-    afk_cutoff = now - timedelta(seconds=45)
-    nudge_cooldown = now - timedelta(minutes=2)
+    try:
+        session = ChatSession.objects.get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return
 
-    candidates = ChatSession.objects.filter(
-        heat_score__gt=30,
-        takeover_active=False,
-        updated_at__lt=afk_cutoff,
-        message_count__gt=0,
-    ).filter(
-        # last_nudge_at is None OR last nudge > 2 min ago
-        last_nudge_at__isnull=True
-    ) | ChatSession.objects.filter(
-        heat_score__gt=30,
-        takeover_active=False,
-        updated_at__lt=afk_cutoff,
-        message_count__gt=0,
-        last_nudge_at__lt=nudge_cooldown,
-    )
+    # Skip if already sent or if visitor has been active in last 4 min
+    if session.afk_nudge_sent or session.takeover_active:
+        return
 
+    cutoff = timezone.now() - timedelta(minutes=4)
+    if session.last_visitor_message_at and session.last_visitor_message_at > cutoff:
+        return  # Visitor is still active
+
+    # Build nudge message based on client config
+    client = session.client
+    nudge_message = "Still exploring? I can help you decide. What's holding you back?"
+    if client and client.cta_message:
+        nudge_message = client.cta_message
+    if client and client.discount_code and session.closing_triggered:
+        nudge_message = (
+            f"{client.cta_message or 'Ready to take the next step?'} "
+            f"Use code **{client.discount_code}** for an exclusive discount!"
+        )
+
+    # Append to chat history
+    history = session.chat_history or []
+    history.append({'role': 'ai', 'message': nudge_message, 'source': 'afk_nudge'})
+    session.chat_history = history
+    session.afk_nudge_sent = True
+    session.save(update_fields=['chat_history', 'afk_nudge_sent'])
+
+    # Push to visitor's WebSocket
+    channel_layer = get_channel_layer()
+    group_name = f'chat_{session_id}'
+    async_to_sync(channel_layer.group_send)(group_name, {
+        'type': 'chat_message',
+        'message': nudge_message,
+        'source': 'afk_nudge',
+    })
+
+
+@shared_task
+def trigger_fomo_for_hot_sessions():
+    """
+    Periodic task: find hot sessions (heat >= 75) that haven't triggered FOMO yet
+    and fire the closing CTA.
+    """
+    from chat.models import ChatSession
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    hot = ChatSession.objects.filter(heat_score__gte=75, closing_triggered=False)
     channel_layer = get_channel_layer()
 
-    for session in candidates[:20]:  # Safety limit
-        nudge_msg = _generate_nudge_message(session)
-
-        try:
-            async_to_sync(channel_layer.group_send)(
-                f"chat_{session.session_id}",
-                {
-                    'type': 'chat_message',
-                    'message': nudge_msg,
-                    'sender': 'ai',
-                    'is_nudge': True,
-                }
+    for session in hot:
+        client = session.client
+        fomo_text = None
+        if client and client.fomo_offer_text:
+            fomo_text = client.fomo_offer_text
+        elif client and client.discount_code:
+            fomo_text = (
+                f"Limited time offer! Use code **{client.discount_code}** "
+                f"before it expires."
             )
-            session.last_nudge_at = now
-            session.nudge_count += 1
-            session.save(update_fields=['last_nudge_at', 'nudge_count'])
-        except Exception as e:
-            print(f"[AFK Nudge] Error for session {session.session_id}: {e}")
 
+        if fomo_text:
+            history = session.chat_history or []
+            history.append({'role': 'ai', 'message': fomo_text, 'source': 'fomo'})
+            session.chat_history = history
+            session.closing_triggered = True
+            session.save(update_fields=['chat_history', 'closing_triggered'])
 
-def _generate_nudge_message(session):
-    """Pick a contextual nudge based on conversation state."""
-    state = session.conversation_state
-    last_topic = ''
-    if session.chat_history:
-        for msg in reversed(session.chat_history):
-            if msg.get('role') == 'user':
-                last_topic = msg.get('message', '')[:60]
-                break
-
-    nudges = {
-        'RESEARCH': f"Still looking for the right fit? I can help narrow it down! What matters most to you?",
-        'EVALUATION': "Any questions about what you were comparing? I'm here to help you decide!",
-        'OBJECTION': "I know it can be a tough call — want me to walk you through the key benefits again?",
-        'RECOVERY': "Still there? No pressure at all — I'm happy to help whenever you're ready.",
-        'READY_TO_BUY': "Ready to get started? I can walk you through the next steps right now!",
-    }
-    return nudges.get(state, "Hey, still there? Let me know if you have any questions!")
+            group_name = f'chat_{session.session_id}'
+            async_to_sync(channel_layer.group_send)(group_name, {
+                'type': 'chat_message',
+                'message': fomo_text,
+                'source': 'fomo',
+            })

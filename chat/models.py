@@ -1,5 +1,6 @@
 import uuid
 from django.db import models
+from django.contrib.auth.models import User
 from users.models import Client
 
 
@@ -16,6 +17,14 @@ class ChatSession(models.Model):
         ('OBJECTION', 'Objection Mode'),
         ('RECOVERY', 'Recovery Mode'),
         ('READY_TO_BUY', 'Ready to Buy')
+    ]
+
+    KANBAN_CHOICES = [
+        ('NEW', 'New'),
+        ('ENGAGED', 'Engaged'),
+        ('HOT_LEAD', 'Hot Lead'),
+        ('CONVERTED', 'Converted'),
+        ('LOST', 'Lost'),
     ]
 
     session_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_index=True)
@@ -35,6 +44,10 @@ class ChatSession(models.Model):
     urgency_trend = models.CharField(max_length=10, choices=TREND_CHOICES, default='FLAT')
 
     conversation_state = models.CharField(max_length=20, choices=STATE_CHOICES, default='RESEARCH')
+    kanban_state = models.CharField(max_length=20, choices=KANBAN_CHOICES, default='NEW')
+
+    # Persisted heat score (updated on every AI response)
+    heat_score = models.FloatField(default=0.0)
 
     message_count = models.IntegerField(default=0)
     chat_history = models.JSONField(default=list)
@@ -56,6 +69,18 @@ class ChatSession(models.Model):
 
     lead_email = models.EmailField(null=True, blank=True)
     lead_phone = models.CharField(max_length=50, null=True, blank=True)
+
+    # God View — admin takeover
+    takeover_active = models.BooleanField(default=False)
+    taken_over_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='takeover_sessions'
+    )
+
+    # Trigger flags
+    closing_triggered = models.BooleanField(default=False)
+    afk_nudge_sent = models.BooleanField(default=False)
+    last_visitor_message_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

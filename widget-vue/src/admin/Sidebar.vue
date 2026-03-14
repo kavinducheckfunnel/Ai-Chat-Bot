@@ -1,73 +1,209 @@
 <template>
-  <aside class="admin-sidebar">
-    <div class="sidebar-logo">
-      <span class="logo-icon">💠</span>
-      <span class="logo-text">Checkfunnel</span>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="url(#sg)"/>
+          <defs>
+            <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#A5B4FC"/>
+              <stop offset="100%" stop-color="#C4B5FD"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <span class="brand-name">Checkfunnel</span>
     </div>
-    <nav class="sidebar-nav">
-      <router-link to="/admin" class="nav-item" exact-active-class="active">
-        <span class="icon">📊</span> Dashboard
+
+    <nav class="nav">
+      <p class="nav-section">Main</p>
+
+      <router-link to="/admin" class="nav-item" :class="{ active: $route.path === '/admin' }">
+        <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+        Dashboard
       </router-link>
-      <router-link to="/admin/clients" class="nav-item" active-class="active">
-        <span class="icon">👥</span> Clients
+
+      <router-link to="/admin/kanban" class="nav-item" :class="{ active: $route.path === '/admin/kanban' }">
+        <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1" stroke="currentColor" stroke-width="2"/><rect x="10" y="3" width="5" height="12" rx="1" stroke="currentColor" stroke-width="2"/><rect x="17" y="3" width="5" height="15" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+        Kanban
       </router-link>
-      <router-link to="/" class="nav-item back-home">
-        <span class="icon">🏠</span> Back to Demo
+
+      <router-link to="/admin/clients" class="nav-item" :class="{ active: $route.path.startsWith('/admin/clients') }">
+        <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Clients
       </router-link>
+
+      <!-- Superadmin only -->
+      <template v-if="isSuperAdmin">
+        <p class="nav-section">Admin</p>
+        <router-link to="/admin/tenants" class="nav-item" :class="{ active: $route.path === '/admin/tenants' }">
+          <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Tenants
+        </router-link>
+      </template>
     </nav>
+
+    <div class="sidebar-bottom">
+      <div class="user-card">
+        <div class="avatar">{{ initials }}</div>
+        <div class="user-info">
+          <p class="user-name">{{ user?.username || 'Admin' }}</p>
+          <p class="user-role">{{ user?.role || 'admin' }}</p>
+        </div>
+      </div>
+      <button class="logout-btn" @click="logout" title="Logout">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
   </aside>
 </template>
 
+<script setup>
+import { computed } from 'vue'
+import { useAdminApi } from '../composables/useAdminApi'
+
+const api = useAdminApi()
+const user = computed(() => api.getUser())
+const initials = computed(() => {
+  const name = user.value?.username || 'A'
+  return name.slice(0, 2).toUpperCase()
+})
+const isSuperAdmin = computed(() => api.isSuperAdmin())
+
+function logout() {
+  api.logout()
+}
+</script>
+
 <style scoped>
-.admin-sidebar {
-  width: 260px;
-  background: white;
-  border-right: 1px solid #e2e8f0;
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: #0F172A;
   display: flex;
   flex-direction: column;
+  padding: 22px 14px;
+  border-right: 1px solid rgba(255,255,255,0.05);
 }
-.sidebar-logo {
-  padding: 32px 24px;
+
+.brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  padding: 0 8px;
+  margin-bottom: 28px;
 }
-.logo-icon {
-  font-size: 1.5rem;
+
+.brand-icon {
+  width: 34px; height: 34px;
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
 }
-.logo-text {
-  font-weight: 800;
-  font-size: 1.25rem;
-  letter-spacing: -0.025em;
-  color: #0f172a;
+
+.brand-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: #F1F5F9;
+  letter-spacing: -0.3px;
 }
-.sidebar-nav {
-  flex: 1;
-  padding: 0 16px;
+
+.nav { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+
+.nav-section {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #334155;
+  padding: 0 10px;
+  margin-bottom: 4px;
+  margin-top: 12px;
 }
+.nav-section:first-child { margin-top: 0; }
+
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  color: #64748b;
-  text-decoration: none;
+  gap: 9px;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 13px;
   font-weight: 500;
-  margin-bottom: 4px;
-  transition: all 0.2s;
+  color: #64748B;
+  text-decoration: none;
+  transition: all 0.15s;
 }
+
 .nav-item:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+  background: rgba(255,255,255,0.05);
+  color: #CBD5E1;
 }
+
 .nav-item.active {
-  background: #eff6ff;
-  color: #2563eb;
+  background: rgba(99,102,241,0.15);
+  color: #A5B4FC;
 }
-.back-home {
-  margin-top: 32px;
-  border-top: 1px solid #f1f5f9;
-  padding-top: 24px;
+
+.sidebar-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.user-card {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.avatar {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-info { min-width: 0; }
+
+.user-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #CBD5E1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 10px;
+  color: #475569;
+  text-transform: capitalize;
+}
+
+.logout-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 7px;
+  color: #475569;
+  display: flex; align-items: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.logout-btn:hover {
+  background: rgba(239,68,68,0.1);
+  color: #FCA5A5;
 }
 </style>

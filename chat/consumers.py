@@ -1,11 +1,15 @@
 import json
+from django.utils import timezone
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models import ChatSession
 from .ai_service import generate_ai_response
 
+ADMIN_GROUP = 'admin_dashboard'
+
 
 class ChatConsumer(AsyncWebsocketConsumer):
+
     async def connect(self):
         self.session_id = self.scope['url_route']['kwargs'].get('session_id')
         self.client_id = self.scope['url_route']['kwargs'].get('client_id')
@@ -20,60 +24,117 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     async def receive(self, text_data):
         data = json.loads(text_data)
+        message_type = data.get('type', 'message')
+
+        # Handle ping from widget
+        if message_type == 'ping':
+            await self.send(text_data=json.dumps({'type': 'pong'}))
+            return
+
         message = data.get('message')
         behavior_matrix = data.get('behavior_matrix', {})
 
         session = await self.get_session(self.client_id, self.session_id)
 
-        # ── Human takeover guard ──────────────────────────────────────────
-        # If an admin has taken over, hold the AI response. The admin injects
-        # replies manually via GodViewConsumer.receive().
-        takeover_active = await database_sync_to_async(
-            lambda: session.takeover_active if session else False
-        )()
-
-        if takeover_active:
-            # Acknowledge receipt to the visitor but do NOT call AI
+        # ── God View guard ────────────────────────────────────────────────
+        if session.takeover_active:
+            # AI is silenced; only admin can send messages via REST endpoint
             await self.send(text_data=json.dumps({
-                'type': 'ai_message',
-                'message': '...',   # Typing indicator keeps showing until admin sends
+                'type': 'takeover_active',
+                'message': 'An admin is currently handling this conversation.',
             }))
-            # Also notify admin group that visitor sent a message
-            await self.channel_layer.group_send(
-                f"admin_{self.session_id}",
-                {
-                    'type': 'chat_message',
-                    'message': message,
-                    'sender': 'user',
-                }
-            )
             return
 
-        # ── Normal AI response path ───────────────────────────────────────
+        # Update last visitor message time for AFK tracking
+        await self.update_visitor_timestamp(session)
+
+        # Generate AI response
         ai_response = await database_sync_to_async(generate_ai_response)(
             session, message, behavior_matrix
         )
 
-        # Push AI reply into the session's group so GodView also sees it
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'chat_message',
-                'message': ai_response.get('reply_text', ''),
-                'sender': 'ai',
-            }
+        # Send reply to visitor
+        await self.send(text_data=json.dumps({
+            'type': 'ai_message',
+            'message': ai_response.get('reply_text'),
+            'suggested_product_id': ai_response.get('suggested_product_id'),
+        }))
+
+        # ── Post-response: persist heat score + broadcast to admin ────────
+        await self.post_process(session)
+
+    async def post_process(self, session):
+        """Persist heat score, check CTA trigger, broadcast to admin dashboard."""
+        updated = await self.refresh_and_persist_heat(session)
+        if updated:
+            await self._broadcast_session_update(updated)
+            await self._check_cta_trigger(updated)
+
+    @database_sync_to_async
+    def refresh_and_persist_heat(self, session):
+        try:
+            s = ChatSession.objects.get(session_id=session.session_id)
+            score = (
+                s.current_intent_ema * 0.45 +
+                s.current_budget_ema * 0.30 +
+                s.current_urgency_ema * 0.25
+            ) * 100
+            s.heat_score = round(min(score, 100), 1)
+            s.save(update_fields=['heat_score'])
+            return s
+        except ChatSession.DoesNotExist:
+            return None
+
+    @database_sync_to_async
+    def update_visitor_timestamp(self, session):
+        ChatSession.objects.filter(session_id=session.session_id).update(
+            last_visitor_message_at=timezone.now()
         )
 
-    # ── Handler: receives messages from the group (from AI or admin inject)
+    async def _broadcast_session_update(self, session):
+        """Push session update to all connected admin dashboards."""
+        payload = {
+            'session_id': str(session.session_id),
+            'visitor_id': session.visitor_id,
+            'heat_score': session.heat_score,
+            'conversation_state': session.conversation_state,
+            'kanban_state': session.kanban_state,
+            'message_count': session.message_count,
+            'intent_ema': round(session.current_intent_ema, 3),
+            'budget_ema': round(session.current_budget_ema, 3),
+            'urgency_ema': round(session.current_urgency_ema, 3),
+            'lead_email': session.lead_email,
+            'takeover_active': session.takeover_active,
+            'client_id': str(session.client_id) if session.client_id else None,
+            'updated_at': session.updated_at.isoformat(),
+        }
+        await self.channel_layer.group_send(ADMIN_GROUP, {
+            'type': 'session_update',
+            'data': payload,
+        })
+
+    @database_sync_to_async
+    def _check_cta_trigger(self, session):
+        """Fire closing CTA when heat_score >= 75 and not already triggered."""
+        if session.heat_score >= 75 and not session.closing_triggered:
+            ChatSession.objects.filter(session_id=session.session_id).update(
+                closing_triggered=True
+            )
+            # Enqueue AFK nudge task if not already sent
+            from chat.tasks import schedule_afk_nudge
+            schedule_afk_nudge.apply_async(
+                args=[str(session.session_id)],
+                countdown=300,  # 5 min inactivity window
+            )
+
+    # ── Handler for admin-injected messages during takeover ──────────────
     async def chat_message(self, event):
-        sender = event.get('sender', 'ai')
-        if sender == 'ai':
-            await self.send(text_data=json.dumps({
-                'type': 'ai_message',
-                'message': event.get('message', ''),
-                'suggested_product_id': event.get('suggested_product_id'),
-                'admin_injected': event.get('admin_injected', False),
-            }))
+        """Relay admin message to visitor WebSocket."""
+        await self.send(text_data=json.dumps({
+            'type': 'ai_message',
+            'message': event['message'],
+            'source': event.get('source', 'ai'),
+        }))
 
     @database_sync_to_async
     def get_session(self, client_id, session_id):
@@ -86,17 +147,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except (Client.DoesNotExist, ValueError, ValidationError):
             client = None
 
-        try:
-            if isinstance(session_id, str):
-                try:
-                    uuid.UUID(session_id)
-                except ValueError:
-                    return None
-
-            session, _ = ChatSession.objects.get_or_create(
-                session_id=session_id,
-                defaults={'client': client, 'visitor_id': session_id}
-            )
-            return session
-        except (ValidationError, ValueError):
-            return None
+        session, _ = ChatSession.objects.get_or_create(
+            session_id=session_id,
+            defaults={'client': client}
+        )
+        return session
