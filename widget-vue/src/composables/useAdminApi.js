@@ -124,9 +124,11 @@ export function useAdminApi() {
 
     deleteTenant: (id) => apiFetch(`/api/admin/tenants/${id}/`, { method: 'DELETE' }),
 
-    assignPlan: (tenantId, planId) => apiFetch(`/api/admin/tenants/${tenantId}/assign-plan/`, {
-      method: 'POST', body: JSON.stringify({ plan_id: planId }),
+    assignPlan: (tenantId, planId, remarks = '') => apiFetch(`/api/admin/tenants/${tenantId}/assign-plan/`, {
+      method: 'POST', body: JSON.stringify({ plan_id: planId, remarks }),
     }),
+
+    getPlanHistory: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/plan-history/`),
 
     impersonateTenant: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/impersonate/`, { method: 'POST' }),
 

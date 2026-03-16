@@ -7,7 +7,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Avg, Count
 
-from .models import Client, UserProfile, TenantProfile, Plan
+from .models import Client, UserProfile, TenantProfile, Plan, PlanHistory
 from .serializers import ClientSerializer, ClientCreateSerializer, UserProfileSerializer
 from .permissions import IsSuperAdmin, get_accessible_clients
 from chat.models import ChatSession
@@ -397,6 +397,9 @@ def tenant_list(request):
                     {'id': str(c.id), 'name': c.name, 'domain_url': c.domain_url, 'chatbot_color': c.chatbot_color}
                     for c in assigned_clients
                 ],
+                'plan_max_sessions': t.plan.max_sessions_per_month if t.plan else None,
+                'plan_max_clients': t.plan.max_clients if t.plan else None,
+                'plan_price': str(t.plan.price_monthly) if t.plan else None,
             })
         return Response(data)
 
@@ -492,9 +495,9 @@ def tenant_detail(request, tenant_id):
 @api_view(['POST'])
 @permission_classes([IsSuperAdmin])
 def assign_plan(request, tenant_id):
-    """Assign a plan to a tenant."""
+    """Assign a plan to a tenant and log the change in PlanHistory."""
     try:
-        tenant = TenantProfile.objects.get(pk=tenant_id)
+        tenant = TenantProfile.objects.select_related('plan').get(pk=tenant_id)
     except TenantProfile.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
@@ -503,13 +506,52 @@ def assign_plan(request, tenant_id):
         return Response({'detail': 'plan_id is required.'}, status=400)
 
     try:
-        plan = Plan.objects.get(pk=plan_id)
+        new_plan = Plan.objects.get(pk=plan_id)
     except Plan.DoesNotExist:
         return Response({'detail': 'Plan not found.'}, status=400)
 
-    tenant.plan = plan
+    old_plan = tenant.plan
+    remarks = request.data.get('remarks', '').strip()
+
+    PlanHistory.objects.create(
+        tenant=tenant,
+        from_plan=old_plan,
+        to_plan=new_plan,
+        changed_by=request.user,
+        remarks=remarks,
+    )
+
+    tenant.plan = new_plan
     tenant.save(update_fields=['plan'])
-    return Response({'detail': f'Plan "{plan.name}" assigned.'})
+    return Response({
+        'detail': f'Plan "{new_plan.name}" assigned.',
+        'plan': new_plan.name,
+        'plan_id': new_plan.id,
+        'plan_max_sessions': new_plan.max_sessions_per_month,
+        'plan_max_clients': new_plan.max_clients,
+        'plan_price': str(new_plan.price_monthly),
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperAdmin])
+def plan_history(request, tenant_id):
+    """Return plan change history for a tenant."""
+    try:
+        tenant = TenantProfile.objects.get(pk=tenant_id)
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    history = PlanHistory.objects.filter(tenant=tenant).select_related('from_plan', 'to_plan', 'changed_by')
+    data = [{
+        'id': h.id,
+        'from_plan': h.from_plan.name if h.from_plan else None,
+        'to_plan': h.to_plan.name if h.to_plan else None,
+        'changed_by': h.changed_by.username if h.changed_by else 'system',
+        'remarks': h.remarks,
+        'changed_at': h.changed_at.isoformat(),
+    } for h in history]
+    return Response(data)
 
 
 @api_view(['GET'])
