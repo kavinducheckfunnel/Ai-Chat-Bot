@@ -1,4 +1,5 @@
 import json
+from django.db import models
 from django.utils import timezone
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -14,6 +15,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
         self.session_id = self.scope['url_route']['kwargs'].get('session_id')
         self.client_id = self.scope['url_route']['kwargs'].get('client_id')
         self.room_group_name = f'chat_{self.session_id}'
+
+        # ── Plan enforcement ─────────────────────────────────────────────
+        limit_hit, limit_msg = await self.check_plan_limit(self.client_id)
+        if limit_hit:
+            await self.accept()
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': limit_msg,
+            }))
+            await self.close(code=4029)
+            return
 
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
@@ -147,8 +159,50 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except (Client.DoesNotExist, ValueError, ValidationError):
             client = None
 
-        session, _ = ChatSession.objects.get_or_create(
+        session, created = ChatSession.objects.get_or_create(
             session_id=session_id,
             defaults={'client': client}
         )
+        # Increment monthly counter only on brand-new sessions
+        if created and client:
+            from users.models import TenantProfile
+            TenantProfile.objects.filter(clients=client).update(
+                sessions_this_month=models.F('sessions_this_month') + 1
+            )
         return session
+
+    @database_sync_to_async
+    def check_plan_limit(self, client_id):
+        """
+        Returns (limit_exceeded: bool, message: str).
+        Also fires a warning email when tenant hits 80% of their plan limit.
+        """
+        from users.models import Client, TenantProfile
+        try:
+            client = Client.objects.get(id=client_id)
+            tenant = TenantProfile.objects.filter(clients=client).select_related('plan').first()
+        except (Client.DoesNotExist, ValueError):
+            return False, ''
+
+        if not tenant or not tenant.plan:
+            return False, ''
+
+        max_s = tenant.plan.max_sessions_per_month
+        used = tenant.sessions_this_month
+
+        # Hard limit — block the connection
+        if used >= max_s:
+            return True, (
+                f"Monthly chat limit reached ({max_s} sessions). "
+                "Please upgrade your plan to continue."
+            )
+
+        # Soft warning at 80% — fire async email if not yet sent
+        if used >= int(max_s * 0.8):
+            try:
+                from users.tasks import send_limit_warning_email
+                send_limit_warning_email.delay(tenant.pk)
+            except Exception:
+                pass
+
+        return False, ''

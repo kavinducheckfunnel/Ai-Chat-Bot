@@ -187,8 +187,35 @@ CELERY_TIMEZONE = 'UTC'
 # Beat schedule for periodic tasks
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
+    # Monthly reset: 1st of every month at midnight UTC
     'reset-monthly-sessions': {
         'task': 'users.tasks.reset_monthly_sessions',
         'schedule': crontab(day_of_month='1', hour='0', minute='0'),
     },
+    # Monthly lead report + chat digest: 1st of every month at 01:00 UTC
+    'monthly-lead-report': {
+        'task': 'users.tasks.send_monthly_lead_reports',
+        'schedule': crontab(day_of_month='1', hour='1', minute='0'),
+    },
+    # FOMO engine: check hot sessions every 10 minutes
+    'trigger-fomo-periodic': {
+        'task': 'chat.tasks.trigger_fomo_for_hot_sessions',
+        'schedule': crontab(minute='*/10'),
+    },
+    # AFK nudge check: every 5 minutes
+    'afk-nudge-check': {
+        'task': 'chat.tasks.check_afk_sessions',
+        'schedule': crontab(minute='*/5'),
+    },
 }
+
+# ─── Email (SMTP) ─────────────────────────────────────────────────────────────
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Checkfunnel <noreply@checkfunnel.ai>')

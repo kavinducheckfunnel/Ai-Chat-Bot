@@ -1,213 +1,120 @@
-import requests
+import hashlib
+import hmac
+import logging
+
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from users.models import Client
 from scraper.models import DocumentChunk
-from scraper.embeddings import batch_embed_texts
-from scraper.ingestion import process_single_wordpress_post
+
+logger = logging.getLogger(__name__)
 
 
-BROWSER_HEADERS = {
-    'User-Agent': (
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) '
-        'Chrome/124.0.0.0 Safari/537.36'
+# ── Shared async re-embed helper ─────────────────────────────────────────────
+
+def _queue_product_update(client, product_id, title, body_html, price, url):
+    """
+    Mark the client as syncing and enqueue a Celery task to do the actual
+    re-embedding asynchronously so the webhook response is instant.
+    """
+    Client.objects.filter(pk=client.pk).update(
+        ingestion_status='RUNNING',
+        updated_at=timezone.now(),
     )
-}
+    from scraper.tasks import re_embed_product
+    re_embed_product.delay(
+        str(client.pk), str(product_id), title, body_html, str(price), url
+    )
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# CORE: Regenerate embedding for a single product (Shopify / WooCommerce)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def regenerate_product_embedding(client, product_id, title, description, price, url):
-    """
-    Atomically replaces the embedding for a single product in the vector DB.
-    Used by Shopify and WooCommerce webhook handlers.
-    """
-    from bs4 import BeautifulSoup
-    clean_desc = BeautifulSoup(description or '', 'html.parser').get_text(separator=' ', strip=True)
-    content = f"Product: {title}\nPrice: ${price}\nDescription: {clean_desc}"
-    source_url_marker = url or f"product_{product_id}"
-
-    # Atomic swap: delete stale → embed → insert fresh
-    DocumentChunk.objects.filter(client=client, product_id=str(product_id)).delete()
-
-    embeddings = batch_embed_texts([content])
-    if embeddings:
-        DocumentChunk.objects.create(
-            client=client,
-            content=content,
-            embedding=embeddings[0],
-            source_url=source_url_marker,
-            product_id=str(product_id),
-            metadata={'title': title, 'type': 'product'},
-        )
-        return True
-    return False
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# SHOPIFY WEBHOOK  — products/create  &  products/update
-# ─────────────────────────────────────────────────────────────────────────────
+# ── Shopify ───────────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def shopify_webhook(request, client_id):
-    """Receives Shopify product webhooks and updates the vector DB."""
+    """Receives Shopify products/update or products/create webhook."""
     client = get_object_or_404(Client, id=client_id)
-    # TODO (production): verify Shopify HMAC header
+
+    # Optional HMAC verification using webhook_secret
+    secret = client.webhook_secret
+    if secret:
+        shopify_hmac = request.headers.get('X-Shopify-Hmac-Sha256', '')
+        digest = hmac.new(
+            secret.encode('utf-8'),
+            request.body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(digest, shopify_hmac):
+            return Response({'status': 'unauthorized'}, status=401)
 
     data = request.data
-    product_id  = data.get('id')
-    title       = data.get('title', '')
-    description = data.get('body_html', '')
-
-    price = 0.0
+    product_id = data.get('id')
+    title = data.get('title', '')
+    body_html = data.get('body_html', '')
     variants = data.get('variants', [])
-    if variants:
-        price = variants[0].get('price', 0.0)
+    price = variants[0].get('price', '0') if variants else '0'
+    handle = data.get('handle', '')
+    url = f"{client.domain_url.rstrip('/')}/products/{handle}"
 
-    url = f"https://{client.domain_url}/products/{data.get('handle', '')}"
+    if not (product_id and title):
+        return Response({'status': 'skipped — missing id or title'}, status=400)
 
-    if product_id and title:
-        regenerate_product_embedding(client, product_id, title, description, price, url)
-        return Response({"status": "synced"}, status=200)
-
-    return Response({"status": "skipped", "reason": "missing id or title"}, status=400)
+    _queue_product_update(client, product_id, title, body_html, price, url)
+    return Response({'status': 'queued'}, status=202)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# WOOCOMMERCE WEBHOOK  — product.updated  &  product.created
-# ─────────────────────────────────────────────────────────────────────────────
+# ── WooCommerce ───────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def woocommerce_webhook(request, client_id):
-    """Receives WooCommerce product webhooks and updates the vector DB."""
+    """Receives WooCommerce product.updated webhook."""
     client = get_object_or_404(Client, id=client_id)
-    # TODO (production): verify WooCommerce secret header
 
     data = request.data
-    product_id  = data.get('id')
-    title       = data.get('name', '')
-    description = data.get('description', '')
-    price       = data.get('price', 0.0)
-    url         = data.get('permalink', '')
+    product_id = data.get('id')
+    title = data.get('name', '')
+    body_html = data.get('description', '') or data.get('short_description', '')
+    price = data.get('price', '0')
+    url = data.get('permalink', client.domain_url)
 
-    if product_id and title:
-        regenerate_product_embedding(client, product_id, title, description, price, url)
-        return Response({"status": "synced"}, status=200)
+    if not (product_id and title):
+        return Response({'status': 'skipped — missing id or name'}, status=400)
 
-    return Response({"status": "skipped", "reason": "missing id or name"}, status=400)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# WORDPRESS WEBHOOK  — post created / updated
-#
-# Handles three common payload formats:
-#   Format A (WP REST API-style):
-#       { "id": 123, "title": {"rendered": "..."}, "content": {"rendered": "..."}, "link": "..." }
-#   Format B (WP Webhooks plugin — flat keys):
-#       { "ID": 123, "post_title": "...", "post_content": "...", "guid": "url" }
-#   Format C (bare post_id only — we fetch fresh from WP REST API):
-#       { "post_id": 123 }
-# ─────────────────────────────────────────────────────────────────────────────
-
-def _normalize_wp_payload(raw_data, client_domain):
-    """
-    Normalise any WP webhook payload into the WP REST API dict format that
-    process_single_wordpress_post() expects.
-    Returns None if the payload cannot be parsed.
-    """
-    # ── Format A: WP REST API style (nested title/content dicts) ──
-    if 'id' in raw_data and isinstance(raw_data.get('title'), dict):
-        return raw_data
-
-    # ── Resolve post_id from any common key ──
-    post_id = (
-        raw_data.get('ID')
-        or raw_data.get('post_ID')
-        or raw_data.get('post_id')
-        or raw_data.get('id')
-    )
-
-    if not post_id:
-        return None
-
-    # ── Format B: Flat WP Webhooks-style with inline content ──
-    if raw_data.get('post_title') or raw_data.get('post_content'):
-        link = (
-            raw_data.get('guid', '')
-            or raw_data.get('post_permalink', '')
-            or f"https://{client_domain}/?p={post_id}"
-        )
-        return {
-            'id':      int(post_id),
-            'title':   {'rendered': raw_data.get('post_title', '')},
-            'content': {'rendered': raw_data.get('post_content', '')},
-            'excerpt': {'rendered': raw_data.get('post_excerpt', '')},
-            'link':    link,
-        }
-
-    # ── Format C: Only a post_id — fetch fresh from WP REST API ──
-    return _fetch_post_from_wp_api(client_domain, int(post_id))
+    _queue_product_update(client, product_id, title, body_html, price, url)
+    return Response({'status': 'queued'}, status=202)
 
 
-def _fetch_post_from_wp_api(domain, post_id):
-    """Fetch a single post/page by ID directly from the WP REST API."""
-    if not domain:
-        return None
-    base = f"https://{domain.rstrip('/')}"
-    for endpoint in (f"{base}/wp-json/wp/v2/posts/{post_id}",
-                     f"{base}/wp-json/wp/v2/pages/{post_id}"):
-        try:
-            resp = requests.get(endpoint, headers=BROWSER_HEADERS, timeout=10)
-            if resp.status_code == 200:
-                return resp.json()
-        except Exception as e:
-            print(f"[Webhook] Error fetching {endpoint}: {e}")
-    return None
-
+# ── WordPress ─────────────────────────────────────────────────────────────────
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def wordpress_webhook(request, client_id):
-    """
-    Receives WordPress post-create/update webhooks and re-ingests the post.
-    Compatible with WP Webhooks plugin, WP REST API hooks, and custom plugins.
-    """
+    """Receives WordPress post create/update webhook."""
     client = get_object_or_404(Client, id=client_id)
-    raw_data = request.data
 
-    # Unwrap nested 'post' key if present (some plugins wrap the payload)
-    if 'post' in raw_data and isinstance(raw_data.get('post'), dict):
-        raw_data = raw_data['post']
+    data = request.data
+    # Some WP webhook plugins wrap the payload in {"post": {...}}
+    post_data = data.get('post', data)
 
-    client_domain = (
-        (client.domain_url or '')
-        .replace('https://', '')
-        .replace('http://', '')
-        .rstrip('/')
+    post_id = post_data.get('id')
+    if not post_id:
+        return Response({'status': 'error', 'message': 'No post ID in payload'}, status=400)
+
+    title = (post_data.get('title') or {}).get('rendered', '') or post_data.get('post_title', '')
+    content_html = (post_data.get('content') or {}).get('rendered', '') or post_data.get('post_content', '')
+    link = post_data.get('link', '') or post_data.get('guid', '')
+
+    if not title:
+        return Response({'status': 'skipped — no title'}, status=400)
+
+    Client.objects.filter(pk=client.pk).update(
+        ingestion_status='RUNNING',
+        updated_at=timezone.now(),
     )
-
-    post_data = _normalize_wp_payload(raw_data, client_domain)
-
-    if not post_data:
-        return Response(
-            {
-                "status": "error",
-                "message": (
-                    "Unrecognised payload format. "
-                    "Expected one of: WP REST API, WP Webhooks plugin, or a bare post_id."
-                )
-            },
-            status=400
-        )
-
-    result = process_single_wordpress_post(client, post_data)
-
-    status_code = 200 if result.get('status') in ('success', 'ignored') else 400
-    return Response(result, status=status_code)
+    from scraper.tasks import re_embed_wordpress_post
+    re_embed_wordpress_post.delay(str(client.pk), str(post_id), title, content_html, link)
+    return Response({'status': 'queued'}, status=202)

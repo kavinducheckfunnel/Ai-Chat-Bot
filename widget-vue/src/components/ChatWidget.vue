@@ -2,14 +2,11 @@
   <div id="cf-chat-container">
     <!-- Chat Window -->
     <div id="cf-chat-window" v-show="isOpen">
-      <div id="cf-chat-header" :style="{ background: branding.color }">
-        <div class="header-info">
-          <img v-if="branding.logo_url" :src="branding.logo_url" class="header-logo" alt="logo" />
+      <div id="cf-chat-header">
+        <div class="header-title">
+          <img v-if="branding.chatbot_logo_url" :src="branding.chatbot_logo_url" class="header-logo" alt="logo" />
           <div v-else class="status-dot"></div>
-          <div class="header-text">
-            <span class="header-name">{{ branding.name || 'AI Assistant' }}</span>
-            <span class="header-status">● Online</span>
-          </div>
+          {{ branding.chatbot_name }}
         </div>
         <button id="cf-close-btn" @click="toggleWindow" aria-label="Close chat">&times;</button>
       </div>
@@ -81,7 +78,6 @@ import ProductCard from './ProductCard.vue';
 import { useTracker } from '../composables/useTracker';
 import { marked } from 'marked';
 
-// ─── Markdown renderer: open links in new tab ─────────────────────────────────
 const renderer = new marked.Renderer();
 renderer.link = (token) =>
   `<a target="_blank" rel="noopener noreferrer" href="${token.href}">${token.text}</a>`;
@@ -92,14 +88,43 @@ const renderMarkdown = (text) => marked.parse(text || '');
 // ─── Tracker composable ───────────────────────────────────────────────────────
 const { sessionId, behaviorMatrix, setNudgeCallback } = useTracker();
 
-// ─── Configurable server URLs ────────────────────────────────────────────────
-// These are injected by the WordPress snippet:
-//   window.__CF_CLIENT_ID__ = "uuid-of-client"
-//   window.__CF_API_URL__   = "https://your-server.com"       (no trailing slash)
-//   window.__CF_WS_URL__    = "wss://your-server.com"         (no trailing slash)
-const CF_CLIENT_ID = window.__CF_CLIENT_ID__ || 'f4efb3d9-30cf-4f7f-ae2d-2ab737f44798'; // dev fallback
-const CF_API_URL   = (window.__CF_API_URL__  || 'http://localhost:8000').replace(/\/$/, '');
-const CF_WS_URL    = (window.__CF_WS_URL__   || 'ws://localhost:8000').replace(/\/$/, '');
+// ── Branding ────────────────────────────────────────────────────────────────
+const branding = ref({
+  chatbot_name: 'AI Assistant',
+  chatbot_color: '#3B82F6',
+  chatbot_logo_url: null,
+});
+
+async function loadBranding() {
+  const clientId = window.__CF_CLIENT_ID__;
+  if (!clientId) return;
+  try {
+    const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:8000'
+      : '';
+    const res = await fetch(`${API}/api/chat/widget-config/${clientId}/`);
+    if (!res.ok) return;
+    const cfg = await res.json();
+    branding.value = cfg;
+    // Inject CSS custom properties onto the widget root
+    const root = document.getElementById('cf-app-root');
+    if (root) {
+      root.style.setProperty('--cf-primary', cfg.chatbot_color);
+      // Derive a darker shade for hover states
+      root.style.setProperty('--cf-primary-dark', cfg.chatbot_color + 'cc');
+    }
+    // Store FOMO config globally so the tracker can access it
+    window.__CF_BRANDING__ = cfg;
+  } catch { /* silently fail — widget still works with defaults */ }
+}
+
+const isOpen = ref(false);
+const inputValue = ref('');
+const chatMessages = ref([
+  { type: 'text', text: "Hi! I'm your Checkfunnel AI Expert. How can I help you today?", sender: 'ai' }
+]);
+const messagesContainer = ref(null);
+let socket = null;
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const isOpen     = ref(false);
@@ -299,14 +324,10 @@ function handleNudge(nudgeText) {
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 onMounted(() => {
-  fetchBranding();
-  setNudgeCallback(handleNudge);
-  // Pre-connect WebSocket after a short delay so the page finishes loading first
-  setTimeout(connectWebSocket, 1200);
-});
-
-onBeforeUnmount(() => {
-  disconnectWebSocket();
+  loadBranding();
+  setTimeout(() => {
+    connectWebSocket();
+  }, 1000);
 });
 </script>
 
@@ -319,18 +340,17 @@ onBeforeUnmount(() => {
   z-index: 999999;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
-
-/* ── Floating bubble ───────────────────────────────────────────────── */
 #cf-chat-button {
-  width: 62px;
-  height: 62px;
+  width: 65px;
+  height: 65px;
   border-radius: 50%;
+  background: var(--cf-primary, #3B82F6);
   color: white;
   border: none;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-  font-size: 26px;
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+  font-size: 28px;
+  transition: transform 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -340,19 +360,23 @@ onBeforeUnmount(() => {
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
 }
 
-/* ── Chat window ───────────────────────────────────────────────────── */
-#cf-chat-window {
+#cf-chat-header {
+  background: var(--cf-primary, #3B82F6);
+  color: white;
+  padding: 20px;
+  font-weight: 600;
+  font-size: 16px;
   display: flex;
-  width: 400px;
-  height: 600px;
-  background: #ffffff;
-  border-radius: 18px;
-  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
-  flex-direction: column;
-  overflow: hidden;
-  margin-bottom: 16px;
-  border: 1px solid #e8e8e8;
-  animation: slideUp 0.3s ease;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.4);
 }
 
 @keyframes slideUp {
@@ -431,34 +455,52 @@ onBeforeUnmount(() => {
   transition: background 0.2s;
   flex-shrink: 0;
 }
-#cf-close-btn:hover { background: rgba(255,255,255,0.38); }
-
-/* ── Messages area ─────────────────────────────────────────────────── */
-#cf-chat-messages {
-  flex: 1;
-  padding: 18px 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: #f8f9fb;
-  scroll-behavior: smooth;
+#cf-chat-input:focus {
+  border-color: var(--cf-primary, #3B82F6);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
 }
 
-/* ── Bubbles ───────────────────────────────────────────────────────── */
-.cf-msg {
-  padding: 12px 16px;
-  border-radius: 18px;
-  max-width: 82%;
-  word-wrap: break-word;
-  font-size: 14.5px;
-  line-height: 1.55;
-  animation: fadeMsg 0.25s ease;
+#cf-send-btn {
+  background: var(--cf-primary, #3B82F6);
+  color: white;
+  border: none;
+  padding: 14px 22px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 15px;
+  transition: opacity 0.2s;
+}
+#cf-send-btn:hover { opacity: 0.85; }
+
+.cf-msg { 
+  padding: 14px 20px; 
+  border-radius: 18px; 
+  max-width: 85%; 
+  word-wrap: break-word; 
+  font-size: 15px; 
+  line-height: 1.5; 
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
+  animation: fadeIn 0.3s ease; 
+}
+@keyframes fadeIn { 
+  from { opacity: 0; transform: translateY(10px); } 
+  to { opacity: 1; transform: translateY(0); } 
 }
 
-@keyframes fadeMsg {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+.cf-msg-user {
+  background: var(--cf-primary, #3B82F6);
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.cf-msg-ai { 
+  background: #ffffff; 
+  color: #333; 
+  align-self: flex-start; 
+  border-bottom-left-radius: 4px; 
+  border: 1px solid #efefef; 
 }
 
 .cf-msg-user {
