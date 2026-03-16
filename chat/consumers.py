@@ -1,6 +1,7 @@
 import json
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models import ChatSession
@@ -181,7 +182,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         try:
             client = Client.objects.get(id=client_id)
             tenant = TenantProfile.objects.filter(clients=client).select_related('plan').first()
-        except (Client.DoesNotExist, ValueError):
+        except (Client.DoesNotExist, ValueError, ValidationError):
             return False, ''
 
         if not tenant or not tenant.plan:

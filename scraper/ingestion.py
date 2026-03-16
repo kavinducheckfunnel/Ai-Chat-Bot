@@ -269,15 +269,15 @@ def ingest_documents(client, documents):
     for i, chunk in enumerate(chunks_text):
         try:
             embs = batch_embed_texts([chunk])
-            emb = embs[0] if embs else [0.0] * 1536
+            emb = embs[0] if embs else [0.0] * 1024
         except Exception as e:
             logger.warning(f'[ingest_documents] Embedding failed for chunk {i}: {e}')
-            emb = [0.0] * 1536
-        # Normalise to 1536 dims
-        if len(emb) < 1536:
-            emb = emb + [0.0] * (1536 - len(emb))
-        elif len(emb) > 1536:
-            emb = emb[:1536]
+            emb = [0.0] * 1024
+        # Normalise to 1024 dims
+        if len(emb) < 1024:
+            emb = emb + [0.0] * (1024 - len(emb))
+        elif len(emb) > 1024:
+            emb = emb[:1024]
         all_embeddings.append(emb)
         time.sleep(0.5)
 
@@ -329,41 +329,36 @@ def process_and_store_website_data(site_url, client=None, dry_run=False):
                 }
             })
 
-    return chunks_to_embed, metadata_list
-
-
-def _embed_and_store(client, chunks_to_embed, metadata_list):
-    """
-    Embed chunks in batches of 10 and bulk-insert into DocumentChunk.
-    Deduplication is handled BEFORE calling this function.
-    """
-    import time
-
-    BATCH_SIZE = 10
-    all_embeddings = []
-
-    total = len(chunks_to_embed)
-    print(f"[Ingestion] Embedding {total} chunks in batches of {BATCH_SIZE}…")
-
-    for i in range(0, total, BATCH_SIZE):
-        batch_texts = chunks_to_embed[i:i + BATCH_SIZE]
-        batch_embs = batch_embed_texts(batch_texts)
-        all_embeddings.extend(batch_embs)
-        print(f"[Ingestion]   Embedded {min(i + BATCH_SIZE, total)}/{total}")
-        time.sleep(0.3)  # Gentle throttle to avoid AWS rate limits
-
-    docs_to_create = []
-    for i in range(len(chunks_to_embed)):
-        emb = all_embeddings[i]
-        meta_info = metadata_list[i]
-        docs_to_create.append(
-            DocumentChunk(
-                client=client,
-                content=chunks_to_embed[i],
-                embedding=emb,
-                source_url=meta_info['source_url'],
-                product_id=meta_info['product_id'],
-                metadata=meta_info['metadata']
+        print("Generating AWS Bedrock Embeddings...")
+        for i in range(0, len(chunks_to_embed), batch_size):
+            batch_texts = chunks_to_embed[i:i+batch_size]
+            batch_embs = batch_embed_texts(batch_texts)
+            all_embeddings.extend(batch_embs)
+            print(f"Embedded chunk {i+1} out of {len(chunks_to_embed)}...")
+            time.sleep(1.0)  # Avoid AWS Throttling limits
+            
+        # Bulk create DocumentChunks
+        docs_to_create = []
+        for i in range(len(chunks_to_embed)):
+            emb = all_embeddings[i]
+            # Since we set pgvector dimensions=1024 but gemini might return 768 by default
+            # Actually, let's pad vectors to 1024 if gemini returns 768. 
+            # Or pass task_type="RETRIEVAL_DOCUMENT" etc. Wait, we should just let it be stored.
+            if len(emb) < 1024:
+                emb = emb + [0.0] * (1024 - len(emb))
+            elif len(emb) > 1024:
+                emb = emb[:1024]
+                
+            meta_info = metadata_list[i]
+            docs_to_create.append(
+                DocumentChunk(
+                    client=client,
+                    content=chunks_to_embed[i],
+                    embedding=emb,
+                    source_url=meta_info['source_url'],
+                    product_id=meta_info['product_id'],
+                    metadata=meta_info['metadata']
+                )
             )
         )
 
@@ -462,6 +457,12 @@ def process_single_wordpress_post(client, post_data):
 
     docs_to_create = []
     for i, text in enumerate(split_texts):
+        emb = all_embeddings[i]
+        if len(emb) < 1024:
+            emb = emb + [0.0] * (1024 - len(emb))
+        elif len(emb) > 1024:
+            emb = emb[:1024]
+            
         docs_to_create.append(
             DocumentChunk(
                 client=client,

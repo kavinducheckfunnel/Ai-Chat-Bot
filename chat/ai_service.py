@@ -23,38 +23,23 @@ def generate_ai_response(session, user_message, behavior_matrix):
     # ── 1. Embed the user query ──────────────────────────────────────────────
     embedder = get_embeddings_model()
     query_embedding = embedder.embed_query(user_message)
-    # Cohere embed-english-v3 returns 1024 dims — no padding needed
-
-    # ── 2. Semantic search: top 8 most relevant chunks ──────────────────────
-    chunk_qs = (
-        DocumentChunk.objects.filter(client=session.client)
-        if session.client
-        else DocumentChunk.objects.all()
-    )
-
-    # Fetch 60 candidates, then deduplicate by source_url (keep best-scoring chunk per page).
-    # This ensures individual tool pages aren't squeezed out by repeated chunks from one URL.
-    all_candidates = (
-        chunk_qs
-        .annotate(distance=CosineDistance('embedding', query_embedding))
-        .order_by('distance')[:60]
-    )
-    seen_urls = {}
-    for chunk in all_candidates:
-        url = chunk.source_url or f'_no_url_{chunk.pk}'
-        if url not in seen_urls:
-            seen_urls[url] = chunk
-        if len(seen_urls) >= 12:
-            break
-    top_chunks = list(seen_urls.values())
-
-    # ── 3. Build prompt ──────────────────────────────────────────────────────
-    client_domain = (
-        session.client.domain_url
-        if session.client and hasattr(session.client, 'domain_url')
-        else "Unknown"
-    )
-
+    
+    # Pad to 1024 if needed
+    if len(query_embedding) < 1024:
+        query_embedding = query_embedding + [0.0] * (1024 - len(query_embedding))
+    elif len(query_embedding) > 1024:
+        query_embedding = query_embedding[:1024]
+    
+    # 2. Similarity Search using CosineDistance filtered by Client
+    chunk_qs = DocumentChunk.objects.filter(client=session.client) if session.client else DocumentChunk.objects.all()
+    
+    top_chunks = chunk_qs.annotate(
+        distance=CosineDistance('embedding', query_embedding)
+    ).order_by('distance')[:40]
+    
+    # 3. Construct Prompt (injecting the schema instructions explicitly for DeepSeek)
+    client_domain = session.client.domain_url if session.client and hasattr(session.client, 'domain_url') else "Unknown"
+    
     system_prompt, user_prompt = build_prompt(
         session.conversation_state,
         top_chunks,
