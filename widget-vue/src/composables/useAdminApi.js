@@ -130,6 +130,10 @@ export function useAdminApi() {
 
     impersonateTenant: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/impersonate/`, { method: 'POST' }),
 
+    assignClientToTenant: (clientId, tenantId) => apiFetch(`/api/admin/clients/${clientId}/assign-tenant/`, {
+      method: 'POST', body: JSON.stringify({ tenant_id: tenantId }),
+    }),
+
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {
       const token = localStorage.getItem('cf_access_token')

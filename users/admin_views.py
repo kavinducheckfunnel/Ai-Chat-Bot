@@ -66,6 +66,15 @@ def client_list(request):
     if request.method == 'GET':
         clients = get_accessible_clients(request.user).order_by('-created_at')
         data = ClientSerializer(clients, many=True).data
+        # Annotate each client with its assigned tenant (if any)
+        tenant_map = {}
+        for tp in TenantProfile.objects.prefetch_related('clients').all():
+            for c in tp.clients.all():
+                tenant_map[str(c.id)] = {'tenant_id': tp.pk, 'tenant_name': tp.company_name or tp.user.username}
+        for item in data:
+            info = tenant_map.get(str(item['id']))
+            item['tenant_id'] = info['tenant_id'] if info else None
+            item['tenant_name'] = info['tenant_name'] if info else None
         return Response(data)
 
     # POST — create client (superadmin or tenant_admin)
@@ -373,6 +382,7 @@ def tenant_list(request):
         tenants = TenantProfile.objects.select_related('user', 'plan').prefetch_related('clients').all()
         data = []
         for t in tenants:
+            assigned_clients = list(t.clients.all())
             data.append({
                 'id': t.id,
                 'username': t.user.username,
@@ -381,8 +391,12 @@ def tenant_list(request):
                 'plan': t.plan.name if t.plan else None,
                 'plan_id': t.plan.id if t.plan else None,
                 'sessions_this_month': t.sessions_this_month,
-                'clients_count': t.clients.count(),
-                'clients': [str(c.id) for c in t.clients.all()],
+                'clients_count': len(assigned_clients),
+                'clients': [str(c.id) for c in assigned_clients],
+                'client_details': [
+                    {'id': str(c.id), 'name': c.name, 'domain_url': c.domain_url, 'chatbot_color': c.chatbot_color}
+                    for c in assigned_clients
+                ],
             })
         return Response(data)
 
@@ -411,12 +425,20 @@ def tenant_list(request):
 
     tenant = TenantProfile.objects.create(user=user, company_name=company_name, plan=plan)
 
+    # Assign clients if provided
+    client_ids = request.data.get('client_ids', [])
+    if client_ids:
+        clients_qs = Client.objects.filter(pk__in=client_ids)
+        tenant.clients.set(clients_qs)
+
     return Response({
         'id': tenant.id,
         'username': user.username,
         'email': user.email,
         'company_name': tenant.company_name,
         'plan': plan.name if plan else None,
+        'clients_count': tenant.clients.count(),
+        'clients': [str(c.id) for c in tenant.clients.all()],
     }, status=201)
 
 
@@ -503,6 +525,40 @@ def plan_list(request):
         'price_monthly': str(p.price_monthly),
     } for p in plans]
     return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsSuperAdmin])
+def assign_client_to_tenant(request, client_id):
+    """
+    Assign or unassign a client to a tenant.
+    Body: { tenant_id: int | null }
+    - tenant_id = int  → assign this client to that tenant (removes from any previous tenant first)
+    - tenant_id = null → unassign the client from whoever currently owns it
+    """
+    try:
+        client = Client.objects.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Client not found.'}, status=404)
+
+    # Remove client from any existing tenant first (a client belongs to one tenant at a time)
+    for tp in TenantProfile.objects.filter(clients=client):
+        tp.clients.remove(client)
+
+    tenant_id = request.data.get('tenant_id')
+    if tenant_id:
+        try:
+            tenant = TenantProfile.objects.get(pk=tenant_id)
+        except TenantProfile.DoesNotExist:
+            return Response({'detail': 'Tenant not found.'}, status=404)
+        tenant.clients.add(client)
+        return Response({
+            'detail': f'Client "{client.name}" assigned to tenant "{tenant.company_name or tenant.user.username}".',
+            'tenant_id': tenant.pk,
+            'tenant_name': tenant.company_name or tenant.user.username,
+        })
+
+    return Response({'detail': f'Client "{client.name}" unassigned.', 'tenant_id': None, 'tenant_name': None})
 
 
 @api_view(['POST'])

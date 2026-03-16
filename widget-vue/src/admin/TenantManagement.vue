@@ -26,7 +26,7 @@
             <th>Username</th>
             <th>Company</th>
             <th>Plan</th>
-            <th>Clients</th>
+            <th>Assigned Clients</th>
             <th>Sessions / mo</th>
             <th>Actions</th>
           </tr>
@@ -48,7 +48,19 @@
                 {{ t.plan || 'No Plan' }}
               </span>
             </td>
-            <td class="center">{{ t.clients_count }}</td>
+            <td>
+              <div class="client-badges">
+                <span v-if="!t.client_details || !t.client_details.length" class="no-clients">None assigned</span>
+                <span
+                  v-for="c in t.client_details" :key="c.id"
+                  class="client-badge"
+                  :style="{ background: (c.chatbot_color || '#6366F1') + '18', color: c.chatbot_color || '#6366F1', borderColor: (c.chatbot_color || '#6366F1') + '44' }"
+                  :title="c.domain_url"
+                >
+                  {{ c.name }}
+                </span>
+              </div>
+            </td>
             <td class="center">{{ t.sessions_this_month }}</td>
             <td>
               <div class="action-row">
@@ -99,6 +111,21 @@
                 <option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }} (${{ p.price_monthly }}/mo)</option>
               </select>
             </div>
+            <div class="form-group full">
+              <label>Assign Clients</label>
+              <div class="client-checkboxes">
+                <p v-if="!allClients.length" class="no-clients-hint">No clients available — create a client first.</p>
+                <label v-for="c in allClients" :key="c.id" class="client-check-row" :class="{ checked: createForm.client_ids.includes(c.id) }">
+                  <input type="checkbox" :value="c.id" v-model="createForm.client_ids" />
+                  <div class="check-dot" :style="{ background: c.chatbot_color || '#6366F1' }">{{ c.name.slice(0,2).toUpperCase() }}</div>
+                  <div class="check-info">
+                    <span class="check-name">{{ c.name }}</span>
+                    <span class="check-url">{{ (c.domain_url || '').replace(/https?:\/\//, '') }}</span>
+                  </div>
+                  <span v-if="c.tenant_name" class="already-assigned">Already: {{ c.tenant_name }}</span>
+                </label>
+              </div>
+            </div>
           </div>
           <p v-if="createError" class="form-error">{{ createError }}</p>
         </div>
@@ -133,6 +160,21 @@
             <div class="form-group full">
               <label>New Password (leave blank to keep current)</label>
               <input v-model="editForm.password" class="form-input" type="password" placeholder="••••••••" />
+            </div>
+            <div class="form-group full">
+              <label>Assigned Clients</label>
+              <div class="client-checkboxes">
+                <p v-if="!allClients.length" class="no-clients-hint">No clients available.</p>
+                <label v-for="c in allClients" :key="c.id" class="client-check-row" :class="{ checked: editForm.client_ids.includes(c.id) }">
+                  <input type="checkbox" :value="c.id" v-model="editForm.client_ids" />
+                  <div class="check-dot" :style="{ background: c.chatbot_color || '#6366F1' }">{{ c.name.slice(0,2).toUpperCase() }}</div>
+                  <div class="check-info">
+                    <span class="check-name">{{ c.name }}</span>
+                    <span class="check-url">{{ (c.domain_url || '').replace(/https?:\/\//, '') }}</span>
+                  </div>
+                  <span v-if="c.tenant_name && !editForm.client_ids.includes(c.id)" class="already-assigned">Owned by: {{ c.tenant_name }}</span>
+                </label>
+              </div>
             </div>
           </div>
           <p v-if="editError" class="form-error">{{ editError }}</p>
@@ -207,12 +249,13 @@ import { useAdminApi } from '../composables/useAdminApi'
 const api = useAdminApi()
 const tenants = ref([])
 const plans = ref([])
+const allClients = ref([])
 const loading = ref(false)
 
 const showCreate = ref(false)
 const creating = ref(false)
 const createError = ref('')
-const createForm = ref({ username: '', password: '', email: '', company_name: '', plan_id: '' })
+const createForm = ref({ username: '', password: '', email: '', company_name: '', plan_id: '', client_ids: [] })
 
 const editTenant = ref(null)
 const editForm = ref({})
@@ -232,9 +275,10 @@ const impersonateToast = ref(null)
 async function load() {
   loading.value = true
   try {
-    const [t, p] = await Promise.all([api.getTenants(), api.getPlans()])
+    const [t, p, c] = await Promise.all([api.getTenants(), api.getPlans(), api.getClients()])
     tenants.value = t || []
     plans.value = p || []
+    allClients.value = c || []
   } catch (e) {
     console.error(e)
   } finally {
@@ -251,9 +295,11 @@ async function createTenant() {
   creating.value = true
   try {
     const t = await api.createTenant({ ...createForm.value })
-    tenants.value.unshift({ ...t, clients_count: 0, sessions_this_month: 0 })
+    tenants.value.unshift({ ...t, client_details: allClients.value.filter(c => (t.clients || []).includes(c.id)) })
+    // Refresh client list so tenant badges update
+    allClients.value = await api.getClients() || []
     showCreate.value = false
-    createForm.value = { username: '', password: '', email: '', company_name: '', plan_id: '' }
+    createForm.value = { username: '', password: '', email: '', company_name: '', plan_id: '', client_ids: [] }
   } catch (e) {
     createError.value = e.message
   } finally {
@@ -263,7 +309,7 @@ async function createTenant() {
 
 function openEdit(t) {
   editTenant.value = t
-  editForm.value = { email: t.email, company_name: t.company_name, password: '' }
+  editForm.value = { email: t.email, company_name: t.company_name, password: '', client_ids: [...(t.clients || [])] }
   editError.value = ''
 }
 
@@ -272,8 +318,10 @@ async function saveTenant() {
   saving.value = true
   try {
     await api.updateTenant(editTenant.value.id, editForm.value)
-    const idx = tenants.value.findIndex(x => x.id === editTenant.value.id)
-    if (idx >= 0) tenants.value[idx] = { ...tenants.value[idx], ...editForm.value }
+    // Refresh both lists so badges stay in sync
+    const [freshTenants, freshClients] = await Promise.all([api.getTenants(), api.getClients()])
+    tenants.value = freshTenants || tenants.value
+    allClients.value = freshClients || allClients.value
     editTenant.value = null
   } catch (e) {
     editError.value = e.message
@@ -443,6 +491,35 @@ onMounted(load)
 .plan-name { font-size: 14px; font-weight: 700; color: #0F172A; }
 .plan-price { font-size: 13px; color: #6366F1; font-weight: 600; margin-top: 2px; }
 .plan-limits { font-size: 11px; color: #94A3B8; margin-top: 4px; }
+
+/* Client badges in table */
+.client-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.client-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px;
+  border: 1px solid; white-space: nowrap;
+}
+.no-clients { font-size: 12px; color: #CBD5E1; font-style: italic; }
+
+/* Client checkboxes in modal */
+.client-checkboxes { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; padding: 2px; }
+.no-clients-hint { font-size: 12px; color: #94A3B8; padding: 8px 0; }
+.client-check-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid #E2E8F0; border-radius: 9px; cursor: pointer;
+  transition: all 0.15s; user-select: none;
+}
+.client-check-row:hover { border-color: #A5B4FC; background: #FAFBFF; }
+.client-check-row.checked { border-color: #6366F1; background: rgba(99,102,241,0.05); }
+.client-check-row input[type="checkbox"] { display: none; }
+.check-dot {
+  width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0;
+  color: white; font-size: 10px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.check-info { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.check-name { font-size: 13px; font-weight: 600; color: #0F172A; }
+.check-url { font-size: 11px; color: #94A3B8; }
+.already-assigned { font-size: 10px; color: #F59E0B; font-weight: 600; white-space: nowrap; }
 
 /* Delete */
 .del-icon { font-size: 32px; margin-bottom: 12px; }
