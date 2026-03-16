@@ -32,10 +32,10 @@ def re_embed_product(self, client_id, product_id, title, body_html, price, url):
             raise ValueError('Empty embedding response')
 
         emb = embeddings[0]
-        if len(emb) < 1536:
-            emb = emb + [0.0] * (1536 - len(emb))
-        elif len(emb) > 1536:
-            emb = emb[:1536]
+        if len(emb) < 1024:
+            emb = emb + [0.0] * (1024 - len(emb))
+        elif len(emb) > 1024:
+            emb = emb[:1024]
 
         DocumentChunk.objects.create(
             client=client,
@@ -86,13 +86,13 @@ def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link)
         for chunk in splits:
             try:
                 embs = batch_embed_texts([chunk])
-                emb = embs[0] if embs else [0.0] * 1536
+                emb = embs[0] if embs else [0.0] * 1024
             except Exception:
-                emb = [0.0] * 1536
-            if len(emb) < 1536:
-                emb = emb + [0.0] * (1536 - len(emb))
-            elif len(emb) > 1536:
-                emb = emb[:1536]
+                emb = [0.0] * 1024
+            if len(emb) < 1024:
+                emb = emb + [0.0] * (1024 - len(emb))
+            elif len(emb) > 1024:
+                emb = emb[:1024]
             docs.append(DocumentChunk(
                 client=client,
                 content=chunk,

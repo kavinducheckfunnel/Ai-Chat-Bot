@@ -124,21 +124,55 @@ const triggerNudge = () => {
 };
 setNudgeCallback(triggerNudge);
 
+// Queue for messages sent while the socket is still connecting
+const pendingMessages = [];
+let reconnectTimer = null;
+
 const connectWebSocket = () => {
-  const host = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? '127.0.0.1:8000' : window.location.host;
-  const globalClientId = window.__CF_CLIENT_ID__ || 'default';
+  // Don't open a second connection if one is already open or connecting
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+
+  const host = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'
+    ? '127.0.0.1:8000'
+    : window.location.host;
+  // Use actual client ID or a nil UUID so the backend skips client lookup cleanly
+  const globalClientId = window.__CF_CLIENT_ID__ || '00000000-0000-0000-0000-000000000000';
   socket = new WebSocket(`ws://${host}/ws/chat/${globalClientId}/${sessionId}/`);
 
-  socket.onmessage = (e) => {
-    const data = JSON.parse(e.data);
-    if (data.type === 'ai_message') {
-      if (data.message) {
-        chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai' });
-      }
-      if (data.suggested_product_id) {
-        chatMessages.value.push({ type: 'product', productId: data.suggested_product_id, sender: 'ai' });
-      }
+  socket.onopen = () => {
+    // Flush any messages that were queued while connecting
+    while (pendingMessages.length > 0) {
+      const payload = pendingMessages.shift();
+      socket.send(JSON.stringify(payload));
     }
+  };
+
+  socket.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'ai_message') {
+        if (data.message) {
+          chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai' });
+        }
+        if (data.suggested_product_id) {
+          chatMessages.value.push({ type: 'product', productId: data.suggested_product_id, sender: 'ai' });
+        }
+      }
+    } catch { /* ignore malformed frames */ }
+  };
+
+  socket.onclose = () => {
+    // Auto-reconnect after 3 seconds on unexpected close
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(() => {
+      connectWebSocket();
+    }, 3000);
+  };
+
+  socket.onerror = () => {
+    // Let onclose handle the reconnect
   };
 };
 
@@ -149,22 +183,24 @@ const sendMessage = () => {
   chatMessages.value.push({ type: 'text', text: msgText, sender: 'user' });
   inputValue.value = '';
 
+  const payload = { message: msgText, behavior_matrix: behaviorMatrix };
+
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({
-      message: msgText,
-      behavior_matrix: behaviorMatrix
-    }));
+    // Socket ready — send immediately
+    socket.send(JSON.stringify(payload));
   } else {
-    chatMessages.value.push({ type: 'text', text: "Reconnecting to the server...", sender: 'ai' });
-    connectWebSocket();
+    // Socket is connecting or closed — queue the message
+    pendingMessages.push(payload);
+    if (!socket || socket.readyState === WebSocket.CLOSED) {
+      connectWebSocket();
+    }
   }
 };
 
 onMounted(() => {
   loadBranding();
-  setTimeout(() => {
-    connectWebSocket();
-  }, 1000);
+  // Connect immediately — no delay needed
+  connectWebSocket();
 });
 </script>
 

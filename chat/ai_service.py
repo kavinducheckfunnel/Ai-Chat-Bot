@@ -15,11 +15,11 @@ def generate_ai_response(session, user_message, behavior_matrix):
     embedder = get_embeddings_model()
     query_embedding = embedder.embed_query(user_message)
     
-    # Pad to 1536 if needed
-    if len(query_embedding) < 1536:
-        query_embedding = query_embedding + [0.0] * (1536 - len(query_embedding))
-    elif len(query_embedding) > 1536:
-        query_embedding = query_embedding[:1536]
+    # Pad to 1024 if needed
+    if len(query_embedding) < 1024:
+        query_embedding = query_embedding + [0.0] * (1024 - len(query_embedding))
+    elif len(query_embedding) > 1024:
+        query_embedding = query_embedding[:1024]
     
     # 2. Similarity Search using CosineDistance filtered by Client
     chunk_qs = DocumentChunk.objects.filter(client=session.client) if session.client else DocumentChunk.objects.all()
