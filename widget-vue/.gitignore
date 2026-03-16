@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Re-include the compiled widget so Django can serve it without a build step on the server
+!dist/
+!dist/assets/
+!dist/assets/widget.js
 *.local
 
 # Editor directories and files
