@@ -90,3 +90,18 @@ class TenantProfile(models.Model):
 
     def __str__(self):
         return f"{self.company_name or self.user.username}"
+
+
+class PlanHistory(models.Model):
+    tenant = models.ForeignKey(TenantProfile, on_delete=models.CASCADE, related_name='plan_history')
+    from_plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    to_plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    changed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='+')
+    remarks = models.TextField(blank=True)
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed_at']
+
+    def __str__(self):
+        return f"{self.tenant} | {self.from_plan} → {self.to_plan}"
