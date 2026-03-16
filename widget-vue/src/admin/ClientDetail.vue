@@ -78,20 +78,64 @@
 
         <!-- Embed Code -->
         <div class="embed-section">
-          <h3 class="section-title">Embed Code</h3>
-          <p class="embed-sub">Add this script to your WordPress site (paste before <code>&lt;/body&gt;</code>):</p>
-          <div class="embed-code-wrap">
-            <code class="embed-code">{{ embedCode }}</code>
-            <button class="copy-btn" @click="copyEmbed">
-              <svg v-if="!copied" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>
-              <svg v-else width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round"/></svg>
-              {{ copied ? 'Copied!' : 'Copy' }}
+          <div class="embed-header">
+            <div>
+              <h3 class="section-title" style="margin-bottom:4px;">WordPress Installation</h3>
+              <p class="embed-sub" style="margin-bottom:0;">Choose the method that works best for your site.</p>
+            </div>
+          </div>
+
+          <!-- Method tabs -->
+          <div class="method-tabs">
+            <button class="method-tab" :class="{ active: embedMethod === 'plugin' }" @click="embedMethod = 'plugin'">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Plugin (Recommended)
+            </button>
+            <button class="method-tab" :class="{ active: embedMethod === 'php' }" @click="embedMethod = 'php'">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              functions.php
             </button>
           </div>
+
+          <!-- Plugin method -->
+          <div v-if="embedMethod === 'plugin'" class="method-content">
+            <ol class="install-steps">
+              <li>In your WordPress dashboard, go to <strong>Plugins → Add New</strong> and search for <strong>"WPCode"</strong> (or "Insert Headers and Footers"). Install and activate it.</li>
+              <li>Go to <strong>Code Snippets → Header &amp; Footer</strong> in your WordPress menu.</li>
+              <li>Paste the snippet below into the <strong>Footer</strong> section and click <strong>Save Changes</strong>.</li>
+            </ol>
+            <div class="embed-code-wrap">
+              <code class="embed-code">{{ embedCode }}</code>
+              <button class="copy-btn" @click="copyCode(embedCode, 'plugin')">
+                <svg v-if="copiedKey !== 'plugin'" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>
+                <svg v-else width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round"/></svg>
+                {{ copiedKey === 'plugin' ? 'Copied!' : 'Copy' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- functions.php method -->
+          <div v-if="embedMethod === 'php'" class="method-content">
+            <ol class="install-steps">
+              <li>In your WordPress dashboard, go to <strong>Appearance → Theme File Editor</strong>.</li>
+              <li>Select <strong>functions.php</strong> from the file list on the right.</li>
+              <li>Paste the snippet below at the bottom of the file and click <strong>Update File</strong>.</li>
+            </ol>
+            <div class="embed-code-wrap">
+              <code class="embed-code embed-code--php">{{ phpSnippet }}</code>
+              <button class="copy-btn" @click="copyCode(phpSnippet, 'php')">
+                <svg v-if="copiedKey !== 'php'" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>
+                <svg v-else width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round"/></svg>
+                {{ copiedKey === 'php' ? 'Copied!' : 'Copy' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Webhook -->
           <div class="webhook-note">
-            <p class="note-title">WordPress Webhook URL:</p>
+            <p class="note-title">WordPress Webhook URL (WooCommerce auto-sync):</p>
             <code class="note-code">{{ webhookUrl }}</code>
-            <p class="note-sub">Add this as a WooCommerce Product Updated webhook to auto-sync content changes.</p>
+            <p class="note-sub">In WooCommerce → Settings → Advanced → Webhooks — add a "Product Updated" webhook pointing to this URL to auto-sync content changes.</p>
           </div>
         </div>
       </div>
@@ -239,7 +283,8 @@ const saving = ref(false)
 const saveError = ref('')
 const saveSuccess = ref(false)
 const activeTab = ref('overview')
-const copied = ref(false)
+const embedMethod = ref('plugin')
+const copiedKey = ref('')
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
@@ -270,6 +315,12 @@ const settingsForm = ref({
 const embedCode = computed(() =>
   client.value
     ? `<script src="${WIDGET_URL}" data-client-id="${client.value.id}"><\/script>`
+    : ''
+)
+
+const phpSnippet = computed(() =>
+  client.value
+    ? `<?php\nfunction checkfunnel_widget() {\n    echo '<script src="${WIDGET_URL}" data-client-id="${client.value.id}"><\\/script>';\n}\nadd_action( 'wp_footer', 'checkfunnel_widget' );`
     : ''
 )
 
@@ -356,11 +407,11 @@ async function viewSession(session) {
   loadingSession.value = false
 }
 
-async function copyEmbed() {
+async function copyCode(text, key) {
   try {
-    await navigator.clipboard.writeText(embedCode.value)
-    copied.value = true
-    setTimeout(() => copied.value = false, 2000)
+    await navigator.clipboard.writeText(text)
+    copiedKey.value = key
+    setTimeout(() => copiedKey.value = '', 2000)
   } catch {}
 }
 
@@ -488,8 +539,30 @@ watch(activeTab, (tab) => { if (tab === 'sessions') loadSessions() })
 .funnel-count { font-size: 13px; font-weight: 600; color: #0F172A; width: 30px; text-align: right; }
 
 /* Embed */
+.embed-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
 .embed-sub { font-size: 13px; color: #64748B; margin-bottom: 12px; }
 .embed-sub code { background: #F1F5F9; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+.method-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.method-tab {
+  display: flex; align-items: center; gap: 6px;
+  background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;
+  padding: 7px 14px; font-size: 13px; font-weight: 500; color: #64748B;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.method-tab:hover { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
+.method-tab.active { background: #EEF2FF; border-color: #6366F1; color: #4338CA; font-weight: 600; }
+
+.method-content { margin-bottom: 16px; }
+
+.install-steps {
+  margin: 0 0 14px 0; padding-left: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.install-steps li { font-size: 13px; color: #475569; line-height: 1.6; }
+.install-steps li strong { color: #0F172A; }
+
+.embed-code--php { white-space: pre; }
 
 .embed-code-wrap {
   background: #0F172A; border-radius: 10px; padding: 14px 16px;
