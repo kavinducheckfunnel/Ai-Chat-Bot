@@ -4,8 +4,9 @@
     <div id="cf-chat-window" v-show="isOpen">
       <div id="cf-chat-header">
         <div class="header-title">
-          <div class="status-dot"></div>
-          Checkfunnel Expert
+          <img v-if="branding.chatbot_logo_url" :src="branding.chatbot_logo_url" class="header-logo" alt="logo" />
+          <div v-else class="status-dot"></div>
+          {{ branding.chatbot_name }}
         </div>
         <button id="cf-close-btn" @click="toggleWindow">&times;</button>
       </div>
@@ -46,7 +47,6 @@ import ProductCard from './ProductCard.vue';
 import { useTracker } from '../composables/useTracker';
 import { marked } from 'marked';
 
-// Optional: Security configuration for marked (open links in new tab)
 const renderer = new marked.Renderer();
 renderer.link = function(token) {
   return `<a target="_blank" href="${token.href}" title="${token.title || ''}">${token.text}</a>`;
@@ -54,6 +54,36 @@ renderer.link = function(token) {
 marked.setOptions({ renderer });
 
 const { sessionId, behaviorMatrix, setNudgeCallback } = useTracker();
+
+// ── Branding ────────────────────────────────────────────────────────────────
+const branding = ref({
+  chatbot_name: 'AI Assistant',
+  chatbot_color: '#3B82F6',
+  chatbot_logo_url: null,
+});
+
+async function loadBranding() {
+  const clientId = window.__CF_CLIENT_ID__;
+  if (!clientId) return;
+  try {
+    const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:8000'
+      : '';
+    const res = await fetch(`${API}/api/chat/widget-config/${clientId}/`);
+    if (!res.ok) return;
+    const cfg = await res.json();
+    branding.value = cfg;
+    // Inject CSS custom properties onto the widget root
+    const root = document.getElementById('cf-app-root');
+    if (root) {
+      root.style.setProperty('--cf-primary', cfg.chatbot_color);
+      // Derive a darker shade for hover states
+      root.style.setProperty('--cf-primary-dark', cfg.chatbot_color + 'cc');
+    }
+    // Store FOMO config globally so the tracker can access it
+    window.__CF_BRANDING__ = cfg;
+  } catch { /* silently fail — widget still works with defaults */ }
+}
 
 const isOpen = ref(false);
 const inputValue = ref('');
@@ -131,6 +161,7 @@ const sendMessage = () => {
 };
 
 onMounted(() => {
+  loadBranding();
   setTimeout(() => {
     connectWebSocket();
   }, 1000);
@@ -145,19 +176,19 @@ onMounted(() => {
   z-index: 999999; 
   font-family: 'Inter', sans-serif; 
 }
-#cf-chat-button { 
-  width: 65px; 
-  height: 65px; 
-  border-radius: 50%; 
-  background: linear-gradient(135deg, #007bff, #0056b3); 
-  color: white; 
-  border: none; 
-  cursor: pointer; 
-  box-shadow: 0 4px 15px rgba(0,123,255,0.4); 
-  font-size: 28px; 
-  transition: transform 0.3s ease; 
-  display: flex; 
-  align-items: center; 
+#cf-chat-button {
+  width: 65px;
+  height: 65px;
+  border-radius: 50%;
+  background: var(--cf-primary, #3B82F6);
+  color: white;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.25);
+  font-size: 28px;
+  transition: transform 0.3s ease;
+  display: flex;
+  align-items: center;
   justify-content: center;
 }
 #cf-chat-button:hover { transform: scale(1.1); }
@@ -176,15 +207,23 @@ onMounted(() => {
   border: 1px solid #eaeaea; 
 }
 
-#cf-chat-header { 
-  background: linear-gradient(135deg, #007bff, #0056b3); 
-  color: white; 
-  padding: 20px; 
-  font-weight: 600; 
-  font-size: 16px; 
-  display: flex; 
-  justify-content: space-between; 
-  align-items: center; 
+#cf-chat-header {
+  background: var(--cf-primary, #3B82F6);
+  color: white;
+  padding: 20px;
+  font-weight: 600;
+  font-size: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.4);
 }
 
 .header-title {
@@ -247,24 +286,24 @@ onMounted(() => {
   background: #f8f9fa; 
   transition: border 0.2s; 
 }
-#cf-chat-input:focus { 
-  border-color: #007bff; 
-  background: #fff; 
-  box-shadow: 0 0 0 3px rgba(0,123,255,0.1); 
+#cf-chat-input:focus {
+  border-color: var(--cf-primary, #3B82F6);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
 }
 
-#cf-send-btn { 
-  background: #007bff; 
-  color: white; 
-  border: none; 
-  padding: 14px 22px; 
-  border-radius: 25px; 
-  cursor: pointer; 
-  font-weight: 500; 
-  font-size: 15px; 
-  transition: background 0.2s; 
+#cf-send-btn {
+  background: var(--cf-primary, #3B82F6);
+  color: white;
+  border: none;
+  padding: 14px 22px;
+  border-radius: 25px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 15px;
+  transition: opacity 0.2s;
 }
-#cf-send-btn:hover { background: #0056b3; }
+#cf-send-btn:hover { opacity: 0.85; }
 
 .cf-msg { 
   padding: 14px 20px; 
@@ -281,11 +320,11 @@ onMounted(() => {
   to { opacity: 1; transform: translateY(0); } 
 }
 
-.cf-msg-user { 
-  background: #007bff; 
-  color: white; 
-  align-self: flex-end; 
-  border-bottom-right-radius: 4px; 
+.cf-msg-user {
+  background: var(--cf-primary, #3B82F6);
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
 }
 .cf-msg-ai { 
   background: #ffffff; 

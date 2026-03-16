@@ -56,6 +56,60 @@ def schedule_afk_nudge(self, session_id):
 
 
 @shared_task
+def check_afk_sessions():
+    """
+    Periodic task (every 5 min): find sessions idle for 5+ minutes where no
+    nudge has been sent yet, and fire the AFK nudge into their WebSocket.
+    """
+    from chat.models import ChatSession
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+
+    cutoff = timezone.now() - timedelta(minutes=5)
+    idle_sessions = ChatSession.objects.filter(
+        afk_nudge_sent=False,
+        takeover_active=False,
+        last_visitor_message_at__isnull=False,
+        last_visitor_message_at__lte=cutoff,
+        # Only sessions that have at least one message (real visitor)
+        message_count__gte=1,
+    ).select_related('client')
+
+    channel_layer = get_channel_layer()
+    fired = 0
+    for session in idle_sessions:
+        client = session.client
+        nudge_message = "Still there? I'm here to help if you have any questions!"
+        if client and client.discount_code and session.closing_triggered:
+            nudge_message = (
+                f"{client.cta_message or 'Ready to take the next step?'} "
+                f"Use code **{client.discount_code}** for an exclusive discount!"
+            )
+        elif client and client.cta_message:
+            nudge_message = client.cta_message
+
+        history = session.chat_history or []
+        history.append({'role': 'ai', 'message': nudge_message, 'source': 'afk_nudge'})
+        ChatSession.objects.filter(session_id=session.session_id).update(
+            chat_history=history,
+            afk_nudge_sent=True,
+        )
+        group_name = f'chat_{session.session_id}'
+        try:
+            async_to_sync(channel_layer.group_send)(group_name, {
+                'type': 'chat_message',
+                'message': nudge_message,
+                'source': 'afk_nudge',
+            })
+            fired += 1
+        except Exception:
+            pass
+
+    import logging
+    logging.getLogger(__name__).info(f'[check_afk_sessions] Fired nudge for {fired} sessions.')
+
+
+@shared_task
 def trigger_fomo_for_hot_sessions():
     """
     Periodic task: find hot sessions (heat >= 75) that haven't triggered FOMO yet
