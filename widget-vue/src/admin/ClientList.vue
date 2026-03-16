@@ -31,6 +31,7 @@
           <tr>
             <th>Client</th>
             <th>Platform</th>
+            <th>Tenant</th>
             <th>Status</th>
             <th>Sessions</th>
             <th>Knowledge Base</th>
@@ -57,6 +58,30 @@
               <span class="platform-badge" :class="'platform-' + client.platform.toLowerCase()">
                 {{ client.platform }}
               </span>
+            </td>
+            <td>
+              <div class="tenant-cell" v-if="isSuperAdmin">
+                <span v-if="client.tenant_name" class="tenant-badge">{{ client.tenant_name }}</span>
+                <span v-else class="unassigned-badge">Unassigned</span>
+                <div class="assign-wrap">
+                  <button class="assign-btn" @click="toggleAssignMenu(client.id)" title="Assign to tenant">
+                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </button>
+                  <div v-if="assignMenuOpen === client.id" class="assign-dropdown">
+                    <p class="assign-dropdown-label">Assign to tenant</p>
+                    <button
+                      v-for="t in tenants" :key="t.id"
+                      class="assign-option"
+                      :class="{ active: client.tenant_id === t.id }"
+                      @click="assignToTenant(client, t.id)"
+                    >{{ t.company_name || t.username }}</button>
+                    <button v-if="client.tenant_id" class="assign-option unassign" @click="assignToTenant(client, null)">
+                      Remove assignment
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <span v-else class="tenant-badge-ro">{{ client.tenant_name || '—' }}</span>
             </td>
             <td>
               <div class="status-dot-wrap">
@@ -179,6 +204,7 @@ import { useAdminApi } from '../composables/useAdminApi'
 
 const api = useAdminApi()
 const clients = ref([])
+const tenants = ref([])
 const loading = ref(false)
 const showModal = ref(false)
 const creating = ref(false)
@@ -186,17 +212,38 @@ const scrapingId = ref(null)
 const deleteTarget = ref(null)
 const deleting = ref(false)
 const formError = ref('')
+const assignMenuOpen = ref(null)
+const isSuperAdmin = api.isSuperAdmin()
 
 const form = ref({ name: '', domain_url: '', platform: 'WORDPRESS' })
 
 async function loadClients() {
   loading.value = true
   try {
-    clients.value = await api.getClients() || []
+    const [c, t] = await Promise.all([api.getClients(), isSuperAdmin ? api.getTenants() : Promise.resolve([])])
+    clients.value = c || []
+    tenants.value = t || []
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
+  }
+}
+
+function toggleAssignMenu(clientId) {
+  assignMenuOpen.value = assignMenuOpen.value === clientId ? null : clientId
+}
+
+async function assignToTenant(client, tenantId) {
+  assignMenuOpen.value = null
+  try {
+    const result = await api.assignClientToTenant(client.id, tenantId)
+    client.tenant_id = result.tenant_id
+    client.tenant_name = result.tenant_name
+    // Keep tenants list in sync
+    tenants.value = await api.getTenants() || tenants.value
+  } catch (e) {
+    alert(e.message || 'Assignment failed.')
   }
 }
 
@@ -254,7 +301,14 @@ async function doDelete() {
   }
 }
 
-onMounted(loadClients)
+function closeAssignMenu(e) {
+  if (!e.target.closest('.assign-wrap')) assignMenuOpen.value = null
+}
+
+onMounted(() => {
+  loadClients()
+  document.addEventListener('click', closeAssignMenu)
+})
 </script>
 
 <style scoped>
@@ -340,6 +394,42 @@ onMounted(loadClients)
 .status-dot.active { background: #22C55E; }
 .status-dot.inactive { background: #CBD5E1; }
 .status-text { font-size: 13px; color: #475569; }
+
+/* Tenant column */
+.tenant-cell { display: flex; align-items: center; gap: 6px; }
+.tenant-badge {
+  font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px;
+  background: rgba(99,102,241,0.1); color: #4F46E5; white-space: nowrap;
+}
+.unassigned-badge {
+  font-size: 11px; color: #CBD5E1; font-style: italic;
+}
+.tenant-badge-ro { font-size: 12px; color: #475569; }
+.assign-wrap { position: relative; }
+.assign-btn {
+  width: 22px; height: 22px; border-radius: 5px; border: 1px solid #E2E8F0;
+  background: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  color: #94A3B8; transition: all 0.15s; flex-shrink: 0;
+}
+.assign-btn:hover { background: #EEF2FF; border-color: #C7D2FE; color: #6366F1; }
+.assign-dropdown {
+  position: absolute; top: 28px; left: 0; z-index: 50;
+  background: white; border: 1px solid #E2E8F0; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 180px; padding: 6px;
+}
+.assign-dropdown-label {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  color: #94A3B8; padding: 4px 8px 6px;
+}
+.assign-option {
+  display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 7px;
+  border: none; background: none; font-size: 13px; color: #334155;
+  cursor: pointer; font-family: inherit; transition: all 0.1s;
+}
+.assign-option:hover { background: #F1F5F9; }
+.assign-option.active { background: rgba(99,102,241,0.08); color: #4F46E5; font-weight: 600; }
+.assign-option.unassign { color: #EF4444; margin-top: 4px; border-top: 1px solid #F1F5F9; border-radius: 0 0 7px 7px; }
+.assign-option.unassign:hover { background: #FEF2F2; }
 
 .sessions-count { font-size: 14px; font-weight: 600; color: #0F172A; }
 
