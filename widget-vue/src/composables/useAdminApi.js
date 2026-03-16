@@ -1,5 +1,12 @@
-const API_BASE = 'http://localhost:8000'
-const WS_BASE = 'ws://localhost:8000'
+// Derive the backend URL from wherever the admin SPA is being served.
+// In dev (npm run dev on :5173) window.location.origin is the Vite dev server,
+// so fall back to localhost:8000.  In production the admin is served from the
+// same Django/Daphne origin, so window.location.origin is already correct.
+const API_BASE =
+  window.location.port === '5173'
+    ? 'http://localhost:8000'
+    : window.location.origin
+const WS_BASE = API_BASE.replace(/^http/, 'ws')
 export const WIDGET_URL = `${API_BASE}/widget/widget.js`
 
 function getHeaders() {
