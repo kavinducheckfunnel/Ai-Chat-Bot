@@ -54,6 +54,9 @@
               <div class="action-row">
                 <button class="action-btn edit-btn" @click="openEdit(t)">Edit</button>
                 <button class="action-btn plan-btn" @click="openPlan(t)">Plan</button>
+                <button class="action-btn impersonate-btn" @click="loginAsTenant(t)" :disabled="impersonating === t.id" title="Login as this tenant">
+                  {{ impersonating === t.id ? '...' : 'Login As' }}
+                </button>
                 <button class="action-btn del-btn" @click="confirmDelete(t)">Delete</button>
               </div>
             </td>
@@ -175,6 +178,11 @@
       </div>
     </div>
 
+    <!-- Impersonate toast -->
+    <div v-if="impersonateToast" class="toast" :class="impersonateToast.type">
+      {{ impersonateToast.msg }}
+    </div>
+
     <!-- Delete Confirm -->
     <div v-if="deleteTenant" class="modal-overlay" @click.self="deleteTenant = null">
       <div class="modal modal-sm">
@@ -217,6 +225,9 @@ const savingPlan = ref(false)
 
 const deleteTenant = ref(null)
 const deleting = ref(false)
+
+const impersonating = ref(null)
+const impersonateToast = ref(null)
 
 async function load() {
   loading.value = true
@@ -292,6 +303,33 @@ async function savePlan() {
   }
 }
 
+async function loginAsTenant(t) {
+  impersonating.value = t.id
+  try {
+    const data = await api.impersonateTenant(t.id)
+    // Store the impersonation token — overwrites current superadmin token
+    const prevToken = localStorage.getItem('cf_access_token')
+    const prevUser = localStorage.getItem('cf_user')
+    localStorage.setItem('cf_access_token', data.access)
+    localStorage.setItem('cf_user', JSON.stringify({ ...data.tenant, role: data.tenant.role }))
+    // Keep a breadcrumb so the admin can return to their own session
+    localStorage.setItem('cf_impersonate_return_token', prevToken)
+    localStorage.setItem('cf_impersonate_return_user', prevUser)
+    localStorage.setItem('cf_impersonating', 'true')
+    showToast(`Logged in as ${data.tenant.username} (${data.tenant.company_name})`, 'success')
+    setTimeout(() => { window.location.href = '/admin/' }, 1200)
+  } catch (e) {
+    showToast(e.message || 'Impersonation failed', 'error')
+  } finally {
+    impersonating.value = null
+  }
+}
+
+function showToast(msg, type = 'success') {
+  impersonateToast.value = { msg, type }
+  setTimeout(() => { impersonateToast.value = null }, 3000)
+}
+
 function confirmDelete(t) { deleteTenant.value = t }
 
 async function doDelete() {
@@ -356,6 +394,19 @@ onMounted(load)
 .plan-btn:hover { background: rgba(99,102,241,0.15); }
 .del-btn { background: #FEF2F2; border-color: #FECACA; color: #DC2626; }
 .del-btn:hover { background: #FEE2E2; }
+.impersonate-btn { background: #F0FDF4; border-color: #86EFAC; color: #16A34A; }
+.impersonate-btn:hover:not(:disabled) { background: #DCFCE7; }
+.impersonate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  padding: 12px 22px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.12); animation: fadeIn 0.2s ease;
+}
+.toast.success { background: #16A34A; color: white; }
+.toast.error { background: #DC2626; color: white; }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
 /* Modal */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }

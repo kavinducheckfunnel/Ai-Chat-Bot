@@ -6,7 +6,7 @@ from datetime import timedelta
 @shared_task(bind=True, max_retries=1)
 def schedule_afk_nudge(self, session_id):
     """
-    Fires 5 minutes after being scheduled.
+    Fires 2 minutes after being scheduled.
     If the visitor hasn't sent a message since the task was queued,
     we inject an AFK nudge message into their WebSocket.
     """
@@ -19,11 +19,11 @@ def schedule_afk_nudge(self, session_id):
     except ChatSession.DoesNotExist:
         return
 
-    # Skip if already sent or if visitor has been active in last 4 min
+    # Skip if already sent or if visitor has been active in last 1 min
     if session.afk_nudge_sent or session.takeover_active:
         return
 
-    cutoff = timezone.now() - timedelta(minutes=4)
+    cutoff = timezone.now() - timedelta(minutes=1)
     if session.last_visitor_message_at and session.last_visitor_message_at > cutoff:
         return  # Visitor is still active
 
@@ -55,31 +55,49 @@ def schedule_afk_nudge(self, session_id):
     })
 
 
+# Nudge messages rotate to avoid repetition across multiple fires
+_NUDGE_MESSAGES = [
+    "Still there? I'm here to help if you have any questions!",
+    "Just checking in — can I help you find what you're looking for?",
+    "Take your time! Let me know if you'd like a recommendation.",
+]
+
+
 @shared_task
 def check_afk_sessions():
     """
-    Periodic task (every 5 min): find sessions idle for 5+ minutes where no
-    nudge has been sent yet, and fire the AFK nudge into their WebSocket.
+    Periodic task (every 2 min): find sessions idle for 2+ minutes.
+    Fires up to 3 nudges per session with a minimum 5-minute gap between nudges.
+    Uses nudge_count and last_nudge_at to track multi-fire state.
     """
     from chat.models import ChatSession
     from channels.layers import get_channel_layer
     from asgiref.sync import async_to_sync
+    from django.db import models as db_models
 
-    cutoff = timezone.now() - timedelta(minutes=5)
+    now = timezone.now()
+    idle_cutoff = now - timedelta(minutes=2)       # must be idle 2+ min
+    nudge_gap_cutoff = now - timedelta(minutes=5)  # min 5 min between nudges
+
     idle_sessions = ChatSession.objects.filter(
-        afk_nudge_sent=False,
         takeover_active=False,
         last_visitor_message_at__isnull=False,
-        last_visitor_message_at__lte=cutoff,
-        # Only sessions that have at least one message (real visitor)
+        last_visitor_message_at__lte=idle_cutoff,
         message_count__gte=1,
+        nudge_count__lt=3,  # max 3 nudges per session
+    ).filter(
+        # Either never nudged, or last nudge was 5+ min ago
+        db_models.Q(last_nudge_at__isnull=True) | db_models.Q(last_nudge_at__lte=nudge_gap_cutoff)
     ).select_related('client')
 
     channel_layer = get_channel_layer()
     fired = 0
     for session in idle_sessions:
         client = session.client
-        nudge_message = "Still there? I'm here to help if you have any questions!"
+        nudge_index = session.nudge_count % len(_NUDGE_MESSAGES)
+        nudge_message = _NUDGE_MESSAGES[nudge_index]
+
+        # Override with client-specific message if configured
         if client and client.discount_code and session.closing_triggered:
             nudge_message = (
                 f"{client.cta_message or 'Ready to take the next step?'} "
@@ -90,9 +108,13 @@ def check_afk_sessions():
 
         history = session.chat_history or []
         history.append({'role': 'ai', 'message': nudge_message, 'source': 'afk_nudge'})
+        new_count = session.nudge_count + 1
         ChatSession.objects.filter(session_id=session.session_id).update(
             chat_history=history,
-            afk_nudge_sent=True,
+            nudge_count=new_count,
+            last_nudge_at=now,
+            # Mark afk_nudge_sent only after all 3 nudges are exhausted
+            afk_nudge_sent=(new_count >= 3),
         )
         group_name = f'chat_{session.session_id}'
         try:

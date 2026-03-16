@@ -37,5 +37,10 @@ def update_session_scores(session, raw_intent, raw_budget, raw_urgency):
     session.urgency_trend = determine_trend(session.current_urgency_ema, session.previous_urgency_ema)
     
     session.message_count += 1
-    session.save()
+    session.save(update_fields=[
+        'previous_intent_ema', 'previous_budget_ema', 'previous_urgency_ema',
+        'current_intent_ema', 'current_budget_ema', 'current_urgency_ema',
+        'intent_trend', 'budget_trend', 'urgency_trend',
+        'message_count',
+    ])
     return session
