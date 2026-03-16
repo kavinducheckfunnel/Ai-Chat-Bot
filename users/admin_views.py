@@ -1,3 +1,5 @@
+import logging
+import threading
 from django.contrib.auth.models import User
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -6,6 +8,8 @@ from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Avg, Count
+
+logger = logging.getLogger(__name__)
 
 from .models import Client, UserProfile, TenantProfile, Plan, PlanHistory
 from .serializers import ClientSerializer, ClientCreateSerializer, UserProfileSerializer
@@ -310,12 +314,32 @@ def trigger_scrape(request, client_id):
     if not client.domain_url:
         return Response({'detail': 'Client has no domain URL set.'}, status=400)
 
-    from scraper.tasks import scrape_client_website
-    scrape_client_website.delay(str(client.id))
-
     client.ingestion_status = 'RUNNING'
-    client.save(update_fields=['ingestion_status'])
+    client.total_pages_ingested = 0
+    client.save(update_fields=['ingestion_status', 'total_pages_ingested'])
 
+    cid = str(client.id)
+
+    def _run_scrape():
+        """Run scrape in a background thread — no Celery required."""
+        from django.db import connection
+        connection.close()  # Let Django open a fresh DB connection in this thread
+        try:
+            from scraper.ingestion import auto_scrape, ingest_documents
+            _client = Client.objects.get(pk=cid)
+            logger.info(f'[trigger_scrape] Starting scrape for "{_client.name}"')
+            documents = auto_scrape(_client)
+            count = ingest_documents(_client, documents)
+            Client.objects.filter(pk=cid).update(
+                ingestion_status='DONE',
+                total_pages_ingested=count,
+            )
+            logger.info(f'[trigger_scrape] Done — {count} chunks ingested for "{_client.name}"')
+        except Exception as exc:
+            logger.error(f'[trigger_scrape] Failed for client {cid}: {exc}')
+            Client.objects.filter(pk=cid).update(ingestion_status='FAILED')
+
+    threading.Thread(target=_run_scrape, daemon=True).start()
     return Response({'detail': 'Scrape started.', 'status': 'RUNNING'})
 
 
