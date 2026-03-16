@@ -224,7 +224,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAdminApi } from '../composables/useAdminApi'
+import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 
 const route = useRoute()
 const api = useAdminApi()
@@ -269,7 +269,7 @@ const settingsForm = ref({
 
 const embedCode = computed(() =>
   client.value
-    ? `<script src="http://localhost:5174/assets/index.js" data-client-id="${client.value.id}"><\/script>`
+    ? `<script src="${WIDGET_URL}" data-client-id="${client.value.id}"><\/script>`
     : ''
 )
 

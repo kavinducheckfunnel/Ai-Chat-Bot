@@ -1,5 +1,6 @@
 const API_BASE = 'http://localhost:8000'
 const WS_BASE = 'ws://localhost:8000'
+export const WIDGET_URL = `${API_BASE}/widget/widget.js`
 
 function getHeaders() {
   const token = localStorage.getItem('cf_access_token')
