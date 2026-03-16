@@ -1,7 +1,10 @@
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { reactive, onMounted, onUnmounted } from 'vue';
+
+// Pricing / checkout URL patterns — triggers pricing hesitation FOMO
+const PRICING_PATTERNS = ['/pricing', '/plans', '/checkout', '/subscribe', '/upgrade', '/buy'];
 
 export function useTracker() {
-    const sessionId = ref(crypto.randomUUID());
+    const sessionId = crypto.randomUUID();
     const events = [];
 
     const behaviorMatrix = reactive({
@@ -9,7 +12,9 @@ export function useTracker() {
         timeOnSite: 0,
         hoverCount: 0,
         scrollDepth: 0,
-        intentLevel: "Casual Browser"
+        intentLevel: "Casual Browser",
+        pricingPageVisits: 0,
+        exitIntentFired: false,
     });
 
     let startTime = Date.now();
@@ -23,11 +28,48 @@ export function useTracker() {
         onNudgeTriggered = cb;
     };
 
-    const trackPageView = () => {
-        behaviorMatrix.pagesViewed.push(window.location.pathname);
-        logEvent("page_view", window.location.pathname);
+    // ── API helpers ───────────────────────────────────────────────────────────
+    const getApiBase = () => {
+        const h = window.location.hostname;
+        return (h === 'localhost' || h === '127.0.0.1') ? 'http://127.0.0.1:8000' : '';
     };
 
+    const fireTrigger = (triggerType) => {
+        const clientId = window.__CF_CLIENT_ID__;
+        if (!clientId || !sessionId) return;
+        fetch(`${getApiBase()}/api/chat/trigger/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: sessionId, client_id: clientId, trigger_type: triggerType }),
+        }).catch(() => { });
+    };
+
+    // ── Page view tracking ────────────────────────────────────────────────────
+    const trackPageView = () => {
+        const path = window.location.pathname;
+        behaviorMatrix.pagesViewed.push(path);
+        logEvent("page_view", path);
+
+        // Check if this is a pricing page
+        if (PRICING_PATTERNS.some(p => path.toLowerCase().includes(p))) {
+            behaviorMatrix.pricingPageVisits++;
+            logEvent("pricing_page_visit", path);
+
+            // Fire FOMO after 2nd visit or after 30s on the page
+            if (behaviorMatrix.pricingPageVisits >= 2) {
+                fireTrigger('pricing_hesitation');
+            } else {
+                // First visit: fire after 30 seconds of hesitation on pricing page
+                setTimeout(() => {
+                    if (PRICING_PATTERNS.some(p => window.location.pathname.toLowerCase().includes(p))) {
+                        fireTrigger('pricing_hesitation');
+                    }
+                }, 30000);
+            }
+        }
+    };
+
+    // ── Scroll tracking ───────────────────────────────────────────────────────
     const trackScroll = () => {
         const handleScroll = () => {
             let docHeight = Math.max(
@@ -44,6 +86,7 @@ export function useTracker() {
         return () => window.removeEventListener("scroll", handleScroll);
     };
 
+    // ── Hover tracking ────────────────────────────────────────────────────────
     const trackHovers = () => {
         const handleHover = (el) => {
             behaviorMatrix.hoverCount++;
@@ -54,43 +97,55 @@ export function useTracker() {
         });
     };
 
+    // ── Exit-intent detection ─────────────────────────────────────────────────
+    // Fires when the mouse moves above the top ~20px of the viewport (heading to browser bar / back button)
+    const trackExitIntent = () => {
+        const handleMouseLeave = (e) => {
+            if (e.clientY > 20) return;                      // not heading out of viewport top
+            if (behaviorMatrix.exitIntentFired) return;       // only fire once
+            if (behaviorMatrix.timeOnSite < 5) return;        // ignore immediate bounces
+
+            behaviorMatrix.exitIntentFired = true;
+            logEvent("exit_intent", window.location.pathname);
+            fireTrigger('exit_intent');
+        };
+        document.addEventListener("mouseleave", handleMouseLeave);
+        return () => document.removeEventListener("mouseleave", handleMouseLeave);
+    };
+
     const logEvent = (type, data) => {
         events.push({ type, data, timestamp: Date.now() });
     };
 
+    // ── Nudge evaluation ──────────────────────────────────────────────────────
     const evaluateAndTriggerNudge = () => {
-        // Stage 1 logic: Give an active nudge when timeOnSite > 30s or depth > 50%
         if (behaviorMatrix.timeOnSite >= 30 || behaviorMatrix.scrollDepth >= 50) {
             behaviorMatrix.intentLevel = "High-Intent Lead";
             onNudgeTriggered();
         }
     };
 
+    // ── Analytics beacon ──────────────────────────────────────────────────────
     const sendBeacon = () => {
-        const host = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost' ? '127.0.0.1:8000' : window.location.host;
-        const url = `http://${host}/api/analytics/beacon/`;
-        const payload = JSON.stringify({
-            sessionId: sessionId.value,
-            behaviorMatrix,
-            events
-        });
+        const url = `${getApiBase()}/api/analytics/beacon/`;
+        const payload = JSON.stringify({ sessionId, behaviorMatrix, events });
         if (navigator.sendBeacon) {
             navigator.sendBeacon(url, payload);
         } else {
             fetch(url, { method: "POST", body: payload, keepalive: true }).catch(() => { });
         }
-        // Clear array after sending
         events.length = 0;
     };
 
     let cleanupScroll = null;
+    let cleanupExitIntent = null;
 
     onMounted(() => {
         startTime = Date.now();
         trackPageView();
         cleanupScroll = trackScroll();
+        cleanupExitIntent = trackExitIntent();
 
-        // Give DOM a chance to render for hover listeners
         setTimeout(trackHovers, 500);
 
         timeInterval = setInterval(() => {
@@ -106,6 +161,7 @@ export function useTracker() {
         clearInterval(timeInterval);
         clearTimeout(nudgeTimeout);
         if (cleanupScroll) cleanupScroll();
+        if (cleanupExitIntent) cleanupExitIntent();
         window.removeEventListener("beforeunload", sendBeacon);
         sendBeacon();
     });
@@ -113,6 +169,6 @@ export function useTracker() {
     return {
         sessionId,
         behaviorMatrix,
-        setNudgeCallback
+        setNudgeCallback,
     };
 }

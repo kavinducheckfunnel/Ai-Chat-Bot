@@ -202,10 +202,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'chat.tasks.trigger_fomo_for_hot_sessions',
         'schedule': crontab(minute='*/10'),
     },
-    # AFK nudge check: every 5 minutes
+    # AFK nudge check: every 2 minutes
     'afk-nudge-check': {
         'task': 'chat.tasks.check_afk_sessions',
-        'schedule': crontab(minute='*/5'),
+        'schedule': crontab(minute='*/2'),
     },
 }
 

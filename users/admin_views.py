@@ -505,6 +505,50 @@ def plan_list(request):
     return Response(data)
 
 
+@api_view(['POST'])
+@permission_classes([IsSuperAdmin])
+def impersonate_tenant(request, tenant_id):
+    """
+    SuperAdmin only — issues a short-lived JWT (1 hr) scoped to the tenant's user.
+    The returned token carries a custom claim 'impersonated_by' so audit logs can
+    distinguish real logins from impersonation sessions.
+    """
+    try:
+        tenant = TenantProfile.objects.select_related('user').get(pk=tenant_id)
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'Tenant not found.'}, status=404)
+
+    tenant_user = tenant.user
+    if not tenant_user:
+        return Response({'detail': 'Tenant has no linked user account.'}, status=400)
+
+    # Issue a fresh access token for the tenant user
+    refresh = RefreshToken.for_user(tenant_user)
+    # Shorten access token lifetime to 1 hour for impersonation safety
+    from datetime import timedelta
+    from django.utils import timezone
+    access = refresh.access_token
+    access.set_exp(lifetime=timedelta(hours=1))
+    # Embed audit claim
+    access['impersonated_by'] = request.user.username
+
+    profile = getattr(tenant_user, 'profile', None)
+    role = profile.role if profile else 'tenant_admin'
+
+    return Response({
+        'access': str(access),
+        'expires_in': 3600,
+        'tenant': {
+            'id': tenant.pk,
+            'company_name': tenant.company_name,
+            'username': tenant_user.username,
+            'email': tenant_user.email,
+            'role': role,
+        },
+        'impersonated_by': request.user.username,
+    })
+
+
 # ─── Helper ───────────────────────────────────────────────────────────────────
 
 def _calc_heat(session):

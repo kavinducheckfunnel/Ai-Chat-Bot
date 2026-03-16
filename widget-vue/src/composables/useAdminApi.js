@@ -128,6 +128,8 @@ export function useAdminApi() {
       method: 'POST', body: JSON.stringify({ plan_id: planId }),
     }),
 
+    impersonateTenant: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/impersonate/`, { method: 'POST' }),
+
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {
       const token = localStorage.getItem('cf_access_token')

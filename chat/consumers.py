@@ -137,7 +137,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             from chat.tasks import schedule_afk_nudge
             schedule_afk_nudge.apply_async(
                 args=[str(session.session_id)],
-                countdown=300,  # 5 min inactivity window
+                countdown=120,  # 2 min inactivity window
             )
 
     # ── Handler for admin-injected messages during takeover ──────────────
