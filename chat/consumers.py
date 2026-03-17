@@ -64,10 +64,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # Update last visitor message time for AFK tracking
         await self.update_visitor_timestamp(session)
 
-        # Generate AI response
-        ai_response = await database_sync_to_async(generate_ai_response)(
-            session, message, behavior_matrix
-        )
+        # Generate AI response — wrap in try/except so the WebSocket
+        # always sends a reply even if the AI service crashes
+        try:
+            ai_response = await database_sync_to_async(generate_ai_response)(
+                session, message, behavior_matrix
+            )
+        except Exception as exc:
+            import traceback
+            traceback.print_exc()
+            print(f"[ChatConsumer] generate_ai_response crashed: {exc}")
+            ai_response = {
+                'reply_text': "I'm sorry, I ran into a technical issue. Please try again in a moment.",
+                'intent_score': 0.5,
+                'budget_score': 0.5,
+                'urgency_score': 0.5,
+            }
 
         # Send reply to visitor
         await self.send(text_data=json.dumps({
