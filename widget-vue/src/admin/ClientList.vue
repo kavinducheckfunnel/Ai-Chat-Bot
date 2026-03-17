@@ -353,8 +353,13 @@ onMounted(() => {
 /* Table */
 .clients-table-wrap {
   background: white; border-radius: 14px; border: 1px solid #F1F5F9;
-  overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  overflow: visible; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
+/* Re-apply corner clipping on the table rows so border-radius still looks correct */
+.clients-table thead tr:first-child th:first-child { border-radius: 14px 0 0 0; }
+.clients-table thead tr:first-child th:last-child  { border-radius: 0 14px 0 0; }
+.clients-table tbody tr:last-child td:first-child  { border-radius: 0 0 0 14px; }
+.clients-table tbody tr:last-child td:last-child   { border-radius: 0 0 14px 0; }
 
 .clients-table { width: 100%; border-collapse: collapse; }
 
@@ -416,7 +421,7 @@ onMounted(() => {
 }
 .assign-btn:hover { background: #EEF2FF; border-color: #C7D2FE; color: #6366F1; }
 .assign-dropdown {
-  position: absolute; top: 28px; left: 0; z-index: 50;
+  position: absolute; bottom: 28px; left: 0; z-index: 200;
   background: white; border: 1px solid #E2E8F0; border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 180px; padding: 6px;
 }
