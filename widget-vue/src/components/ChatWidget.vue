@@ -88,7 +88,7 @@ async function loadBranding() {
 const isOpen = ref(false);
 const inputValue = ref('');
 const chatMessages = ref([
-  { type: 'text', text: "Hi! I'm your Checkfunnel AI Expert. How can I help you today?", sender: 'ai' }
+  { type: 'text', text: "Hi! 👋 I'm your AI Assistant. How can I help you today?", sender: 'ai' }
 ]);
 const messagesContainer = ref(null);
 let socket = null;
@@ -230,17 +230,17 @@ onMounted(() => {
 #cf-chat-button:hover { transform: scale(1.1); }
 
 /* Changed display from block/none to flex with v-show logic managing it naturally */
-#cf-chat-window { 
-  display: flex; 
-  width: 420px; 
-  height: 680px; 
-  background: #ffffff; 
-  border-radius: 16px; 
-  box-shadow: 0 10px 40px rgba(0,0,0,0.15); 
-  flex-direction: column; 
-  overflow: hidden; 
-  margin-bottom: 20px; 
-  border: 1px solid #eaeaea; 
+#cf-chat-window {
+  display: flex;
+  width: 460px;
+  height: 760px;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 12px 50px rgba(0,0,0,0.18);
+  flex-direction: column;
+  overflow: hidden;
+  margin-bottom: 20px;
+  border: 1px solid #eaeaea;
 }
 
 #cf-chat-header {

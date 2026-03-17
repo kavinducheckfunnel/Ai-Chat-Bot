@@ -243,7 +243,10 @@ async function assignToTenant(client, tenantId) {
     // Keep tenants list in sync
     tenants.value = await api.getTenants() || tenants.value
   } catch (e) {
-    alert(e.message || 'Assignment failed.')
+    const msg = e.message === 'Failed to fetch'
+      ? 'Cannot reach server. Make sure the backend is running.'
+      : (e.message || 'Assignment failed.')
+    alert(msg)
   }
 }
 
