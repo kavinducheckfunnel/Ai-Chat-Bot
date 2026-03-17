@@ -109,9 +109,9 @@ export function useAdminApi() {
     getKanban: () => apiFetch('/api/admin/kanban/'),
 
     // ── God View ─────────────────────────────────────────────────────────
-    takeoverSession: (id) => apiFetch(`/api/admin/sessions/${id}/takeover/`, { method: 'POST' }),
+    takeoverSession: (id) => apiFetch(`/api/admin/sessions/${id}/takeover/`, { method: 'POST', body: '{}' }),
 
-    releaseSession: (id) => apiFetch(`/api/admin/sessions/${id}/release/`, { method: 'POST' }),
+    releaseSession: (id) => apiFetch(`/api/admin/sessions/${id}/release/`, { method: 'POST', body: '{}' }),
 
     sendMessage: (id, message) => apiFetch(`/api/admin/sessions/${id}/send/`, {
       method: 'POST', body: JSON.stringify({ message }),
@@ -138,7 +138,22 @@ export function useAdminApi() {
 
     getPlanHistory: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/plan-history/`),
 
-    impersonateTenant: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/impersonate/`, { method: 'POST' }),
+    impersonateTenant: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/impersonate/`, { method: 'POST', body: '{}' }),
+
+    isImpersonating() {
+      return localStorage.getItem('cf_impersonating') === 'true'
+    },
+
+    returnFromImpersonation() {
+      const returnToken = localStorage.getItem('cf_impersonate_return_token')
+      const returnUser = localStorage.getItem('cf_impersonate_return_user')
+      localStorage.setItem('cf_access_token', returnToken)
+      localStorage.setItem('cf_user', returnUser)
+      localStorage.removeItem('cf_impersonating')
+      localStorage.removeItem('cf_impersonate_return_token')
+      localStorage.removeItem('cf_impersonate_return_user')
+      window.location.href = '/admin/tenants'
+    },
 
     assignClientToTenant: (clientId, tenantId) => apiFetch(`/api/admin/clients/${clientId}/assign-tenant/`, {
       method: 'POST', body: JSON.stringify({ tenant_id: tenantId }),

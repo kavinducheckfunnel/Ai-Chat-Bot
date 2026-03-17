@@ -43,6 +43,18 @@
       </template>
     </nav>
 
+    <!-- Impersonation banner -->
+    <div v-if="isImpersonating" class="impersonate-banner">
+      <div class="impersonate-info">
+        <span class="impersonate-label">Viewing as</span>
+        <span class="impersonate-name">{{ user?.username }}</span>
+      </div>
+      <button class="return-btn" @click="returnFromImpersonation" title="Return to admin account">
+        <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10.5a6.5 6.5 0 010 13H11" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Return
+      </button>
+    </div>
+
     <div class="sidebar-bottom">
       <div class="user-card">
         <div class="avatar">{{ initials }}</div>
@@ -69,9 +81,14 @@ const initials = computed(() => {
   return name.slice(0, 2).toUpperCase()
 })
 const isSuperAdmin = computed(() => api.isSuperAdmin())
+const isImpersonating = computed(() => api.isImpersonating())
 
 function logout() {
   api.logout()
+}
+
+function returnFromImpersonation() {
+  api.returnFromImpersonation()
 }
 </script>
 
@@ -205,5 +222,61 @@ function logout() {
 .logout-btn:hover {
   background: rgba(239,68,68,0.1);
   color: #FCA5A5;
+}
+
+.impersonate-banner {
+  margin: 0 0 10px 0;
+  padding: 10px 12px;
+  background: rgba(234,179,8,0.12);
+  border: 1px solid rgba(234,179,8,0.3);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.impersonate-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.impersonate-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #CA8A04;
+}
+
+.impersonate-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #FDE68A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.return-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  background: rgba(234,179,8,0.2);
+  border: 1px solid rgba(234,179,8,0.4);
+  border-radius: 6px;
+  color: #FDE68A;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.return-btn:hover {
+  background: rgba(234,179,8,0.35);
 }
 </style>
