@@ -31,24 +31,24 @@ def generate_ai_response(session, user_message, behavior_matrix):
 
         # ── 2. Similarity search filtered by client ──────────────────────────
         chunk_qs = DocumentChunk.objects.filter(client=session.client) if session.client else DocumentChunk.objects.all()
-        # Fetch top 120 candidates but defer embedding vectors (not needed in Python,
-        # only used in SQL for the CosineDistance computation)
+        # Fetch all chunks sorted by distance, deferring the heavy embedding
+        # vectors (only needed for the SQL computation, not in Python).
+        # Limit 3000 is generous enough for any site while avoiding runaway queries.
         raw_chunks = list(
             chunk_qs.annotate(
                 distance=CosineDistance('embedding', query_embedding)
-            ).order_by('distance').defer('embedding')[:120]
+            ).order_by('distance').defer('embedding')[:3000]
         )
 
-        # De-duplicate: at most 2 chunks per source URL so the AI sees
-        # diverse pages instead of 40 chunks from 1-2 URLs
-        seen_urls: dict = {}
+        # Pick the BEST (closest) chunk per unique URL — this ensures ALL pages
+        # can surface, not just those whose many duplicate chunks dominate the top-N.
+        seen_urls: set = set()
         top_chunks = []
         for chunk in raw_chunks:
             url = chunk.source_url or ''
-            count = seen_urls.get(url, 0)
-            if count < 2:
+            if url not in seen_urls:
                 top_chunks.append(chunk)
-                seen_urls[url] = count + 1
+                seen_urls.add(url)
             if len(top_chunks) >= 25:
                 break
 
