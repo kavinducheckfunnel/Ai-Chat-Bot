@@ -17,6 +17,25 @@ export default defineConfig({
       },
     },
   ],
+  server: {
+    proxy: {
+      // Proxy all API + widget requests to Django
+      '/api': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      '/widget': {
+        target: 'http://127.0.0.1:8000',
+        changeOrigin: true,
+      },
+      // Proxy WebSocket connections to Django/Daphne
+      '/ws': {
+        target: 'ws://127.0.0.1:8000',
+        ws: true,
+        changeOrigin: true,
+      },
+    },
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

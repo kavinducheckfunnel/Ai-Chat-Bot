@@ -3,21 +3,23 @@
     <!-- Chat Window -->
     <div id="cf-chat-window" v-show="isOpen">
       <div id="cf-chat-header">
-        <div class="header-title">
+        <div class="header-info">
           <img v-if="branding.chatbot_logo_url" :src="branding.chatbot_logo_url" class="header-logo" alt="logo" />
           <div v-else class="status-dot"></div>
-          {{ branding.chatbot_name }}
+          <div class="header-text">
+            <span class="header-name">{{ branding.chatbot_name }}</span>
+            <span class="header-status">● Online</span>
+          </div>
         </div>
         <button id="cf-close-btn" @click="toggleWindow" aria-label="Close chat">&times;</button>
       </div>
 
       <div id="cf-chat-messages" ref="messagesContainer">
-        <!-- Chat messages -->
         <div
           v-for="(msg, index) in chatMessages"
           :key="index"
           :class="['cf-msg', msg.sender === 'user' ? 'cf-msg-user' : 'cf-msg-ai']"
-          :style="msg.sender === 'user' ? { background: branding.color } : {}"
+          :style="msg.sender === 'user' ? { background: branding.chatbot_color } : {}"
         >
           <template v-if="msg.type === 'text'">
             <div v-if="msg.sender === 'ai'" v-html="renderMarkdown(msg.text)" class="markdown-body"></div>
@@ -29,7 +31,7 @@
             </div>
           </template>
           <template v-else-if="msg.type === 'product'">
-            <ProductCard :productId="msg.productId" />
+            <ProductCard :productId="msg.productId" :clientId="clientId" />
           </template>
         </div>
       </div>
@@ -47,7 +49,7 @@
         <button
           id="cf-send-btn"
           @click="sendMessage"
-          :style="{ background: branding.color }"
+          :style="{ background: branding.chatbot_color }"
           :disabled="isTyping || !inputValue.trim()"
           aria-label="Send message"
         >
@@ -59,8 +61,40 @@
       </div>
     </div>
 
+    <!-- Lead Capture Modal -->
+    <div v-if="showLeadForm" class="cf-lead-overlay" @click.self="dismissLeadForm">
+      <div class="cf-lead-modal">
+        <button class="cf-lead-close" @click="dismissLeadForm">&times;</button>
+        <div class="cf-lead-icon">📬</div>
+        <h3 class="cf-lead-title">Stay in touch</h3>
+        <p class="cf-lead-sub">Leave your contact and we'll follow up with a personalised answer.</p>
+        <input
+          v-model="leadEmail"
+          type="email"
+          class="cf-lead-input"
+          placeholder="Your email address"
+          @keydown.enter="submitLead"
+        />
+        <input
+          v-model="leadPhone"
+          type="tel"
+          class="cf-lead-input"
+          placeholder="Phone number (optional)"
+          @keydown.enter="submitLead"
+        />
+        <button
+          class="cf-lead-submit"
+          :style="{ background: branding.chatbot_color }"
+          @click="submitLead"
+          :disabled="!leadEmail.trim()"
+        >
+          {{ leadSubmitting ? 'Saving…' : 'Send my details' }}
+        </button>
+      </div>
+    </div>
+
     <!-- Floating Bubble -->
-    <button id="cf-chat-button" @click="toggleWindow" :style="{ background: branding.color }" aria-label="Open chat">
+    <button id="cf-chat-button" @click="toggleWindow" :style="{ background: branding.chatbot_color }" aria-label="Open chat">
       <svg v-if="!isOpen" width="28" height="28" viewBox="0 0 24 24" fill="white">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
       </svg>
@@ -85,152 +119,118 @@ marked.setOptions({ renderer, breaks: true });
 
 const renderMarkdown = (text) => marked.parse(text || '');
 
-// ─── Tracker composable ───────────────────────────────────────────────────────
+// ─── Tracker ─────────────────────────────────────────────────────────────────
 const { sessionId, behaviorMatrix, setNudgeCallback } = useTracker();
 
-// ── Branding ────────────────────────────────────────────────────────────────
-const branding = ref({
+// ─── State ────────────────────────────────────────────────────────────────────
+const clientId = window.__CF_CLIENT_ID__ || null;
+const isOpen     = ref(false);
+const isTyping   = ref(false);
+const inputValue = ref('');
+const branding   = ref({
   chatbot_name: 'AI Assistant',
   chatbot_color: '#3B82F6',
   chatbot_logo_url: null,
 });
-
-async function loadBranding() {
-  const clientId = window.__CF_CLIENT_ID__;
-  if (!clientId) return;
-  try {
-    const API = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:8000'
-      : '';
-    const res = await fetch(`${API}/api/chat/widget-config/${clientId}/`);
-    if (!res.ok) return;
-    const cfg = await res.json();
-    branding.value = cfg;
-    // Inject CSS custom properties onto the widget root
-    const root = document.getElementById('cf-app-root');
-    if (root) {
-      root.style.setProperty('--cf-primary', cfg.chatbot_color);
-      // Derive a darker shade for hover states
-      root.style.setProperty('--cf-primary-dark', cfg.chatbot_color + 'cc');
-    }
-    // Store FOMO config globally so the tracker can access it
-    window.__CF_BRANDING__ = cfg;
-  } catch { /* silently fail — widget still works with defaults */ }
-}
-
-const isOpen = ref(false);
-const inputValue = ref('');
 const chatMessages = ref([
-  { type: 'text', text: "Hi! I'm your Checkfunnel AI Expert. How can I help you today?", sender: 'ai' }
+  { type: 'text', text: "Hi! 👋 I'm your AI Assistant. How can I help you today?", sender: 'ai' },
 ]);
 const messagesContainer = ref(null);
-let socket = null;
+const userMessageCount = ref(0);
 
-// ─── State ────────────────────────────────────────────────────────────────────
-const isOpen     = ref(false);
-const isTyping   = ref(false);
-const inputValue = ref('');
-const branding   = ref({ name: '', color: '#3B82F6', logo_url: '' });
-
-const chatMessages = ref([
-  {
-    type: 'text',
-    text: "Hi! 👋 I'm your AI Assistant. How can I help you today?",
-    sender: 'ai',
-  },
-]);
-
-const messagesContainer = ref(null);
+// ─── Lead capture state ───────────────────────────────────────────────────────
+const showLeadForm    = ref(false);
+const leadEmail       = ref('');
+const leadPhone       = ref('');
+const leadSubmitting  = ref(false);
+const leadCaptured    = ref(false);  // only show once per session
 
 // ─── WebSocket ────────────────────────────────────────────────────────────────
 let socket = null;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
 const MAX_RECONNECT = 5;
+const pendingMessages = [];
+
+function getApiBase() {
+  // Production embed: main.js sets this from the <script src> URL so the widget
+  // always calls back to the correct Django server, not the host page.
+  if (window.__CF_BACKEND_URL__) return window.__CF_BACKEND_URL__;
+  // Dev (Vite proxy) or same-origin Django: use relative paths (proxy handles it).
+  return '';
+}
+
+function getWsBase() {
+  // Production embed: derive ws(s):// from the known backend HTTP URL.
+  if (window.__CF_BACKEND_URL__) {
+    return window.__CF_BACKEND_URL__.replace(/^http/, 'ws');
+  }
+  // Dev / same-origin: WebSocket to the current host (Vite proxies /ws → Django).
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  return `${proto}://${window.location.host}`;
+}
 
 function connectWebSocket() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    return; // Already connected or connecting
-  }
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
 
-  const wsUrl = `${CF_WS_URL}/ws/chat/${CF_CLIENT_ID}/${sessionId.value}/`;
-  console.log('[CF] Connecting WebSocket:', wsUrl);
-
-  socket = new WebSocket(wsUrl);
+  const globalClientId = clientId || '00000000-0000-0000-0000-000000000000';
+  socket = new WebSocket(`${getWsBase()}/ws/chat/${globalClientId}/${sessionId}/`);
 
   socket.onopen = () => {
-    console.log('[CF] WebSocket connected.');
     reconnectAttempts = 0;
+    while (pendingMessages.length > 0) {
+      socket.send(JSON.stringify(pendingMessages.shift()));
+    }
   };
 
   socket.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data);
-
-      // Remove typing indicator
       removeTypingIndicator();
       isTyping.value = false;
 
       if (data.type === 'ai_message') {
-        chatMessages.value.push({
-          type: 'text',
-          text: data.message || '',
-          sender: 'ai',
-        });
-
+        if (data.message) {
+          chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai' });
+        }
         if (data.suggested_product_id) {
-          chatMessages.value.push({
-            type: 'product',
-            productId: data.suggested_product_id,
-            sender: 'ai',
-          });
+          chatMessages.value.push({ type: 'product', productId: data.suggested_product_id, sender: 'ai' });
+        }
+        // Trigger lead capture after 3rd AI response if not already captured
+        if (!leadCaptured.value && userMessageCount.value >= 3) {
+          setTimeout(() => { showLeadForm.value = true; }, 1500);
         }
       }
-    } catch (err) {
-      console.error('[CF] Failed to parse WebSocket message:', err);
+    } catch {
       removeTypingIndicator();
       isTyping.value = false;
     }
   };
 
-  socket.onerror = (err) => {
-    console.error('[CF] WebSocket error:', err);
-  };
+  socket.onerror = () => {};
 
   socket.onclose = (event) => {
-    console.warn('[CF] WebSocket closed. Code:', event.code);
     removeTypingIndicator();
     isTyping.value = false;
     socket = null;
-
-    // Auto-reconnect with exponential back-off (skip if intentional close)
     if (event.code !== 1000 && reconnectAttempts < MAX_RECONNECT) {
       const delay = Math.min(1000 * 2 ** reconnectAttempts, 15000);
       reconnectAttempts++;
-      console.log(`[CF] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})…`);
       reconnectTimer = setTimeout(connectWebSocket, delay);
     }
   };
 }
 
 function disconnectWebSocket() {
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-  if (socket) {
-    socket.close(1000, 'Component unmounted');
-    socket = null;
-  }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  if (socket) { socket.close(1000, 'Component unmounted'); socket = null; }
 }
 
-// ─── Typing indicator helpers ─────────────────────────────────────────────────
+// ─── Typing indicator ─────────────────────────────────────────────────────────
 const TYPING_MSG_ID = '__typing__';
-
 function showTypingIndicator() {
   chatMessages.value.push({ type: 'typing', sender: 'ai', id: TYPING_MSG_ID });
 }
-
 function removeTypingIndicator() {
   const idx = chatMessages.value.findIndex((m) => m.id === TYPING_MSG_ID);
   if (idx !== -1) chatMessages.value.splice(idx, 1);
@@ -241,38 +241,55 @@ function sendMessage() {
   const text = inputValue.value.trim();
   if (!text || isTyping.value) return;
 
-  // Show message immediately — don't wait for socket
   chatMessages.value.push({ type: 'text', text, sender: 'user' });
   inputValue.value = '';
   isTyping.value = true;
+  userMessageCount.value++;
   showTypingIndicator();
 
-  // Ensure socket is open, then send
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    connectWebSocket();
-  }
-  _trySend(text, 0);
-}
-
-function _trySend(text, attempt) {
+  const payload = { message: text, behavior_matrix: behaviorMatrix };
   if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify({ message: text, behavior_matrix: behaviorMatrix.value || {} }));
-    return;
-  }
-  if (attempt < 10) {
-    setTimeout(() => _trySend(text, attempt + 1), 400);
+    socket.send(JSON.stringify(payload));
   } else {
-    removeTypingIndicator();
-    isTyping.value = false;
-    chatMessages.value.push({
-      type: 'text',
-      text: '⚠️ Could not connect to server. Please try again.',
-      sender: 'ai',
-    });
+    pendingMessages.push(payload);
+    if (!socket || socket.readyState === WebSocket.CLOSED) connectWebSocket();
   }
 }
 
-// ─── Auto-scroll on new messages ─────────────────────────────────────────────
+// ─── Lead capture ─────────────────────────────────────────────────────────────
+function dismissLeadForm() {
+  showLeadForm.value = false;
+  leadCaptured.value = true;  // don't show again this session
+}
+
+async function submitLead() {
+  const email = leadEmail.value.trim();
+  if (!email || leadSubmitting.value) return;
+
+  leadSubmitting.value = true;
+  try {
+    await fetch(`${getApiBase()}/api/chat/lead/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        email,
+        phone: leadPhone.value.trim() || null,
+      }),
+    });
+  } catch { /* silent fail — lead saved on best-effort */ }
+
+  leadSubmitting.value = false;
+  leadCaptured.value = true;
+  showLeadForm.value = false;
+  chatMessages.value.push({
+    type: 'text',
+    text: '✅ Thanks! We\'ll be in touch soon.',
+    sender: 'ai',
+  });
+}
+
+// ─── Auto-scroll ──────────────────────────────────────────────────────────────
 watch(chatMessages, async () => {
   await nextTick();
   if (messagesContainer.value) {
@@ -280,109 +297,54 @@ watch(chatMessages, async () => {
   }
 }, { deep: true });
 
-// ─── Toggle chat window ───────────────────────────────────────────────────────
+// ─── Toggle ───────────────────────────────────────────────────────────────────
 function toggleWindow() {
   isOpen.value = !isOpen.value;
   if (isOpen.value) {
     connectWebSocket();
     nextTick(() => {
-      if (messagesContainer.value) {
-        messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-      }
+      if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
     });
   }
 }
 
-// Queue for messages sent while the socket is still connecting
-const pendingMessages = [];
-let reconnectTimer = null;
-
-const connectWebSocket = () => {
-  // Don't open a second connection if one is already open or connecting
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
-    return;
-  }
-
-  const host = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'
-    ? '127.0.0.1:8000'
-    : window.location.host;
-  // Use actual client ID or a nil UUID so the backend skips client lookup cleanly
-  const globalClientId = window.__CF_CLIENT_ID__ || '00000000-0000-0000-0000-000000000000';
-  socket = new WebSocket(`ws://${host}/ws/chat/${globalClientId}/${sessionId}/`);
-
-  socket.onopen = () => {
-    // Flush any messages that were queued while connecting
-    while (pendingMessages.length > 0) {
-      const payload = pendingMessages.shift();
-      socket.send(JSON.stringify(payload));
-    }
-  };
-
-  socket.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      if (data.type === 'ai_message') {
-        if (data.message) {
-          chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai' });
-        }
-        if (data.suggested_product_id) {
-          chatMessages.value.push({ type: 'product', productId: data.suggested_product_id, sender: 'ai' });
-        }
-      }
-    } catch { /* ignore malformed frames */ }
-  };
-
-  socket.onclose = () => {
-    // Auto-reconnect after 3 seconds on unexpected close
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    reconnectTimer = setTimeout(() => {
-      connectWebSocket();
-    }, 3000);
-  };
-
-  socket.onerror = () => {
-    // Let onclose handle the reconnect
-  };
-};
-
-const sendMessage = () => {
-  const msgText = inputValue.value.trim();
-  if (!msgText) return;
-
-  chatMessages.value.push({ type: 'text', text: msgText, sender: 'user' });
-  inputValue.value = '';
-
-  const payload = { message: msgText, behavior_matrix: behaviorMatrix };
-
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    // Socket ready — send immediately
-    socket.send(JSON.stringify(payload));
-  } else {
-    // Socket is connecting or closed — queue the message
-    pendingMessages.push(payload);
-    if (!socket || socket.readyState === WebSocket.CLOSED) {
-      connectWebSocket();
-    }
-  }
-}
-
-// ─── Proactive nudge callback from tracker ────────────────────────────────────
-function handleNudge(nudgeText) {
+// ─── Nudge callback ───────────────────────────────────────────────────────────
+setNudgeCallback((nudgeText) => {
   if (!nudgeText) return;
   chatMessages.value.push({ type: 'text', text: nudgeText, sender: 'ai' });
   if (!isOpen.value) isOpen.value = true;
+});
+
+// ─── Branding ─────────────────────────────────────────────────────────────────
+async function loadBranding() {
+  if (!clientId) return;
+  try {
+    const res = await fetch(`${getApiBase()}/api/chat/widget-config/${clientId}/`);
+    if (!res.ok) return;
+    const cfg = await res.json();
+    branding.value = cfg;
+    const root = document.getElementById('cf-app-root');
+    if (root) {
+      root.style.setProperty('--cf-primary', cfg.chatbot_color);
+      root.style.setProperty('--cf-primary-dark', cfg.chatbot_color + 'cc');
+    }
+    window.__CF_BRANDING__ = cfg;
+  } catch { /* use defaults */ }
 }
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 onMounted(() => {
   loadBranding();
-  // Connect immediately — no delay needed
   connectWebSocket();
+});
+
+onBeforeUnmount(() => {
+  disconnectWebSocket();
 });
 </script>
 
 <style scoped>
-/* ── Container ─────────────────────────────────────────────────────── */
+/* ── Container ──────────────────────────────────────────────────────── */
 #cf-chat-container {
   position: fixed;
   bottom: 28px;
@@ -390,6 +352,7 @@ onMounted(() => {
   z-index: 999999;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+
 #cf-chat-button {
   width: 65px;
   height: 65px;
@@ -399,43 +362,36 @@ onMounted(() => {
   border: none;
   cursor: pointer;
   box-shadow: 0 4px 15px rgba(0,0,0,0.25);
-  font-size: 28px;
   transition: transform 0.3s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-#cf-chat-button:hover {
-  transform: scale(1.08);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
-}
+#cf-chat-button:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(0,0,0,0.3); }
 
-#cf-chat-header {
-  background: var(--cf-primary, #3B82F6);
-  color: white;
-  padding: 20px;
-  font-weight: 600;
-  font-size: 16px;
+/* ── Chat window ────────────────────────────────────────────────────── */
+#cf-chat-window {
+  position: absolute;
+  bottom: 80px;
+  right: 0;
+  width: 420px;
+  max-height: 640px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.25s ease;
 }
-
-.header-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255,255,255,0.4);
-}
-
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Header ────────────────────────────────────────────────────────── */
+/* ── Header ─────────────────────────────────────────────────────────── */
 #cf-chat-header {
+  background: var(--cf-primary, #3B82F6);
   color: white;
   padding: 16px 18px;
   font-weight: 600;
@@ -445,153 +401,50 @@ onMounted(() => {
   align-items: center;
   flex-shrink: 0;
 }
-
-.header-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.header-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid rgba(255,255,255,0.5);
-}
-
-.status-dot {
-  width: 36px;
-  height: 36px;
-  background: rgba(255,255,255,0.25);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-}
+.header-info { display: flex; align-items: center; gap: 10px; }
+.header-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.5); }
+.status-dot { width: 36px; height: 36px; background: rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; }
 .status-dot::after { content: '🤖'; }
+.header-text { display: flex; flex-direction: column; gap: 1px; }
+.header-name { font-size: 15px; font-weight: 600; line-height: 1.2; }
+.header-status { font-size: 11px; opacity: 0.85; }
+#cf-close-btn {
+  background: rgba(255,255,255,0.2); border: none; color: white; cursor: pointer;
+  font-size: 20px; border-radius: 50%; width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0;
+}
 
-.header-text {
+/* ── Messages ───────────────────────────────────────────────────────── */
+#cf-chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 10px;
+  background: #f8f9fb;
 }
-
-.header-name {
+.cf-msg {
+  padding: 13px 18px;
+  border-radius: 18px;
+  max-width: 85%;
+  word-wrap: break-word;
   font-size: 15px;
-  font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.55;
+  animation: fadeIn 0.25s ease;
 }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.cf-msg-user { color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+.cf-msg-ai { background: #fff; color: #1a1a2e; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #ececec; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
 
-.header-status {
-  font-size: 11px;
-  opacity: 0.85;
-  letter-spacing: 0.3px;
-}
-
-#cf-close-btn {
-  background: rgba(255,255,255,0.2);
-  border: none;
-  color: white;
-  cursor: pointer;
-  font-size: 20px;
-  border-radius: 50%;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s;
-  flex-shrink: 0;
-}
-#cf-chat-input:focus {
-  border-color: var(--cf-primary, #3B82F6);
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.15);
-}
-
-#cf-send-btn {
-  background: var(--cf-primary, #3B82F6);
-  color: white;
-  border: none;
-  padding: 14px 22px;
-  border-radius: 25px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 15px;
-  transition: opacity 0.2s;
-}
-#cf-send-btn:hover { opacity: 0.85; }
-
-.cf-msg { 
-  padding: 14px 20px; 
-  border-radius: 18px; 
-  max-width: 85%; 
-  word-wrap: break-word; 
-  font-size: 15px; 
-  line-height: 1.5; 
-  box-shadow: 0 2px 5px rgba(0,0,0,0.05); 
-  animation: fadeIn 0.3s ease; 
-}
-@keyframes fadeIn { 
-  from { opacity: 0; transform: translateY(10px); } 
-  to { opacity: 1; transform: translateY(0); } 
-}
-
-.cf-msg-user {
-  background: var(--cf-primary, #3B82F6);
-  color: white;
-  align-self: flex-end;
-  border-bottom-right-radius: 4px;
-}
-.cf-msg-ai { 
-  background: #ffffff; 
-  color: #333; 
-  align-self: flex-start; 
-  border-bottom-left-radius: 4px; 
-  border: 1px solid #efefef; 
-}
-
-.cf-msg-user {
-  color: white;
-  align-self: flex-end;
-  border-bottom-right-radius: 4px;
-}
-
-.cf-msg-ai {
-  background: #ffffff;
-  color: #1a1a2e;
-  align-self: flex-start;
-  border-bottom-left-radius: 4px;
-  border: 1px solid #ececec;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-}
-
-/* ── Typing indicator ──────────────────────────────────────────────── */
-.typing-indicator {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-  height: 20px;
-}
-
-.typing-indicator span {
-  width: 8px;
-  height: 8px;
-  background: #adb5bd;
-  border-radius: 50%;
-  animation: bounce 1.2s infinite ease-in-out;
-}
+/* ── Typing indicator ───────────────────────────────────────────────── */
+.typing-indicator { display: flex; gap: 5px; align-items: center; height: 20px; }
+.typing-indicator span { width: 8px; height: 8px; background: #adb5bd; border-radius: 50%; animation: bounce 1.2s infinite ease-in-out; }
 .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
 .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
 
-@keyframes bounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30%           { transform: translateY(-6px); }
-}
-
-/* ── Input area ────────────────────────────────────────────────────── */
+/* ── Input area ─────────────────────────────────────────────────────── */
 #cf-chat-input-area {
   display: flex;
   border-top: 1px solid #efefef;
@@ -601,7 +454,6 @@ onMounted(() => {
   gap: 8px;
   flex-shrink: 0;
 }
-
 #cf-chat-input {
   flex: 1;
   padding: 11px 18px;
@@ -613,49 +465,66 @@ onMounted(() => {
   transition: border 0.2s, box-shadow 0.2s;
   font-family: inherit;
 }
-#cf-chat-input:focus {
-  border-color: #3B82F6;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(59,130,246,0.12);
-}
+#cf-chat-input:focus { border-color: var(--cf-primary, #3B82F6); background: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
 #cf-chat-input:disabled { opacity: 0.6; cursor: not-allowed; }
-
 #cf-send-btn {
-  color: white;
-  border: none;
-  padding: 11px 14px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 15px;
-  transition: opacity 0.2s, transform 0.15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
+  color: white; border: none; padding: 11px 14px; border-radius: 50%;
+  cursor: pointer; transition: opacity 0.2s, transform 0.15s;
+  display: flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; flex-shrink: 0;
 }
 #cf-send-btn:hover:not(:disabled) { opacity: 0.88; transform: scale(1.05); }
 #cf-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* ── Markdown styles inside AI bubbles ─────────────────────────────── */
-.markdown-body :deep(p)           { margin: 0 0 8px 0; }
-.markdown-body :deep(p:last-child){ margin-bottom: 0; }
-.markdown-body :deep(ol),
-.markdown-body :deep(ul)          { margin: 6px 0; padding-left: 18px; }
-.markdown-body :deep(li)          { margin-bottom: 5px; }
-.markdown-body :deep(a) {
-  color: #3B82F6;
-  text-decoration: none;
-  font-weight: 600;
+/* ── Markdown ───────────────────────────────────────────────────────── */
+.markdown-body :deep(p) { margin: 0 0 8px 0; }
+.markdown-body :deep(p:last-child) { margin-bottom: 0; }
+.markdown-body :deep(ol), .markdown-body :deep(ul) { margin: 6px 0; padding-left: 18px; }
+.markdown-body :deep(li) { margin-bottom: 5px; }
+.markdown-body :deep(a) { color: #3B82F6; text-decoration: none; font-weight: 600; }
+.markdown-body :deep(a:hover) { text-decoration: underline; }
+.markdown-body :deep(strong) { font-weight: 700; }
+.markdown-body :deep(code) { background: #f1f3f5; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+
+/* ── Lead capture modal ─────────────────────────────────────────────── */
+.cf-lead-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 1000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
 }
-.markdown-body :deep(a:hover)     { text-decoration: underline; }
-.markdown-body :deep(strong)      { font-weight: 700; }
-.markdown-body :deep(code) {
-  background: #f1f3f5;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 13px;
+.cf-lead-modal {
+  background: #fff;
+  border-radius: 20px;
+  padding: 32px 28px;
+  width: 320px;
+  max-width: 90vw;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  animation: slideUp 0.2s ease;
 }
+.cf-lead-close {
+  position: absolute; top: 12px; right: 14px;
+  background: none; border: none; font-size: 22px; cursor: pointer; color: #999;
+}
+.cf-lead-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
+.cf-lead-title { margin: 0 0 6px; font-size: 18px; font-weight: 700; color: #1a1a2e; text-align: center; }
+.cf-lead-sub { margin: 0 0 20px; font-size: 13px; color: #64748b; text-align: center; line-height: 1.5; }
+.cf-lead-input {
+  width: 100%; padding: 11px 14px; border: 1.5px solid #e1e5ea; border-radius: 10px;
+  font-size: 14px; margin-bottom: 10px; box-sizing: border-box; outline: none; font-family: inherit;
+  transition: border 0.2s;
+}
+.cf-lead-input:focus { border-color: var(--cf-primary, #3B82F6); }
+.cf-lead-submit {
+  width: 100%; padding: 12px; border: none; border-radius: 10px;
+  color: white; font-size: 15px; font-weight: 600; cursor: pointer;
+  transition: opacity 0.2s; margin-top: 4px;
+}
+.cf-lead-submit:hover:not(:disabled) { opacity: 0.88; }
+.cf-lead-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

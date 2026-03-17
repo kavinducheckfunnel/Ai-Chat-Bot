@@ -53,7 +53,7 @@ export function useTracker() {
         // Check if this is a pricing page
         if (PRICING_PATTERNS.some(p => path.toLowerCase().includes(p))) {
             behaviorMatrix.pricingPageVisits++;
-            logEvent("pricing_page_visit", path);
+            logEvent("pricing_visit", path);
 
             // Fire FOMO after 2nd visit or after 30s on the page
             if (behaviorMatrix.pricingPageVisits >= 2) {
@@ -128,7 +128,8 @@ export function useTracker() {
     // ── Analytics beacon ──────────────────────────────────────────────────────
     const sendBeacon = () => {
         const url = `${getApiBase()}/api/analytics/beacon/`;
-        const payload = JSON.stringify({ sessionId, behaviorMatrix, events });
+        const clientId = window.__CF_CLIENT_ID__;
+        const payload = JSON.stringify({ sessionId, clientId, behaviorMatrix, events });
         if (navigator.sendBeacon) {
             navigator.sendBeacon(url, payload);
         } else {

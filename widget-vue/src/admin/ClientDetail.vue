@@ -140,6 +140,55 @@
         </div>
       </div>
 
+      <!-- Analytics Tab -->
+      <div v-if="activeTab === 'analytics'" class="tab-content">
+        <div v-if="loadingPageAnalytics" class="loading-state"><div class="loader"></div></div>
+        <template v-else-if="pageAnalytics">
+          <div class="overview-stats">
+            <div class="ov-stat">
+              <p class="ov-label">Page Views (30d)</p>
+              <p class="ov-value">{{ pageAnalytics.total_page_views ?? '—' }}</p>
+            </div>
+            <div class="ov-stat">
+              <p class="ov-label">Unique Sessions (30d)</p>
+              <p class="ov-value">{{ pageAnalytics.unique_sessions ?? '—' }}</p>
+            </div>
+            <div class="ov-stat">
+              <p class="ov-label">Pricing Visits</p>
+              <p class="ov-value hot">{{ pageAnalytics.pricing_visits ?? '—' }}</p>
+            </div>
+            <div class="ov-stat">
+              <p class="ov-label">Exit Intents</p>
+              <p class="ov-value">{{ pageAnalytics.exit_intents ?? '—' }}</p>
+            </div>
+          </div>
+
+          <div v-if="pageAnalytics.top_pages?.length" class="top-pages-section">
+            <h3 class="section-title">Top Pages</h3>
+            <table class="sessions-table" style="margin-top: 12px;">
+              <thead>
+                <tr>
+                  <th>Page URL</th>
+                  <th style="width: 80px; text-align: right;">Views</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="p in pageAnalytics.top_pages" :key="p.page_url">
+                  <td class="visitor-cell" style="max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ p.page_url || '(unknown)' }}
+                  </td>
+                  <td style="text-align: right; font-weight: 600; color: #6366F1;">{{ p.views }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="empty-state" style="margin-top: 24px;">
+            <p>No page view events tracked yet. Make sure the widget is embedded and visitors are browsing.</p>
+          </div>
+        </template>
+        <div v-else class="empty-state"><p>No analytics data available.</p></div>
+      </div>
+
       <!-- Settings Tab -->
       <div v-if="activeTab === 'settings'" class="tab-content">
         <div class="settings-card">
@@ -288,10 +337,13 @@ const copiedKey = ref('')
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
+const pageAnalytics = ref(null)
+const loadingPageAnalytics = ref(false)
 
 const tabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'sessions', label: 'Sessions' },
+  { id: 'analytics', label: 'Analytics' },
   { id: 'settings', label: 'Settings' },
 ]
 
@@ -446,7 +498,19 @@ onMounted(loadClient)
 
 // Load sessions when tab switches
 import { watch } from 'vue'
-watch(activeTab, (tab) => { if (tab === 'sessions') loadSessions() })
+async function loadPageAnalytics() {
+  if (pageAnalytics.value) return
+  loadingPageAnalytics.value = true
+  try {
+    pageAnalytics.value = await api.getClientPageAnalytics(route.params.id)
+  } catch {}
+  loadingPageAnalytics.value = false
+}
+
+watch(activeTab, (tab) => {
+  if (tab === 'sessions') loadSessions()
+  if (tab === 'analytics') loadPageAnalytics()
+})
 </script>
 
 <style scoped>

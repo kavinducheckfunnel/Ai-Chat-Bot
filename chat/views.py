@@ -8,8 +8,6 @@ from channels.layers import get_channel_layer
 from .models import ChatSession
 from .ai_service import generate_ai_response
 from users.models import Client
-from channels.layers import get_channel_layer
-from asgiref.sync import async_to_sync
 
 
 @api_view(['POST'])
@@ -93,27 +91,24 @@ def trigger_event(request):
     if not client:
         return Response({'status': 'ignored', 'reason': 'no client'})
 
+    # Only fire FOMO if the client has explicitly configured it
+    has_fomo_config = bool(client.fomo_offer_text or client.discount_code)
+    if not has_fomo_config:
+        return Response({'status': 'ignored', 'reason': 'no fomo config'})
+
     # Build FOMO message based on trigger type
     if trigger_type == 'exit_intent':
         fomo_msg = (
             client.fomo_offer_text
-            or (
-                f"Wait! Before you go — use code **{client.discount_code}** for an exclusive discount!"
-                if client.discount_code
-                else "Wait! Don't leave yet — I can help you find exactly what you're looking for."
-            )
+            or f"Wait! Before you go — use code **{client.discount_code}** for an exclusive discount!"
         )
     else:  # pricing_hesitation
         fomo_msg = (
             client.fomo_offer_text
-            or (
-                f"Still deciding? Use code **{client.discount_code}** — limited time only!"
-                if client.discount_code
-                else "Still deciding? I can walk you through our plans and find the best fit for you."
-            )
+            or f"Still deciding? Use code **{client.discount_code}** — limited time only!"
         )
 
-    # Add countdown hint if configured
+    # Add countdown hint only if explicitly configured (not default)
     if client.fomo_countdown_seconds and client.fomo_countdown_seconds > 0:
         mins = client.fomo_countdown_seconds // 60
         fomo_msg += f" This offer expires in {mins} minutes!"
@@ -139,3 +134,69 @@ def trigger_event(request):
         pass  # WS might not be open; message is still saved to history
 
     return Response({'status': 'sent', 'trigger_type': trigger_type})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def capture_lead(request):
+    """
+    Called by the widget lead-capture modal to save visitor email/phone to the session.
+    Body: { session_id, email, phone? }
+    """
+    session_id = request.data.get('session_id')
+    email = request.data.get('email', '').strip()
+
+    if not session_id or not email:
+        return Response({'error': 'session_id and email required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    phone = request.data.get('phone', '') or ''
+
+    updated = ChatSession.objects.filter(session_id=session_id).update(
+        lead_email=email,
+        lead_phone=phone or None,
+    )
+
+    if not updated:
+        return Response({'error': 'session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response({'status': 'saved'})
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def product_detail(request, product_id):
+    """
+    Returns product data for a given product_id by looking up DocumentChunks.
+    Called by the ProductCard widget component.
+    """
+    from scraper.models import DocumentChunk
+    import re
+
+    chunks = DocumentChunk.objects.filter(product_id=str(product_id)).order_by('id')[:3]
+    if not chunks:
+        return Response({'error': 'product not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    chunk = chunks[0]
+    meta = chunk.metadata or {}
+
+    # Extract price from metadata or content text
+    price = meta.get('price') or meta.get('regular_price')
+    if not price:
+        match = re.search(r'\$[\d,]+(?:\.\d{2})?', chunk.content)
+        price = match.group(0) if match else None
+
+    # Extract title — prefer metadata, fall back to first line of content
+    title = meta.get('title') or meta.get('name') or chunk.content.split('\n')[0][:80]
+
+    # Short description: first 160 chars of content after title
+    lines = [l.strip() for l in chunk.content.split('\n') if l.strip()]
+    description = lines[1] if len(lines) > 1 else (lines[0][:160] if lines else '')
+
+    return Response({
+        'product_id': product_id,
+        'title': title,
+        'price': price,
+        'description': description[:200],
+        'url': chunk.source_url,
+        'image_url': meta.get('image_url') or meta.get('image'),
+    })

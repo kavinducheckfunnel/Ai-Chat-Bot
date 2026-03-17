@@ -74,6 +74,20 @@ def woocommerce_webhook(request, client_id):
     """Receives WooCommerce product.updated webhook."""
     client = get_object_or_404(Client, id=client_id)
 
+    # HMAC-SHA256 verification (WooCommerce sends X-WC-Webhook-Signature)
+    secret = client.webhook_secret
+    if secret:
+        wc_sig = request.headers.get('X-WC-Webhook-Signature', '')
+        digest = hmac.new(
+            secret.encode('utf-8'),
+            request.body,
+            hashlib.sha256,
+        ).digest()
+        import base64
+        expected = base64.b64encode(digest).decode()
+        if not hmac.compare_digest(expected, wc_sig):
+            return Response({'status': 'unauthorized'}, status=401)
+
     data = request.data
     product_id = data.get('id')
     title = data.get('name', '')
@@ -95,6 +109,21 @@ def woocommerce_webhook(request, client_id):
 def wordpress_webhook(request, client_id):
     """Receives WordPress post create/update webhook."""
     client = get_object_or_404(Client, id=client_id)
+
+    # HMAC-SHA256 verification (header: X-WP-Webhook-Signature or X-Hub-Signature-256)
+    secret = client.webhook_secret
+    if secret:
+        sig_header = (
+            request.headers.get('X-WP-Webhook-Signature') or
+            request.headers.get('X-Hub-Signature-256', '')
+        )
+        digest = 'sha256=' + hmac.new(
+            secret.encode('utf-8'),
+            request.body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(digest, sig_header):
+            return Response({'status': 'unauthorized'}, status=401)
 
     data = request.data
     # Some WP webhook plugins wrap the payload in {"post": {...}}

@@ -46,43 +46,30 @@ class ChatSession(models.Model):
     conversation_state = models.CharField(max_length=20, choices=STATE_CHOICES, default='RESEARCH')
     kanban_state = models.CharField(max_length=20, choices=KANBAN_CHOICES, default='NEW')
 
-    # Persisted heat score (updated on every AI response)
+    # Heat score — computed from EMA scores on every message
     heat_score = models.FloatField(default=0.0)
 
     message_count = models.IntegerField(default=0)
     chat_history = models.JSONField(default=list)
     behavioral_context = models.JSONField(default=dict)
 
-    # ── Heat score (derived from EMA scores) ──────────────────────────────
-    heat_score = models.FloatField(default=0.0)
-
-    # ── God View / Human Takeover ─────────────────────────────────────────
-    taken_over_by = models.ForeignKey(
-        'auth.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='taken_sessions'
-    )
-    takeover_active = models.BooleanField(default=False)
-
-    # ── Engagement triggers ───────────────────────────────────────────────
-    closing_triggered = models.BooleanField(default=False)
-    last_nudge_at = models.DateTimeField(null=True, blank=True)
-    nudge_count = models.IntegerField(default=0)
-
-    lead_email = models.EmailField(null=True, blank=True)
-    lead_phone = models.CharField(max_length=50, null=True, blank=True)
-
-    # God View — admin takeover
-    takeover_active = models.BooleanField(default=False)
+    # God View / Human Takeover
     taken_over_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='takeover_sessions'
     )
+    takeover_active = models.BooleanField(default=False)
 
-    # Trigger flags
+    # Engagement triggers
     closing_triggered = models.BooleanField(default=False)
     afk_nudge_sent = models.BooleanField(default=False)
     nudge_count = models.IntegerField(default=0)
     last_nudge_at = models.DateTimeField(null=True, blank=True)
     last_visitor_message_at = models.DateTimeField(null=True, blank=True)
+
+    # Lead capture
+    lead_email = models.EmailField(null=True, blank=True)
+    lead_phone = models.CharField(max_length=50, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
