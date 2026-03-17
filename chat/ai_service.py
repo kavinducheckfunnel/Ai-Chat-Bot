@@ -31,9 +31,22 @@ def generate_ai_response(session, user_message, behavior_matrix):
 
         # ── 2. Similarity search filtered by client ──────────────────────────
         chunk_qs = DocumentChunk.objects.filter(client=session.client) if session.client else DocumentChunk.objects.all()
-        top_chunks = chunk_qs.annotate(
+        raw_chunks = chunk_qs.annotate(
             distance=CosineDistance('embedding', query_embedding)
-        ).order_by('distance')[:40]
+        ).order_by('distance')[:200]
+
+        # De-duplicate: at most 2 chunks per source URL so the AI gets
+        # a diverse view of many pages rather than 40 chunks from 1-2 URLs
+        from collections import defaultdict
+        url_counts = defaultdict(int)
+        top_chunks = []
+        for chunk in raw_chunks:
+            url = chunk.source_url or ''
+            if url_counts[url] < 2:
+                top_chunks.append(chunk)
+                url_counts[url] += 1
+            if len(top_chunks) >= 30:
+                break
 
         # ── 3. Build prompt ──────────────────────────────────────────────────
         client_domain = session.client.domain_url if session.client and hasattr(session.client, 'domain_url') else "Unknown"
