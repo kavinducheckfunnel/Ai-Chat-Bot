@@ -51,11 +51,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         # ── God View guard ────────────────────────────────────────────────
         if session.takeover_active:
-            # AI is silenced; only admin can send messages via REST endpoint
-            await self.send(text_data=json.dumps({
-                'type': 'takeover_active',
-                'message': 'An admin is currently handling this conversation.',
-            }))
+            # Save visitor message to history so admin can see it
+            if message:
+                await self._save_visitor_message(session, message)
+                # Broadcast to admin watching via GodViewConsumer
+                await self.channel_layer.group_send(
+                    self.room_group_name,
+                    {'type': 'chat_message', 'message': message, 'sender': 'user', 'admin_injected': False}
+                )
             return
 
         # Update last visitor message time for AFK tracking
@@ -148,6 +151,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'message': event['message'],
             'source': event.get('source', 'ai'),
         }))
+
+    @database_sync_to_async
+    def _save_visitor_message(self, session, message):
+        from .models import ChatSession
+        try:
+            s = ChatSession.objects.get(session_id=session.session_id)
+            s.chat_history.append({'role': 'user', 'message': message})
+            s.save(update_fields=['chat_history'])
+        except ChatSession.DoesNotExist:
+            pass
 
     @database_sync_to_async
     def get_session(self, client_id, session_id):
