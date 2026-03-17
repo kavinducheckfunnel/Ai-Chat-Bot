@@ -96,8 +96,6 @@ export function useAdminApi() {
 
     getClientAnalytics: (id) => apiFetch(`/api/admin/clients/${id}/analytics/`),
 
-    getClientPageAnalytics: (id) => apiFetch(`/api/analytics/client/${id}/`),
-
     triggerScrape: (id) => apiFetch(`/api/admin/clients/${id}/scrape/`, { method: 'POST' }),
 
     // ── Sessions ─────────────────────────────────────────────────────────
