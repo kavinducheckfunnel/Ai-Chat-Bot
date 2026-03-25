@@ -48,6 +48,8 @@
       </template>
     </nav>
 
+    <UsageBar />
+
     <!-- Impersonation banner -->
     <div v-if="isImpersonating" class="impersonate-banner">
       <div class="impersonate-info">
@@ -78,6 +80,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import UsageBar from './UsageBar.vue'
 
 const api = useAdminApi()
 const user = computed(() => api.getUser())

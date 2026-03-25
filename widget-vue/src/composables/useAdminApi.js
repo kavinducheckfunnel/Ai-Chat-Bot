@@ -92,7 +92,12 @@ export function useAdminApi() {
 
     deleteClient: (id) => apiFetch(`/api/admin/clients/${id}/`, { method: 'DELETE' }),
 
-    getClientSessions: (id) => apiFetch(`/api/admin/clients/${id}/sessions/`),
+    getClientSessions(id, params = {}) {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined && v !== false))
+      ).toString()
+      return apiFetch(`/api/admin/clients/${id}/sessions/${qs ? '?' + qs : ''}`)
+    },
 
     getClientAnalytics: (id) => apiFetch(`/api/admin/clients/${id}/analytics/`),
 

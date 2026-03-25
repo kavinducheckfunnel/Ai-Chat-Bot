@@ -60,11 +60,26 @@ def me_view(request):
     user = request.user
     profile = getattr(user, 'profile', None)
     role = profile.role if profile else ('superadmin' if user.is_superuser else 'tenant_admin')
+
+    quota = None
+    tenant = getattr(user, 'tenant_profile', None)
+    if tenant:
+        plan = tenant.plan
+        client_count = tenant.clients.filter(is_active=True).count()
+        quota = {
+            'sessions_this_month': tenant.sessions_this_month,
+            'max_sessions': plan.max_sessions_per_month if plan else None,
+            'client_count': client_count,
+            'max_clients': plan.max_clients if plan else None,
+            'plan_name': plan.name if plan else None,
+        }
+
     return Response({
         'username': user.username,
         'email': user.email,
         'role': role,
         'is_superuser': user.is_superuser,
+        'quota': quota,
     })
 
 
@@ -134,10 +149,41 @@ def client_sessions(request, client_id):
     except Client.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
-    sessions = ChatSession.objects.filter(client=client).order_by('-updated_at')[:100]
+    qs = ChatSession.objects.filter(client=client).order_by('-updated_at')
+
+    # ── Filters ────────────────────────────────────────────────────────
+    state = request.query_params.get('state', '').strip()
+    if state:
+        qs = qs.filter(conversation_state=state)
+
+    date_from = request.query_params.get('date_from', '').strip()
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+
+    date_to = request.query_params.get('date_to', '').strip()
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+
+    if request.query_params.get('has_lead') == 'true':
+        qs = qs.exclude(lead_email='').exclude(lead_email__isnull=True)
+
+    q = request.query_params.get('q', '').strip()
+    if q:
+        qs = qs.filter(lead_email__icontains=q)
+
+    # Fetch up to 200; heat-score range filter applied in-memory
+    min_heat_raw = request.query_params.get('min_heat', '').strip()
+    max_heat_raw = request.query_params.get('max_heat', '').strip()
+    min_heat = float(min_heat_raw) if min_heat_raw else None
+    max_heat = float(max_heat_raw) if max_heat_raw else None
+
     data = []
-    for s in sessions:
+    for s in qs[:200]:
         heat = _calc_heat(s)
+        if min_heat is not None and heat < min_heat:
+            continue
+        if max_heat is not None and heat > max_heat:
+            continue
         data.append({
             'session_id': str(s.session_id),
             'visitor_id': s.visitor_id,

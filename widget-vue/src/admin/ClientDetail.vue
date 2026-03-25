@@ -290,15 +290,6 @@
             </div>
           </div>
 
-          <h3 class="settings-section" style="margin-top: 24px;">Notifications</h3>
-          <div class="settings-grid">
-            <div class="field full">
-              <label>Alert Email</label>
-              <input v-model="settingsForm.notification_email" type="email" placeholder="alerts@yourbusiness.com" />
-              <p class="field-hint">Hot lead and human-request alerts go here. Leave blank to use your account email.</p>
-            </div>
-          </div>
-
           <h3 class="settings-section" style="margin-top: 24px;">FOMO Engine</h3>
           <div class="settings-grid">
             <div class="field full">
@@ -328,11 +319,37 @@
 
       <!-- Sessions Tab -->
       <div v-if="activeTab === 'sessions'" class="tab-content">
+
+        <!-- Filter bar -->
+        <div class="session-filters">
+          <input
+            v-model="sessionFilters.q"
+            class="sf-input sf-search"
+            placeholder="Search email..."
+          />
+          <select v-model="sessionFilters.state" class="sf-select">
+            <option value="">All states</option>
+            <option value="RESEARCH">Research</option>
+            <option value="EVALUATION">Evaluation</option>
+            <option value="OBJECTION">Objection</option>
+            <option value="RECOVERY">Recovery</option>
+            <option value="READY_TO_BUY">Ready to Buy</option>
+          </select>
+          <input v-model="sessionFilters.date_from" type="date" class="sf-input sf-date" title="From date" />
+          <input v-model="sessionFilters.date_to"   type="date" class="sf-input sf-date" title="To date" />
+          <input v-model="sessionFilters.min_heat" type="number" min="0" max="100" class="sf-input sf-heat" placeholder="Min heat" />
+          <input v-model="sessionFilters.max_heat" type="number" min="0" max="100" class="sf-input sf-heat" placeholder="Max heat" />
+          <label class="sf-toggle">
+            <input v-model="sessionFilters.has_lead" type="checkbox" />
+            <span>Has lead</span>
+          </label>
+        </div>
+
         <div v-if="loadingSessions" class="loading-state">
           <div class="loader"></div>
         </div>
         <div v-else-if="!sessions.length" class="empty-state">
-          <p>No sessions yet for this client.</p>
+          <p>No sessions match the current filters.</p>
         </div>
         <div v-else class="sessions-table-wrap">
           <table class="sessions-table">
@@ -403,7 +420,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 
@@ -425,6 +442,16 @@ const copiedKey = ref('')
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
+
+const sessionFilters = reactive({
+  state: '',
+  date_from: '',
+  date_to: '',
+  min_heat: '',
+  max_heat: '',
+  has_lead: false,
+  q: '',
+})
 
 const tabs = [
   { id: 'overview', label: 'Overview' },
@@ -453,7 +480,6 @@ const settingsForm = ref({
   chatbot_name: '',
   chatbot_color: '#3B82F6',
   chatbot_logo_url: '',
-  notification_email: '',
   discount_code: '',
   cta_message: '',
   fomo_countdown_seconds: 600,
@@ -496,7 +522,6 @@ async function loadClient() {
       chatbot_name: clientData.chatbot_name || 'AI Assistant',
       chatbot_color: clientData.chatbot_color || '#3B82F6',
       chatbot_logo_url: clientData.chatbot_logo_url || '',
-      notification_email: clientData.notification_email || '',
       discount_code: clientData.discount_code || '',
       cta_message: clientData.cta_message || '',
       fomo_countdown_seconds: clientData.fomo_countdown_seconds || 600,
@@ -509,12 +534,25 @@ async function loadClient() {
 }
 
 async function loadSessions() {
-  if (sessions.value.length) return
   loadingSessions.value = true
   try {
-    sessions.value = await api.getClientSessions(route.params.id) || []
+    const params = {}
+    if (sessionFilters.state)     params.state      = sessionFilters.state
+    if (sessionFilters.date_from) params.date_from  = sessionFilters.date_from
+    if (sessionFilters.date_to)   params.date_to    = sessionFilters.date_to
+    if (sessionFilters.min_heat)  params.min_heat   = sessionFilters.min_heat
+    if (sessionFilters.max_heat)  params.max_heat   = sessionFilters.max_heat
+    if (sessionFilters.has_lead)  params.has_lead   = 'true'
+    if (sessionFilters.q)         params.q          = sessionFilters.q
+    sessions.value = await api.getClientSessions(route.params.id, params) || []
   } catch {}
   loadingSessions.value = false
+}
+
+let _filterDebounce = null
+function onFilterChange() {
+  clearTimeout(_filterDebounce)
+  _filterDebounce = setTimeout(loadSessions, 300)
 }
 
 async function triggerScrape() {
@@ -618,9 +656,50 @@ const analyticsSparklineArea = computed(() => {
 
 onMounted(loadClient)
 watch(activeTab, (tab) => { if (tab === 'sessions') loadSessions() })
+watch(sessionFilters, onFilterChange)
 </script>
 
 <style scoped>
+/* ── Session filter bar ──────────────────────────────────────────────── */
+.session-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sf-input, .sf-select {
+  height: 34px;
+  padding: 0 10px;
+  background: #1E293B;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #CBD5E1;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.sf-input:focus, .sf-select:focus { border-color: #6366F1; }
+.sf-select { padding-right: 28px; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%2364748B' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center; }
+.sf-search { width: 160px; }
+.sf-date   { width: 130px; color-scheme: dark; }
+.sf-heat   { width: 90px; }
+
+.sf-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #64748B;
+  user-select: none;
+}
+.sf-toggle input { accent-color: #6366F1; cursor: pointer; }
+.sf-toggle:hover span { color: #CBD5E1; }
+
 .detail-page { max-width: 1000px; }
 
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
