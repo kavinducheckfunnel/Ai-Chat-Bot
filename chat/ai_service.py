@@ -82,7 +82,7 @@ def generate_ai_response(session, user_message, behavior_matrix):
             messages=[
                 {"role": "user", "content": [{"text": f"{system_prompt}\n\n{user_prompt}"}]}
             ],
-            inferenceConfig={"maxTokens": 2000, "temperature": 0.7, "topP": 0.9},
+            inferenceConfig={"maxTokens": 2000, "temperature": 0.3, "topP": 0.9},
         )
 
         content_blocks = resp['output']['message']['content']

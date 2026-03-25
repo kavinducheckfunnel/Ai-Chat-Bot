@@ -38,6 +38,9 @@ class Client(models.Model):
     chatbot_color = models.CharField(max_length=20, default='#3B82F6')
     chatbot_logo_url = models.URLField(max_length=500, blank=True, null=True)
 
+    # Notifications
+    notification_email = models.EmailField(blank=True, null=True)
+
     # FOMO / engagement
     discount_code = models.CharField(max_length=100, blank=True, null=True)
     cta_message = models.CharField(max_length=255, default="You're clearly ready — grab your exclusive discount:")

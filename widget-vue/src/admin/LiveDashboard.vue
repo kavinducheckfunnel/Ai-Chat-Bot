@@ -37,6 +37,15 @@
         </div>
       </div>
       <div class="stat-card">
+        <div class="stat-icon stat-red">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2C6 2 2 8 2 12s4 10 10 10 10-4.5 10-10S18 2 12 2z" stroke="currentColor" stroke-width="2"/><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <p class="stat-label">Hot Sessions</p>
+          <p class="stat-value">{{ stats.heat_distribution?.hot ?? '—' }}</p>
+        </div>
+      </div>
+      <div class="stat-card">
         <div class="stat-icon stat-orange">
           <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M12 2C8.5 2 5.5 4.5 5 8c-.3 2 .5 4 2 5.5L12 22l5-8.5c1.5-1.5 2.3-3.5 2-5.5-.5-3.5-3.5-6-7-6z" stroke="currentColor" stroke-width="2"/></svg>
         </div>
@@ -45,13 +54,69 @@
           <p class="stat-value">{{ stats.active_clients ?? '—' }}</p>
         </div>
       </div>
-      <div class="stat-card">
-        <div class="stat-icon stat-purple">
-          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </div>
+
+    <!-- Analytics Row: Heat Distribution + Daily Trend -->
+    <div class="analytics-row">
+      <!-- Heat Distribution -->
+      <div class="analytics-card">
+        <h3 class="analytics-title">Heat Distribution</h3>
+        <div class="heat-dist">
+          <div class="heat-dist-bar">
+            <div class="hd-seg hd-cold" :style="{ flex: heatTotal ? stats.heat_distribution.cold : 1 }"></div>
+            <div class="hd-seg hd-warm" :style="{ flex: heatTotal ? stats.heat_distribution.warm : 1 }"></div>
+            <div class="hd-seg hd-hot"  :style="{ flex: heatTotal ? stats.heat_distribution.hot  : 1 }"></div>
+          </div>
+          <div class="heat-dist-legend">
+            <div class="hd-item">
+              <span class="hd-dot hd-cold"></span>
+              <span class="hd-label">Cold</span>
+              <span class="hd-count">{{ stats.heat_distribution?.cold ?? 0 }}</span>
+            </div>
+            <div class="hd-item">
+              <span class="hd-dot hd-warm"></span>
+              <span class="hd-label">Warm</span>
+              <span class="hd-count">{{ stats.heat_distribution?.warm ?? 0 }}</span>
+            </div>
+            <div class="hd-item">
+              <span class="hd-dot hd-hot"></span>
+              <span class="hd-label">Hot</span>
+              <span class="hd-count">{{ stats.heat_distribution?.hot ?? 0 }}</span>
+            </div>
+          </div>
         </div>
-        <div>
-          <p class="stat-label">Platform Users</p>
-          <p class="stat-value">{{ stats.total_users ?? '—' }}</p>
+      </div>
+
+      <!-- Daily Trend Sparkline -->
+      <div class="analytics-card trend-card">
+        <h3 class="analytics-title">Sessions — Last 14 Days</h3>
+        <div class="sparkline-wrap">
+          <svg v-if="stats.daily_trend?.length" class="sparkline" viewBox="0 0 280 60" preserveAspectRatio="none">
+            <polyline
+              :points="sparklinePoints"
+              fill="none"
+              stroke="#6366F1"
+              stroke-width="2"
+              stroke-linejoin="round"
+              stroke-linecap="round"
+            />
+            <polyline
+              :points="sparklineAreaPoints"
+              fill="url(#sparkGrad)"
+              stroke="none"
+            />
+            <defs>
+              <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#6366F1" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#6366F1" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <p v-else class="no-data">No data yet</p>
+        </div>
+        <div class="sparkline-labels">
+          <span v-if="stats.daily_trend?.length">{{ stats.daily_trend[0].date }}</span>
+          <span v-if="stats.daily_trend?.length">{{ stats.daily_trend[stats.daily_trend.length - 1].date }}</span>
         </div>
       </div>
     </div>
@@ -196,6 +261,40 @@ const filteredSessions = computed(() => {
   if (activeFilter.value === 'warm') return sessions.value.filter(s => s.heat_score >= 40 && s.heat_score < 70)
   if (activeFilter.value === 'cool') return sessions.value.filter(s => s.heat_score < 40)
   return sessions.value
+})
+
+const heatTotal = computed(() => {
+  const d = stats.value.heat_distribution
+  if (!d) return 0
+  return (d.hot || 0) + (d.warm || 0) + (d.cold || 0)
+})
+
+// Build SVG polyline points for the 14-day sparkline
+const sparklinePoints = computed(() => {
+  const trend = stats.value.daily_trend
+  if (!trend || trend.length < 2) return ''
+  const W = 280, H = 60, PAD = 4
+  const counts = trend.map(d => d.count)
+  const maxVal = Math.max(...counts, 1)
+  return trend.map((d, i) => {
+    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+})
+
+const sparklineAreaPoints = computed(() => {
+  const trend = stats.value.daily_trend
+  if (!trend || trend.length < 2) return ''
+  const W = 280, H = 60, PAD = 4
+  const counts = trend.map(d => d.count)
+  const maxVal = Math.max(...counts, 1)
+  const pts = trend.map((d, i) => {
+    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  return `${pts[0].split(',')[0]},${H} ${pts.join(' ')} ${pts[pts.length - 1].split(',')[0]},${H}`
 })
 
 async function loadData() {
@@ -364,9 +463,50 @@ onUnmounted(() => {
 .stat-green { background: rgba(34,197,94,0.1); color: #22C55E; }
 .stat-orange { background: rgba(249,115,22,0.1); color: #F97316; }
 .stat-purple { background: rgba(139,92,246,0.1); color: #8B5CF6; }
+.stat-red { background: rgba(239,68,68,0.1); color: #EF4444; }
 
 .stat-label { font-size: 12px; color: #94A3B8; font-weight: 500; }
 .stat-value { font-size: 26px; font-weight: 700; color: #0F172A; letter-spacing: -0.5px; }
+
+/* Analytics row */
+.analytics-row {
+  display: grid; grid-template-columns: 1fr 2fr; gap: 16px; margin-bottom: 32px;
+}
+
+.analytics-card {
+  background: white; border: 1px solid #F1F5F9; border-radius: 14px;
+  padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.analytics-title { font-size: 13px; font-weight: 600; color: #64748B; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+/* Heat distribution */
+.heat-dist-bar {
+  display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 14px; gap: 2px;
+}
+.hd-seg { border-radius: 6px; transition: flex 0.4s; }
+.hd-seg.hd-cold { background: #3B82F6; }
+.hd-seg.hd-warm { background: #F97316; }
+.hd-seg.hd-hot  { background: #EF4444; }
+
+.heat-dist-legend { display: flex; gap: 20px; }
+.hd-item { display: flex; align-items: center; gap: 6px; }
+.hd-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.hd-dot.hd-cold { background: #3B82F6; }
+.hd-dot.hd-warm { background: #F97316; }
+.hd-dot.hd-hot  { background: #EF4444; }
+.hd-label { font-size: 12px; color: #64748B; }
+.hd-count { font-size: 13px; font-weight: 700; color: #0F172A; }
+
+/* Sparkline */
+.trend-card { display: flex; flex-direction: column; }
+.sparkline-wrap { flex: 1; min-height: 60px; }
+.sparkline { width: 100%; height: 60px; display: block; }
+.sparkline-labels {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: #94A3B8; margin-top: 4px;
+}
+.no-data { font-size: 13px; color: #CBD5E1; text-align: center; padding: 16px; }
 
 /* Section header */
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }

@@ -1,6 +1,9 @@
+import logging
 from celery import shared_task
 from django.utils import timezone
 from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, max_retries=1)
@@ -168,3 +171,236 @@ def trigger_fomo_for_hot_sessions():
                 'message': fomo_text,
                 'source': 'fomo',
             })
+
+            # C1 — fire hot lead alert email (one-time)
+            if not session.hot_lead_email_sent:
+                send_hot_lead_alert.delay(str(session.session_id))
+
+
+# ── C1: Hot Lead Alert ────────────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3)
+def send_hot_lead_alert(self, session_id):
+    """
+    C1: Email the tenant admin when a session first crosses heat_score >= 75.
+    Guarded by hot_lead_email_sent flag — fires at most once per session.
+    """
+    from chat.models import ChatSession
+    from users.models import TenantProfile
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+
+    try:
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return
+
+    if session.hot_lead_email_sent:
+        return
+
+    tenant = TenantProfile.objects.filter(
+        clients=session.client
+    ).select_related('user').first()
+
+    # Resolve recipient: client-level email takes priority over tenant account email
+    recipient = (
+        (session.client.notification_email if session.client else None)
+        or (tenant.user.email if tenant else None)
+    )
+    if not recipient:
+        logger.warning(f'[send_hot_lead_alert] No recipient email for session {session_id}')
+        return
+
+    client_name = session.client.name if session.client else 'Unknown'
+    god_view_url = f'https://app.checkfunnel.ai/admin/godview/{session_id}'
+
+    last_msg = ''
+    for msg in reversed(session.chat_history or []):
+        if msg.get('role') == 'user':
+            last_msg = msg.get('message', msg.get('content', ''))[:200]
+            break
+
+    contact_lines = ''
+    if session.lead_email:
+        contact_lines += f'Email:       {session.lead_email}\n'
+    if session.lead_phone:
+        contact_lines += f'Phone:       {session.lead_phone}\n'
+
+    subject = f'[Checkfunnel] Hot Lead on {client_name} — Heat Score {session.heat_score:.0f}/100'
+    body = (
+        f'A visitor on {client_name} just reached a heat score of '
+        f'{session.heat_score:.1f}/100 — they\'re showing strong buying intent.\n\n'
+        f'Visitor:     {session.visitor_id}\n'
+        f'Stage:       {session.kanban_state}\n'
+        f'Heat Score:  {session.heat_score:.1f} / 100\n'
+        f'{contact_lines}\n'
+        f'Last message:\n"{last_msg}"\n\n'
+        f'View live session:\n{god_view_url}\n\n'
+        f'— The Checkfunnel Team\n'
+    )
+
+    try:
+        EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[recipient],
+        ).send(fail_silently=False)
+        ChatSession.objects.filter(session_id=session_id).update(hot_lead_email_sent=True)
+        logger.info(f'[send_hot_lead_alert] Sent to {recipient} for session {session_id}')
+    except Exception as exc:
+        logger.warning(f'[send_hot_lead_alert] Failed: {exc}')
+        raise self.retry(exc=exc, countdown=60)
+
+
+# ── C3: Takeover Request Alert ────────────────────────────────────────────────
+
+@shared_task(bind=True, max_retries=3)
+def send_takeover_alert(self, session_id):
+    """
+    C3: Email the tenant admin when a visitor asks to speak to a human.
+    Triggered from consumers.py on keyword detection.
+    """
+    from chat.models import ChatSession
+    from users.models import TenantProfile
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+
+    try:
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return
+
+    tenant = TenantProfile.objects.filter(
+        clients=session.client
+    ).select_related('user').first()
+
+    # Resolve recipient: client-level email takes priority over tenant account email
+    recipient = (
+        (session.client.notification_email if session.client else None)
+        or (tenant.user.email if tenant else None)
+    )
+    if not recipient:
+        logger.warning(f'[send_takeover_alert] No recipient email for session {session_id}')
+        return
+
+    client_name = session.client.name if session.client else 'Unknown'
+    god_view_url = f'https://app.checkfunnel.ai/admin/godview/{session_id}'
+
+    last_msg = ''
+    for msg in reversed(session.chat_history or []):
+        if msg.get('role') == 'user':
+            last_msg = msg.get('message', msg.get('content', ''))[:200]
+            break
+
+    contact_lines = ''
+    if session.lead_email:
+        contact_lines += f'Email:       {session.lead_email}\n'
+
+    subject = f'[Checkfunnel] Visitor requesting human support on {client_name}'
+    body = (
+        f'A visitor on {client_name} is asking to speak to a human agent.\n\n'
+        f'Visitor:     {session.visitor_id}\n'
+        f'Heat Score:  {session.heat_score:.1f} / 100\n'
+        f'Stage:       {session.kanban_state}\n'
+        f'{contact_lines}\n'
+        f'Last message:\n"{last_msg}"\n\n'
+        f'Take over this session now:\n{god_view_url}\n\n'
+        f'— The Checkfunnel Team\n'
+    )
+
+    try:
+        EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[recipient],
+        ).send(fail_silently=False)
+        logger.info(f'[send_takeover_alert] Sent to {recipient} for session {session_id}')
+    except Exception as exc:
+        logger.warning(f'[send_takeover_alert] Failed: {exc}')
+        raise self.retry(exc=exc, countdown=60)
+
+
+# ── C2: Daily Digest ──────────────────────────────────────────────────────────
+
+@shared_task
+def send_daily_digest():
+    """
+    C2: Daily email per tenant at 08:00 UTC.
+    Summarises today's sessions, leads captured, and top sessions by heat score.
+    Skipped for tenants with no activity today.
+    """
+    from django.db import models as db_models
+    from users.models import TenantProfile
+    from chat.models import ChatSession
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+
+    now = timezone.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    date_label = today_start.strftime('%B %d, %Y')
+
+    tenants = TenantProfile.objects.select_related('user').all()
+    for tenant in tenants:
+        if not tenant.user.email:
+            continue
+
+        client_ids = list(tenant.clients.values_list('id', flat=True))
+        if not client_ids:
+            continue
+
+        sessions_today = ChatSession.objects.filter(
+            client_id__in=client_ids,
+            created_at__gte=today_start,
+        )
+        total = sessions_today.count()
+        if total == 0:
+            continue  # Nothing to report
+
+        has_contact = (
+            db_models.Q(lead_email__isnull=False) & ~db_models.Q(lead_email='')
+        ) | (
+            db_models.Q(lead_phone__isnull=False) & ~db_models.Q(lead_phone='')
+        )
+        leads_count = sessions_today.filter(has_contact).count()
+
+        avg_heat = sessions_today.aggregate(
+            avg=db_models.Avg('heat_score')
+        )['avg'] or 0.0
+
+        top_sessions = list(sessions_today.order_by('-heat_score')[:3])
+        top_lines = ''
+        for i, s in enumerate(top_sessions, 1):
+            top_lines += (
+                f'  {i}. Heat {s.heat_score:.0f}/100'
+                f' — {s.visitor_id} ({s.kanban_state})\n'
+            )
+
+        subject = f'[Checkfunnel] Daily Digest — {date_label}'
+        body = (
+            f'Hi {tenant.user.get_full_name() or tenant.user.username},\n\n'
+            f"Here's your Checkfunnel activity summary for {date_label}.\n\n"
+            f'Today\'s Stats\n'
+            f'-------------\n'
+            f'Sessions started:    {total}\n'
+            f'Leads captured:      {leads_count}\n'
+            f'Avg heat score:      {avg_heat:.1f} / 100\n\n'
+            f'Top Sessions by Heat Score\n'
+            f'--------------------------\n'
+            f'{top_lines or "  No sessions yet."}\n'
+            f'Log in to your dashboard:\n'
+            f'https://app.checkfunnel.ai/admin/\n\n'
+            f'— The Checkfunnel Team\n'
+        )
+
+        try:
+            EmailMessage(
+                subject=subject,
+                body=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[tenant.user.email],
+            ).send(fail_silently=False)
+            logger.info(f'[send_daily_digest] Sent to {tenant.user.email}')
+        except Exception as exc:
+            logger.warning(f'[send_daily_digest] Failed for {tenant.user.email}: {exc}')

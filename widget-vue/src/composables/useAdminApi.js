@@ -108,6 +108,34 @@ export function useAdminApi() {
     // ── Kanban ───────────────────────────────────────────────────────────
     getKanban: () => apiFetch('/api/admin/kanban/'),
 
+    // ── Leads ─────────────────────────────────────────────────────────────
+    getLeads(params = {}) {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+      ).toString()
+      return apiFetch(`/api/admin/leads/${qs ? '?' + qs : ''}`)
+    },
+
+    async exportLeadsCSV(params = {}) {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+      ).toString()
+      const token = localStorage.getItem('cf_access_token')
+      const res = await fetch(`${API_BASE}/api/admin/leads/export/${qs ? '?' + qs : ''}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `leads_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    },
+
     // ── God View ─────────────────────────────────────────────────────────
     takeoverSession: (id) => apiFetch(`/api/admin/sessions/${id}/takeover/`, { method: 'POST', body: '{}' }),
 

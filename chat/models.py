@@ -67,6 +67,10 @@ class ChatSession(models.Model):
     last_nudge_at = models.DateTimeField(null=True, blank=True)
     last_visitor_message_at = models.DateTimeField(null=True, blank=True)
 
+    # Email notification flags
+    hot_lead_email_sent = models.BooleanField(default=False)
+    human_requested = models.BooleanField(default=False)
+
     # Lead capture
     lead_email = models.EmailField(null=True, blank=True)
     lead_phone = models.CharField(max_length=50, null=True, blank=True)

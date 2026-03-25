@@ -1,13 +1,18 @@
+import csv
 import logging
 import threading
+from datetime import timedelta
+
 from django.contrib.auth.models import User
+from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q
+from django.db.models.functions import TruncDate
+from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from django.db.models import Avg, Count
 
 logger = logging.getLogger(__name__)
 
@@ -273,27 +278,90 @@ def client_analytics(request, client_id):
     sessions = ChatSession.objects.filter(client=client)
     total = sessions.count()
 
+    # Conversation funnel
     state_counts = sessions.values('conversation_state').annotate(count=Count('session_id'))
     funnel = {item['conversation_state']: item['count'] for item in state_counts}
 
-    avg_intent = sessions.aggregate(avg=Avg('current_intent_ema'))['avg'] or 0
-    avg_budget = sessions.aggregate(avg=Avg('current_budget_ema'))['avg'] or 0
-    avg_urgency = sessions.aggregate(avg=Avg('current_urgency_ema'))['avg'] or 0
+    # EMA averages
+    agg = sessions.aggregate(
+        avg_intent=Avg('current_intent_ema'),
+        avg_budget=Avg('current_budget_ema'),
+        avg_urgency=Avg('current_urgency_ema'),
+    )
+    avg_intent = agg['avg_intent'] or 0
+    avg_budget = agg['avg_budget'] or 0
+    avg_urgency = agg['avg_urgency'] or 0
 
-    hot_sessions = sum(1 for s in sessions if _calc_heat(s) >= 70)
+    # Heat distribution via DB expression
+    heat_expr = ExpressionWrapper(
+        (F('current_intent_ema') * 0.45 + F('current_budget_ema') * 0.30 + F('current_urgency_ema') * 0.25) * 100,
+        output_field=FloatField()
+    )
+    annotated = sessions.annotate(heat=heat_expr)
+    hot_count = annotated.filter(heat__gte=70).count()
+    warm_count = annotated.filter(heat__gte=40, heat__lt=70).count()
+    cold_count = annotated.filter(heat__lt=40).count()
+    avg_heat = annotated.aggregate(avg=Avg('heat'))['avg'] or 0
+
+    # Leads captured
+    leads_captured = sessions.filter(
+        Q(lead_email__isnull=False) | Q(lead_phone__isnull=False)
+    ).exclude(lead_email='', lead_phone='').count()
+
+    # Kanban breakdown
+    kanban_raw = sessions.values('kanban_state').annotate(count=Count('session_id'))
+    kanban_breakdown = {item['kanban_state']: item['count'] for item in kanban_raw}
+
+    # 14-day daily trend
+    today = timezone.now().date()
+    cutoff = timezone.now() - timedelta(days=14)
+    daily_raw = (
+        sessions
+        .filter(created_at__gte=cutoff)
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(count=Count('session_id'))
+        .order_by('day')
+    )
+    daily_map = {item['day']: item['count'] for item in daily_raw}
+    daily_trend = [
+        {'date': (today - timedelta(days=i)).strftime('%b %d'), 'count': daily_map.get(today - timedelta(days=i), 0)}
+        for i in range(13, -1, -1)
+    ]
+
+    # Analytics events — aggregate from behavioral_context (populated by beacon)
+    total_page_views = 0
+    total_exit_intent = 0
+    total_pricing_visits = 0
+    for ctx_val in sessions.values_list('behavioral_context', flat=True):
+        ctx = ctx_val or {}
+        total_page_views += ctx.get('pages_viewed', 0) or 0
+        total_pricing_visits += ctx.get('pricing_page_visits', 0) or 0
+        if ctx.get('exit_intent_triggered'):
+            total_exit_intent += 1
 
     return Response({
         'total_sessions': total,
-        'hot_sessions': hot_sessions,
+        'hot_sessions': hot_count,
+        'avg_heat_score': round(avg_heat, 1),
+        'heat_distribution': {'hot': hot_count, 'warm': warm_count, 'cold': cold_count},
         'avg_intent': round(avg_intent * 100, 1),
         'avg_budget': round(avg_budget * 100, 1),
         'avg_urgency': round(avg_urgency * 100, 1),
+        'leads_captured': leads_captured,
         'funnel': {
             'RESEARCH': funnel.get('RESEARCH', 0),
             'EVALUATION': funnel.get('EVALUATION', 0),
             'OBJECTION': funnel.get('OBJECTION', 0),
             'RECOVERY': funnel.get('RECOVERY', 0),
             'READY_TO_BUY': funnel.get('READY_TO_BUY', 0),
+        },
+        'kanban_breakdown': kanban_breakdown,
+        'daily_trend': daily_trend,
+        'analytics_events': {
+            'page_views': total_page_views,
+            'exit_intent_count': total_exit_intent,
+            'pricing_page_visits': total_pricing_visits,
         },
         'pages_ingested': client.total_pages_ingested,
         'ingestion_status': client.ingestion_status,
@@ -348,7 +416,6 @@ def trigger_scrape(request, client_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def platform_stats(request):
-    # Superadmins get all stats; tenant admins get scoped stats
     is_super = request.user.is_superuser or (
         getattr(getattr(request.user, 'profile', None), 'role', '') == 'superadmin'
     )
@@ -356,16 +423,46 @@ def platform_stats(request):
     accessible = get_accessible_clients(request.user)
     active_clients = accessible.filter(is_active=True).count()
     total_clients = accessible.count()
-    total_sessions = ChatSession.objects.filter(client__in=accessible).count()
-    total_users = User.objects.count() if is_super else None
+
+    sessions_qs = ChatSession.objects.filter(client__in=accessible)
+    total_sessions = sessions_qs.count()
+
+    # Heat distribution via DB expression (avoids Python loop)
+    heat_expr = ExpressionWrapper(
+        (F('current_intent_ema') * 0.45 + F('current_budget_ema') * 0.30 + F('current_urgency_ema') * 0.25) * 100,
+        output_field=FloatField()
+    )
+    annotated = sessions_qs.annotate(heat=heat_expr)
+    hot_count = annotated.filter(heat__gte=70).count()
+    warm_count = annotated.filter(heat__gte=40, heat__lt=70).count()
+    cold_count = annotated.filter(heat__lt=40).count()
+
+    # 14-day daily session trend
+    today = timezone.now().date()
+    cutoff = timezone.now() - timedelta(days=14)
+    daily_raw = (
+        sessions_qs
+        .filter(created_at__gte=cutoff)
+        .annotate(day=TruncDate('created_at'))
+        .values('day')
+        .annotate(count=Count('session_id'))
+        .order_by('day')
+    )
+    daily_map = {item['day']: item['count'] for item in daily_raw}
+    daily_trend = [
+        {'date': (today - timedelta(days=i)).strftime('%b %d'), 'count': daily_map.get(today - timedelta(days=i), 0)}
+        for i in range(13, -1, -1)
+    ]
 
     response = {
         'total_clients': total_clients,
         'active_clients': active_clients,
         'total_sessions': total_sessions,
+        'heat_distribution': {'hot': hot_count, 'warm': warm_count, 'cold': cold_count},
+        'daily_trend': daily_trend,
     }
     if is_super:
-        response['total_users'] = total_users
+        response['total_users'] = User.objects.count()
 
     return Response(response)
 
@@ -669,6 +766,97 @@ def impersonate_tenant(request, tenant_id):
         },
         'impersonated_by': request.user.username,
     })
+
+
+# ─── Leads ────────────────────────────────────────────────────────────────────
+
+def _leads_queryset(request):
+    """Shared filtered queryset for leads_list and leads_export."""
+    accessible = get_accessible_clients(request.user)
+
+    heat_expr = ExpressionWrapper(
+        (F('current_intent_ema') * 0.45 + F('current_budget_ema') * 0.30 + F('current_urgency_ema') * 0.25) * 100,
+        output_field=FloatField()
+    )
+
+    has_email = Q(lead_email__isnull=False) & ~Q(lead_email='')
+    has_phone = Q(lead_phone__isnull=False) & ~Q(lead_phone='')
+
+    qs = (
+        ChatSession.objects
+        .filter(client__in=accessible)
+        .filter(has_email | has_phone)
+        .select_related('client')
+        .annotate(computed_heat=heat_expr)
+        .order_by('-created_at')
+    )
+
+    client_id = request.GET.get('client_id')
+    if client_id:
+        qs = qs.filter(client__id=client_id)
+
+    date_from = request.GET.get('date_from')
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+
+    date_to = request.GET.get('date_to')
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+
+    min_heat = request.GET.get('min_heat')
+    if min_heat:
+        try:
+            qs = qs.filter(computed_heat__gte=float(min_heat))
+        except ValueError:
+            pass
+
+    return qs
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def leads_list(request):
+    qs = _leads_queryset(request)
+    leads = qs[:500]
+    data = []
+    for s in leads:
+        data.append({
+            'session_id': str(s.session_id),
+            'visitor_id': s.visitor_id,
+            'lead_email': s.lead_email or '',
+            'lead_phone': s.lead_phone or '',
+            'heat_score': round(min(s.computed_heat, 100.0), 1),
+            'kanban_state': s.kanban_state,
+            'client_name': s.client.name if s.client else 'Unknown',
+            'client_id': str(s.client.id) if s.client else None,
+            'created_at': s.created_at.isoformat(),
+        })
+    return Response({'count': len(data), 'leads': data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def leads_export(request):
+    qs = _leads_queryset(request)
+    leads = qs[:5000]
+
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = 'attachment; filename="leads.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['Email', 'Phone', 'Heat Score', 'Stage', 'Client', 'Session ID', 'Date Captured'])
+    for s in leads:
+        writer.writerow([
+            s.lead_email or '',
+            s.lead_phone or '',
+            round(min(s.computed_heat, 100.0), 1),
+            s.kanban_state,
+            s.client.name if s.client else '',
+            str(s.session_id),
+            s.created_at.strftime('%Y-%m-%d %H:%M'),
+        ])
+
+    return response
 
 
 # ─── Helper ───────────────────────────────────────────────────────────────────

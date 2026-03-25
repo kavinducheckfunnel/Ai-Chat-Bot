@@ -84,8 +84,11 @@ def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link)
 
         docs = []
         for chunk in splits:
+            # Prefix every chunk with the title so mid-article chunks
+            # remain identifiable to the AI.
+            prefixed = f"Title: {title}\n\n{chunk}"
             try:
-                embs = batch_embed_texts([chunk])
+                embs = batch_embed_texts([prefixed])
                 emb = embs[0] if embs else [0.0] * 1024
             except Exception:
                 emb = [0.0] * 1024
@@ -95,7 +98,7 @@ def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link)
                 emb = emb[:1024]
             docs.append(DocumentChunk(
                 client=client,
-                content=chunk,
+                content=prefixed,
                 embedding=emb,
                 source_url=link,
                 product_id=post_id,

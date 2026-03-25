@@ -42,15 +42,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
+    'corsheaders',
     'channels',
     'chat',
     'scraper',
     'analytics',
     'users',
-    'django_celery_beat',
 ]
 
 MIDDLEWARE = [
@@ -63,12 +62,6 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
-
-# ── CORS — allow the chat widget to be embedded on any client's WordPress site ──
-# In production, replace with explicit allowed origins:
-#   CORS_ALLOWED_ORIGINS = ["https://theaitips.com", "https://client2.com"]
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'checkfunnel.urls'
 
@@ -205,6 +198,11 @@ CELERY_BEAT_SCHEDULE = {
     'afk-nudge-check': {
         'task': 'chat.tasks.check_afk_sessions',
         'schedule': crontab(minute='*/2'),
+    },
+    # C2 — Daily digest: every day at 08:00 UTC
+    'daily-digest-8am': {
+        'task': 'chat.tasks.send_daily_digest',
+        'schedule': crontab(hour='8', minute='0'),
     },
 }
 

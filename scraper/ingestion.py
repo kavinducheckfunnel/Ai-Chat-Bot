@@ -38,29 +38,42 @@ def clean_html(html_content):
 
 def fetch_wordpress_data(site_url):
     """
-    Generic paginated fetcher for any WP REST API endpoint
-    (posts, pages, custom post types, etc.).
-    Returns a flat list of all items across all pages.
+    Fetch all posts AND pages from a WordPress site via the WP REST API.
+    Returns a flat list of WP post objects across all pages.
     """
-    api_url = f"{base_url.rstrip('/')}/wp-json/wp/v2/{endpoint}"
     all_items = []
-    page = 1
+    base = site_url.rstrip('/')
 
-    while True:
-        try:
-            response = requests.get(
-                api_url,
-                params={'per_page': 100, 'page': page, '_embed': 1},
-                headers=BROWSER_HEADERS,
-                timeout=15
-            )
-            # WP returns 400 when page is out of range
-            if response.status_code not in (200, 201):
+    for endpoint in ['posts', 'pages']:
+        page = 1
+        while True:
+            try:
+                response = requests.get(
+                    f"{base}/wp-json/wp/v2/{endpoint}",
+                    params={'per_page': 100, 'page': page, '_embed': 1},
+                    headers=_HEADERS,
+                    timeout=15,
+                )
+                # WP returns 400 when page number is out of range
+                if response.status_code not in (200, 201):
+                    break
+
+                data = response.json()
+                if not data:
+                    break
+
+                all_items.extend(data)
+                page += 1
+                if len(data) < 100:
+                    break  # last page
+
+            except Exception as e:
+                logger.warning(f'[fetch_wordpress_data] Error fetching {endpoint} page {page}: {e}')
                 break
 
-            data = response.json()
-            if not data:
-                break
+    logger.info(f'[fetch_wordpress_data] Fetched {len(all_items)} items from {site_url}')
+    return all_items
+
 
 # ── Strategy 2: Generic HTML crawl (requests + BeautifulSoup) ───────────────
 
@@ -246,16 +259,20 @@ def ingest_documents(client, documents):
     chunks_meta = []
 
     for doc in documents:
-        text = doc.get('content', '') or doc.get('title', '')
+        title = doc.get('title', '')
+        text = doc.get('content', '') or title
         if not text or len(text.strip()) < 30:
             continue
         splits = _SPLITTER.split_text(text)
         for split in splits:
-            chunks_text.append(split)
+            # Prefix every chunk with the page title so the AI always knows
+            # which tool/article it is reading, even for mid-article chunks.
+            prefixed = f"Title: {title}\n\n{split}" if title else split
+            chunks_text.append(prefixed)
             chunks_meta.append({
                 'source_url': doc.get('url', ''),
                 'product_id': doc.get('product_id', ''),
-                'title': doc.get('title', ''),
+                'title': title,
             })
 
     if not chunks_text:
@@ -297,185 +314,3 @@ def ingest_documents(client, documents):
     return len(docs_to_create)
 
 
-def process_and_store_website_data(site_url, client=None, dry_run=False):
-    print(f"Starting crawl of: {site_url}")
-    posts = fetch_wordpress_data(site_url)
-    print(f"Found {len(posts)} posts/pages.")
-    
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=100,
-        separators=["\n\n", "\n", " ", ""]
-    )
-    
-    chunks_to_embed = []
-    metadata_list = []
-
-    for item in items:
-        title, full_text, link, post_id = _extract_text_from_post(item)
-
-        if not full_text.strip():
-            continue
-
-        split_texts = TEXT_SPLITTER.split_text(full_text)
-        for text in split_texts:
-            chunks_to_embed.append(text)
-            metadata_list.append({
-                'source_url': link,
-                'product_id': post_id,
-                'metadata': {
-                    'title': title,
-                    'type': content_type,
-                }
-            })
-
-        print("Generating AWS Bedrock Embeddings...")
-        for i in range(0, len(chunks_to_embed), batch_size):
-            batch_texts = chunks_to_embed[i:i+batch_size]
-            batch_embs = batch_embed_texts(batch_texts)
-            all_embeddings.extend(batch_embs)
-            print(f"Embedded chunk {i+1} out of {len(chunks_to_embed)}...")
-            time.sleep(1.0)  # Avoid AWS Throttling limits
-            
-        # Bulk create DocumentChunks
-        docs_to_create = []
-        for i in range(len(chunks_to_embed)):
-            emb = all_embeddings[i]
-            # Since we set pgvector dimensions=1024 but gemini might return 768 by default
-            # Actually, let's pad vectors to 1024 if gemini returns 768. 
-            # Or pass task_type="RETRIEVAL_DOCUMENT" etc. Wait, we should just let it be stored.
-            if len(emb) < 1024:
-                emb = emb + [0.0] * (1024 - len(emb))
-            elif len(emb) > 1024:
-                emb = emb[:1024]
-                
-            meta_info = metadata_list[i]
-            docs_to_create.append(
-                DocumentChunk(
-                    client=client,
-                    content=chunks_to_embed[i],
-                    embedding=emb,
-                    source_url=meta_info['source_url'],
-                    product_id=meta_info['product_id'],
-                    metadata=meta_info['metadata']
-                )
-            )
-        )
-
-    DocumentChunk.objects.bulk_create(docs_to_create)
-    print(f"[Ingestion] Stored {len(docs_to_create)} chunks.")
-    return len(docs_to_create)
-
-
-# ─────────────────────────────────────────────
-# PUBLIC API
-# ─────────────────────────────────────────────
-
-def process_and_store_website_data(site_url, client=None, dry_run=False):
-    """
-    Full-site ingestion:
-      1. Fetches all posts AND pages from the WP REST API.
-      2. Deduplicates by deleting all old chunks for this client first.
-      3. Splits, embeds, and stores new chunks.
-    """
-    print(f"[Ingestion] Starting full crawl of: {site_url}")
-
-    posts = fetch_wordpress_data(site_url)
-    print(f"[Ingestion] Found {len(posts)} posts.")
-
-    pages = fetch_wordpress_pages(site_url)
-    print(f"[Ingestion] Found {len(pages)} pages.")
-
-    post_chunks, post_meta = _build_chunks(posts, content_type='post')
-    page_chunks, page_meta = _build_chunks(pages, content_type='page')
-
-    chunks_to_embed = post_chunks + page_chunks
-    metadata_list = post_meta + page_meta
-
-    if not chunks_to_embed:
-        print("[Ingestion] No content found to process.")
-        return
-
-    if dry_run:
-        print(f"[DRY RUN] Would embed {len(chunks_to_embed)} chunks.")
-        print("Sample chunk:\n---")
-        print(chunks_to_embed[0])
-        print("---")
-        return
-
-    # ── Deduplication: wipe all old chunks for this client before re-ingesting ──
-    if client:
-        deleted, _ = DocumentChunk.objects.filter(client=client).delete()
-        print(f"[Ingestion] Cleared {deleted} stale chunks for client '{client}'.")
-    else:
-        # No client (global) – clear global chunks
-        deleted, _ = DocumentChunk.objects.filter(client__isnull=True).delete()
-        print(f"[Ingestion] Cleared {deleted} stale global chunks.")
-
-    # ── Embed & store ──
-    total_stored = _embed_and_store(client, chunks_to_embed, metadata_list)
-
-    # ── Update client ingestion status ──
-    if client:
-        client.total_pages_ingested = len(posts) + len(pages)
-        client.ingestion_status = 'DONE'
-        client.save(update_fields=['total_pages_ingested', 'ingestion_status'])
-
-    print(f"[Ingestion] ✅ Complete. {total_stored} chunks stored for {site_url}.")
-
-
-def process_single_wordpress_post(client, post_data):
-    """
-    Ingest or re-ingest a single WordPress post/page from a webhook payload.
-    Atomically replaces old chunks for that post ID.
-    """
-    post_id = str(post_data.get('id', ''))
-    if not post_id:
-        return {"status": "error", "message": "No post ID in payload"}
-
-    # ── Strip old chunks for this post so updates don't accumulate ──
-    DocumentChunk.objects.filter(client=client, product_id=post_id).delete()
-
-    title, full_text, link, _ = _extract_text_from_post(post_data)
-
-    if not full_text.strip():
-        return {"status": "ignored", "message": "Post had no text content"}
-
-    split_texts = TEXT_SPLITTER.split_text(full_text)
-    if not split_texts:
-        return {"status": "ignored", "message": "Text splitter produced no chunks"}
-
-    import time
-    all_embeddings = []
-    BATCH_SIZE = 10
-
-    print(f"[Ingestion] Embedding {len(split_texts)} chunks for post {post_id}…")
-    for i in range(0, len(split_texts), BATCH_SIZE):
-        batch = split_texts[i:i + BATCH_SIZE]
-        all_embeddings.extend(batch_embed_texts(batch))
-        time.sleep(0.3)
-
-    docs_to_create = []
-    for i, text in enumerate(split_texts):
-        emb = all_embeddings[i]
-        if len(emb) < 1024:
-            emb = emb + [0.0] * (1024 - len(emb))
-        elif len(emb) > 1024:
-            emb = emb[:1024]
-            
-        docs_to_create.append(
-            DocumentChunk(
-                client=client,
-                content=text,
-                embedding=all_embeddings[i],
-                source_url=link,
-                product_id=post_id,
-                metadata={'title': title, 'type': 'post'}
-            )
-        )
-
-    DocumentChunk.objects.bulk_create(docs_to_create)
-    return {
-        "status": "success",
-        "message": f"Ingested {len(docs_to_create)} chunks for post {post_id}"
-    }

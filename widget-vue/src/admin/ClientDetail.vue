@@ -142,51 +142,130 @@
 
       <!-- Analytics Tab -->
       <div v-if="activeTab === 'analytics'" class="tab-content">
-        <div v-if="loadingPageAnalytics" class="loading-state"><div class="loader"></div></div>
-        <template v-else-if="pageAnalytics">
-          <div class="overview-stats">
-            <div class="ov-stat">
-              <p class="ov-label">Page Views (30d)</p>
-              <p class="ov-value">{{ pageAnalytics.total_page_views ?? '—' }}</p>
+        <div v-if="!analytics" class="loading-state"><div class="loader"></div></div>
+        <template v-else>
+
+          <!-- Top stat row -->
+          <div class="an-stats-row">
+            <div class="an-stat">
+              <p class="an-label">Total Sessions</p>
+              <p class="an-value">{{ analytics.total_sessions ?? 0 }}</p>
             </div>
-            <div class="ov-stat">
-              <p class="ov-label">Unique Sessions (30d)</p>
-              <p class="ov-value">{{ pageAnalytics.unique_sessions ?? '—' }}</p>
+            <div class="an-stat">
+              <p class="an-label">Avg Heat Score</p>
+              <p class="an-value" :class="analytics.avg_heat_score >= 70 ? 'hot' : analytics.avg_heat_score >= 40 ? 'warm' : ''">
+                {{ analytics.avg_heat_score ?? 0 }}%
+              </p>
             </div>
-            <div class="ov-stat">
-              <p class="ov-label">Pricing Visits</p>
-              <p class="ov-value hot">{{ pageAnalytics.pricing_visits ?? '—' }}</p>
+            <div class="an-stat">
+              <p class="an-label">Leads Captured</p>
+              <p class="an-value" style="color:#6366F1">{{ analytics.leads_captured ?? 0 }}</p>
             </div>
-            <div class="ov-stat">
-              <p class="ov-label">Exit Intents</p>
-              <p class="ov-value">{{ pageAnalytics.exit_intents ?? '—' }}</p>
+            <div class="an-stat">
+              <p class="an-label">Hot Sessions</p>
+              <p class="an-value hot">{{ analytics.hot_sessions ?? 0 }}</p>
             </div>
           </div>
 
-          <div v-if="pageAnalytics.top_pages?.length" class="top-pages-section">
-            <h3 class="section-title">Top Pages</h3>
-            <table class="sessions-table" style="margin-top: 12px;">
-              <thead>
-                <tr>
-                  <th>Page URL</th>
-                  <th style="width: 80px; text-align: right;">Views</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in pageAnalytics.top_pages" :key="p.page_url">
-                  <td class="visitor-cell" style="max-width: 500px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    {{ p.page_url || '(unknown)' }}
-                  </td>
-                  <td style="text-align: right; font-weight: 600; color: #6366F1;">{{ p.views }}</td>
-                </tr>
-              </tbody>
-            </table>
+          <!-- Heat Distribution + Avg EMA Gauges -->
+          <div class="an-two-col">
+            <div class="an-card">
+              <h3 class="an-card-title">Heat Distribution</h3>
+              <div class="an-heat-bar">
+                <div class="an-hd-cold" :style="{ flex: analytics.heat_distribution?.cold || 0.01 }"></div>
+                <div class="an-hd-warm" :style="{ flex: analytics.heat_distribution?.warm || 0.01 }"></div>
+                <div class="an-hd-hot"  :style="{ flex: analytics.heat_distribution?.hot  || 0.01 }"></div>
+              </div>
+              <div class="an-heat-legend">
+                <div class="an-hl-item"><span class="an-dot cold"></span><span>Cold</span><strong>{{ analytics.heat_distribution?.cold ?? 0 }}</strong></div>
+                <div class="an-hl-item"><span class="an-dot warm"></span><span>Warm</span><strong>{{ analytics.heat_distribution?.warm ?? 0 }}</strong></div>
+                <div class="an-hl-item"><span class="an-dot hot"></span><span>Hot</span><strong>{{ analytics.heat_distribution?.hot ?? 0 }}</strong></div>
+              </div>
+            </div>
+
+            <div class="an-card">
+              <h3 class="an-card-title">Avg Engagement Scores</h3>
+              <div class="an-gauges">
+                <div class="an-gauge-row">
+                  <span class="an-gauge-label">Intent</span>
+                  <div class="an-gauge-bar"><div class="an-gauge-fill intent" :style="{ width: (analytics.avg_intent || 0) + '%' }"></div></div>
+                  <span class="an-gauge-val">{{ analytics.avg_intent ?? 0 }}%</span>
+                </div>
+                <div class="an-gauge-row">
+                  <span class="an-gauge-label">Budget</span>
+                  <div class="an-gauge-bar"><div class="an-gauge-fill budget" :style="{ width: (analytics.avg_budget || 0) + '%' }"></div></div>
+                  <span class="an-gauge-val">{{ analytics.avg_budget ?? 0 }}%</span>
+                </div>
+                <div class="an-gauge-row">
+                  <span class="an-gauge-label">Urgency</span>
+                  <div class="an-gauge-bar"><div class="an-gauge-fill urgency" :style="{ width: (analytics.avg_urgency || 0) + '%' }"></div></div>
+                  <span class="an-gauge-val">{{ analytics.avg_urgency ?? 0 }}%</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div v-else class="empty-state" style="margin-top: 24px;">
-            <p>No page view events tracked yet. Make sure the widget is embedded and visitors are browsing.</p>
+
+          <!-- Daily Trend Sparkline -->
+          <div class="an-card an-full">
+            <h3 class="an-card-title">Sessions — Last 14 Days</h3>
+            <div class="an-spark-wrap">
+              <svg v-if="analytics.daily_trend?.length" class="an-spark" viewBox="0 0 340 60" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="anGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#6366F1" stop-opacity="0.25"/>
+                    <stop offset="100%" stop-color="#6366F1" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <polyline :points="analyticsSparklineArea" fill="url(#anGrad)" stroke="none"/>
+                <polyline :points="analyticsSparklinePoints" fill="none" stroke="#6366F1" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+              </svg>
+              <p v-else class="an-no-data">No sessions in the last 14 days</p>
+            </div>
+            <div class="an-spark-labels" v-if="analytics.daily_trend?.length">
+              <span>{{ analytics.daily_trend[0].date }}</span>
+              <span>{{ analytics.daily_trend[analytics.daily_trend.length - 1].date }}</span>
+            </div>
           </div>
+
+          <!-- Kanban Breakdown + Analytics Events -->
+          <div class="an-two-col">
+            <div class="an-card">
+              <h3 class="an-card-title">Kanban Breakdown</h3>
+              <div class="an-kanban-list">
+                <div v-for="(col, key) in kanbanCols" :key="key" class="an-kanban-row">
+                  <span class="an-kanban-dot" :style="{ background: col.color }"></span>
+                  <span class="an-kanban-label">{{ col.label }}</span>
+                  <span class="an-kanban-count">{{ analytics.kanban_breakdown?.[key] ?? 0 }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="an-card">
+              <h3 class="an-card-title">Behavioral Events</h3>
+              <div class="an-events-list">
+                <div class="an-event-row">
+                  <div class="an-event-icon" style="background:rgba(99,102,241,0.1);color:#6366F1">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                  </div>
+                  <div><p class="an-event-label">Page Views</p><p class="an-event-val">{{ analytics.analytics_events?.page_views ?? 0 }}</p></div>
+                </div>
+                <div class="an-event-row">
+                  <div class="an-event-icon" style="background:rgba(249,115,22,0.1);color:#F97316">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </div>
+                  <div><p class="an-event-label">Exit Intent Triggers</p><p class="an-event-val">{{ analytics.analytics_events?.exit_intent_count ?? 0 }}</p></div>
+                </div>
+                <div class="an-event-row">
+                  <div class="an-event-icon" style="background:rgba(34,197,94,0.1);color:#22C55E">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </div>
+                  <div><p class="an-event-label">Pricing Page Visits</p><p class="an-event-val">{{ analytics.analytics_events?.pricing_page_visits ?? 0 }}</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </template>
-        <div v-else class="empty-state"><p>No analytics data available.</p></div>
       </div>
 
       <!-- Settings Tab -->
@@ -208,6 +287,15 @@
             <div class="field full">
               <label>Logo URL (optional)</label>
               <input v-model="settingsForm.chatbot_logo_url" type="url" placeholder="https://..." />
+            </div>
+          </div>
+
+          <h3 class="settings-section" style="margin-top: 24px;">Notifications</h3>
+          <div class="settings-grid">
+            <div class="field full">
+              <label>Alert Email</label>
+              <input v-model="settingsForm.notification_email" type="email" placeholder="alerts@yourbusiness.com" />
+              <p class="field-hint">Hot lead and human-request alerts go here. Leave blank to use your account email.</p>
             </div>
           </div>
 
@@ -315,7 +403,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 
@@ -337,13 +425,11 @@ const copiedKey = ref('')
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
-const pageAnalytics = ref(null)
-const loadingPageAnalytics = ref(false)
 
 const tabs = [
   { id: 'overview', label: 'Overview' },
-  { id: 'sessions', label: 'Sessions' },
   { id: 'analytics', label: 'Analytics' },
+  { id: 'sessions', label: 'Sessions' },
   { id: 'settings', label: 'Settings' },
 ]
 
@@ -355,10 +441,19 @@ const funnelStages = [
   { key: 'READY_TO_BUY', label: 'Ready to Buy', color: 'bar-green' },
 ]
 
+const kanbanCols = {
+  NEW:          { label: 'New',          color: '#94A3B8' },
+  CONTACTED:    { label: 'Contacted',    color: '#3B82F6' },
+  QUALIFIED:    { label: 'Qualified',    color: '#F97316' },
+  CONVERTED:    { label: 'Converted',    color: '#22C55E' },
+  LOST:         { label: 'Lost',         color: '#EF4444' },
+}
+
 const settingsForm = ref({
   chatbot_name: '',
   chatbot_color: '#3B82F6',
   chatbot_logo_url: '',
+  notification_email: '',
   discount_code: '',
   cta_message: '',
   fomo_countdown_seconds: 600,
@@ -401,6 +496,7 @@ async function loadClient() {
       chatbot_name: clientData.chatbot_name || 'AI Assistant',
       chatbot_color: clientData.chatbot_color || '#3B82F6',
       chatbot_logo_url: clientData.chatbot_logo_url || '',
+      notification_email: clientData.notification_email || '',
       discount_code: clientData.discount_code || '',
       cta_message: clientData.cta_message || '',
       fomo_countdown_seconds: clientData.fomo_countdown_seconds || 600,
@@ -494,23 +590,34 @@ function timeAgo(iso) {
   return `${Math.floor(h / 24)}d ago`
 }
 
-onMounted(loadClient)
-
-// Load sessions when tab switches
-import { watch } from 'vue'
-async function loadPageAnalytics() {
-  if (pageAnalytics.value) return
-  loadingPageAnalytics.value = true
-  try {
-    pageAnalytics.value = await api.getClientPageAnalytics(route.params.id)
-  } catch {}
-  loadingPageAnalytics.value = false
-}
-
-watch(activeTab, (tab) => {
-  if (tab === 'sessions') loadSessions()
-  if (tab === 'analytics') loadPageAnalytics()
+// Sparkline computed properties for the analytics tab
+const analyticsSparklinePoints = computed(() => {
+  const trend = analytics.value?.daily_trend
+  if (!trend || trend.length < 2) return ''
+  const W = 340, H = 60, PAD = 4
+  const maxVal = Math.max(...trend.map(d => d.count), 1)
+  return trend.map((d, i) => {
+    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
 })
+
+const analyticsSparklineArea = computed(() => {
+  const trend = analytics.value?.daily_trend
+  if (!trend || trend.length < 2) return ''
+  const W = 340, H = 60, PAD = 4
+  const maxVal = Math.max(...trend.map(d => d.count), 1)
+  const pts = trend.map((d, i) => {
+    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  return `${pts[0].split(',')[0]},${H} ${pts.join(' ')} ${pts[pts.length - 1].split(',')[0]},${H}`
+})
+
+onMounted(loadClient)
+watch(activeTab, (tab) => { if (tab === 'sessions') loadSessions() })
 </script>
 
 <style scoped>
@@ -765,4 +872,74 @@ watch(activeTab, (tab) => {
 .no-history { color: #94A3B8; font-size: 13px; text-align: center; padding: 20px; }
 .mini-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.1); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
 .mini-spinner.white { border-color: rgba(255,255,255,0.3); border-top-color: white; }
+
+/* ── Analytics Tab ─────────────────────────────────────────────── */
+.an-stats-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px;
+}
+.an-stat {
+  background: white; border: 1px solid #F1F5F9; border-radius: 12px;
+  padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.an-label { font-size: 12px; color: #94A3B8; font-weight: 500; margin-bottom: 4px; }
+.an-value { font-size: 26px; font-weight: 700; color: #0F172A; letter-spacing: -0.5px; }
+.an-value.hot  { color: #EF4444; }
+.an-value.warm { color: #F97316; }
+
+.an-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+.an-card {
+  background: white; border: 1px solid #F1F5F9; border-radius: 14px;
+  padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.an-card.an-full { margin-bottom: 16px; }
+
+.an-card-title { font-size: 12px; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+
+/* Heat distribution */
+.an-heat-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; margin-bottom: 14px; }
+.an-hd-cold { background: #3B82F6; border-radius: 6px; transition: flex 0.4s; }
+.an-hd-warm { background: #F97316; border-radius: 6px; transition: flex 0.4s; }
+.an-hd-hot  { background: #EF4444; border-radius: 6px; transition: flex 0.4s; }
+.an-heat-legend { display: flex; gap: 16px; }
+.an-hl-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748B; }
+.an-hl-item strong { color: #0F172A; margin-left: 2px; }
+.an-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.an-dot.cold { background: #3B82F6; }
+.an-dot.warm { background: #F97316; }
+.an-dot.hot  { background: #EF4444; }
+
+/* EMA Gauges */
+.an-gauges { display: flex; flex-direction: column; gap: 14px; }
+.an-gauge-row { display: flex; align-items: center; gap: 10px; }
+.an-gauge-label { font-size: 12px; color: #94A3B8; width: 48px; flex-shrink: 0; }
+.an-gauge-bar { flex: 1; background: #F1F5F9; border-radius: 4px; height: 8px; overflow: hidden; }
+.an-gauge-fill { height: 100%; border-radius: 4px; transition: width 0.6s; }
+.an-gauge-fill.intent  { background: linear-gradient(90deg, #6366F1, #8B5CF6); }
+.an-gauge-fill.budget  { background: linear-gradient(90deg, #22C55E, #16A34A); }
+.an-gauge-fill.urgency { background: linear-gradient(90deg, #F97316, #EF4444); }
+.an-gauge-val { font-size: 12px; font-weight: 600; color: #475569; width: 34px; text-align: right; }
+
+/* Sparkline */
+.an-spark-wrap { min-height: 64px; }
+.an-spark { width: 100%; height: 64px; display: block; }
+.an-spark-labels { display: flex; justify-content: space-between; font-size: 11px; color: #94A3B8; margin-top: 4px; }
+.an-no-data { font-size: 13px; color: #CBD5E1; text-align: center; padding: 20px; }
+
+/* Kanban breakdown */
+.an-kanban-list { display: flex; flex-direction: column; gap: 10px; }
+.an-kanban-row { display: flex; align-items: center; gap: 10px; }
+.an-kanban-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.an-kanban-label { flex: 1; font-size: 13px; color: #475569; }
+.an-kanban-count { font-size: 13px; font-weight: 700; color: #0F172A; }
+
+/* Behavioral events */
+.an-events-list { display: flex; flex-direction: column; gap: 12px; }
+.an-event-row { display: flex; align-items: center; gap: 12px; }
+.an-event-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.an-event-label { font-size: 12px; color: #94A3B8; }
+.an-event-val { font-size: 18px; font-weight: 700; color: #0F172A; }
 </style>

@@ -28,6 +28,8 @@ urlpatterns = [
     # Platform
     path('stats/', admin_views.platform_stats, name='admin-platform-stats'),
     path('kanban/', admin_views.kanban_view, name='admin-kanban'),
+    path('leads/', admin_views.leads_list, name='admin-leads'),
+    path('leads/export/', admin_views.leads_export, name='admin-leads-export'),
 
     # Tenant Management (superadmin only)
     path('tenants/', admin_views.tenant_list, name='admin-tenants'),

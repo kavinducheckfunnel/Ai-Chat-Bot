@@ -64,6 +64,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # Update last visitor message time for AFK tracking
         await self.update_visitor_timestamp(session)
 
+        # C3 — detect human takeover request
+        if message and not session.human_requested:
+            await self._check_human_request(session, message)
+
         # Generate AI response — wrap in try/except so the WebSocket
         # always sends a reply even if the AI service crashes
         try:
@@ -149,11 +153,34 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 closing_triggered=True
             )
             # Enqueue AFK nudge task if not already sent
-            from chat.tasks import schedule_afk_nudge
+            from chat.tasks import schedule_afk_nudge, send_hot_lead_alert
             schedule_afk_nudge.apply_async(
                 args=[str(session.session_id)],
                 countdown=120,  # 2 min inactivity window
             )
+            # C1 — hot lead alert email (one-time per session)
+            if not session.hot_lead_email_sent:
+                send_hot_lead_alert.delay(str(session.session_id))
+
+    _HUMAN_KEYWORDS = [
+        'speak to a human', 'talk to a human', 'talk to someone',
+        'real person', 'human agent', 'human support', 'live agent',
+        'live chat', 'live support', 'speak with a human',
+        'talk to a real', 'speak to a real', 'representative',
+        'customer support', 'customer service',
+    ]
+
+    @database_sync_to_async
+    def _check_human_request(self, session, message):
+        """Detect human-request keywords; fire C3 takeover alert email once per session."""
+        msg_lower = message.lower()
+        if not any(kw in msg_lower for kw in self._HUMAN_KEYWORDS):
+            return
+        ChatSession.objects.filter(session_id=session.session_id).update(
+            human_requested=True
+        )
+        from chat.tasks import send_takeover_alert
+        send_takeover_alert.delay(str(session.session_id))
 
     # ── Handler for admin-injected messages during takeover ──────────────
     async def chat_message(self, event):

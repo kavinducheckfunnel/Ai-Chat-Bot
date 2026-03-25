@@ -9,6 +9,7 @@ import ClientDetail from './admin/ClientDetail.vue'
 import KanbanView from './admin/KanbanView.vue'
 import GodView from './admin/GodView.vue'
 import TenantManagement from './admin/TenantManagement.vue'
+import LeadManagement from './admin/LeadManagement.vue'
 
 const routes = [
   { path: '/admin/login', component: LoginView, meta: { public: true } },
@@ -20,6 +21,7 @@ const routes = [
       { path: 'clients', component: ClientList },
       { path: 'clients/:id', component: ClientDetail },
       { path: 'kanban', component: KanbanView },
+      { path: 'leads', component: LeadManagement },
       { path: 'godview/:id', component: GodView },
       { path: 'tenants', component: TenantManagement, meta: { superadminOnly: true } },
     ],
