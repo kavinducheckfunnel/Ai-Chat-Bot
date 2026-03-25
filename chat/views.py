@@ -1,17 +1,18 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
-
 from .models import ChatSession
 from .ai_service import generate_ai_response
+from .throttles import ChatRateThrottle
 from users.models import Client
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([ChatRateThrottle])
 def chat_message(request):
     session_id = request.data.get('session_id')
     message = request.data.get('message')
@@ -91,24 +92,27 @@ def trigger_event(request):
     if not client:
         return Response({'status': 'ignored', 'reason': 'no client'})
 
-    # Only fire FOMO if the client has explicitly configured it
-    has_fomo_config = bool(client.fomo_offer_text or client.discount_code)
-    if not has_fomo_config:
-        return Response({'status': 'ignored', 'reason': 'no fomo config'})
-
     # Build FOMO message based on trigger type
     if trigger_type == 'exit_intent':
         fomo_msg = (
             client.fomo_offer_text
-            or f"Wait! Before you go — use code **{client.discount_code}** for an exclusive discount!"
+            or (
+                f"Wait! Before you go — use code **{client.discount_code}** for an exclusive discount!"
+                if client.discount_code
+                else "Wait! Don't leave yet — I can help you find exactly what you're looking for."
+            )
         )
     else:  # pricing_hesitation
         fomo_msg = (
             client.fomo_offer_text
-            or f"Still deciding? Use code **{client.discount_code}** — limited time only!"
+            or (
+                f"Still deciding? Use code **{client.discount_code}** — limited time only!"
+                if client.discount_code
+                else "Still deciding? I can walk you through our plans and find the best fit for you."
+            )
         )
 
-    # Add countdown hint only if explicitly configured (not default)
+    # Add countdown hint if configured
     if client.fomo_countdown_seconds and client.fomo_countdown_seconds > 0:
         mins = client.fomo_countdown_seconds // 60
         fomo_msg += f" This offer expires in {mins} minutes!"
@@ -179,16 +183,13 @@ def product_detail(request, product_id):
     chunk = chunks[0]
     meta = chunk.metadata or {}
 
-    # Extract price from metadata or content text
     price = meta.get('price') or meta.get('regular_price')
     if not price:
         match = re.search(r'\$[\d,]+(?:\.\d{2})?', chunk.content)
         price = match.group(0) if match else None
 
-    # Extract title — prefer metadata, fall back to first line of content
     title = meta.get('title') or meta.get('name') or chunk.content.split('\n')[0][:80]
 
-    # Short description: first 160 chars of content after title
     lines = [l.strip() for l in chunk.content.split('\n') if l.strip()]
     description = lines[1] if len(lines) > 1 else (lines[0][:160] if lines else '')
 

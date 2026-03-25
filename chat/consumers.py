@@ -49,41 +49,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         session = await self.get_session(self.client_id, self.session_id)
 
+        # ── WebSocket rate guard: drop messages within 1 s of the previous ─
+        if session.last_visitor_message_at:
+            gap = (timezone.now() - session.last_visitor_message_at).total_seconds()
+            if gap < 1.0:
+                return
+
         # ── God View guard ────────────────────────────────────────────────
         if session.takeover_active:
-            # Save visitor message to history so admin can see it
-            if message:
-                await self._save_visitor_message(session, message)
-                # Broadcast to admin watching via GodViewConsumer
-                await self.channel_layer.group_send(
-                    self.room_group_name,
-                    {'type': 'chat_message', 'message': message, 'sender': 'user', 'admin_injected': False}
-                )
+            # AI is silenced; only admin can send messages via REST endpoint
+            await self.send(text_data=json.dumps({
+                'type': 'takeover_active',
+                'message': 'An admin is currently handling this conversation.',
+            }))
             return
 
         # Update last visitor message time for AFK tracking
         await self.update_visitor_timestamp(session)
 
-        # C3 — detect human takeover request
-        if message and not session.human_requested:
-            await self._check_human_request(session, message)
-
-        # Generate AI response — wrap in try/except so the WebSocket
-        # always sends a reply even if the AI service crashes
-        try:
-            ai_response = await database_sync_to_async(generate_ai_response)(
-                session, message, behavior_matrix
-            )
-        except Exception as exc:
-            import traceback
-            traceback.print_exc()
-            print(f"[ChatConsumer] generate_ai_response crashed: {exc}")
-            ai_response = {
-                'reply_text': "I'm sorry, I ran into a technical issue. Please try again in a moment.",
-                'intent_score': 0.5,
-                'budget_score': 0.5,
-                'urgency_score': 0.5,
-            }
+        # Generate AI response
+        ai_response = await database_sync_to_async(generate_ai_response)(
+            session, message, behavior_matrix
+        )
 
         # Send reply to visitor
         await self.send(text_data=json.dumps({
@@ -153,34 +140,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 closing_triggered=True
             )
             # Enqueue AFK nudge task if not already sent
-            from chat.tasks import schedule_afk_nudge, send_hot_lead_alert
+            from chat.tasks import schedule_afk_nudge
             schedule_afk_nudge.apply_async(
                 args=[str(session.session_id)],
                 countdown=120,  # 2 min inactivity window
             )
-            # C1 — hot lead alert email (one-time per session)
-            if not session.hot_lead_email_sent:
-                send_hot_lead_alert.delay(str(session.session_id))
-
-    _HUMAN_KEYWORDS = [
-        'speak to a human', 'talk to a human', 'talk to someone',
-        'real person', 'human agent', 'human support', 'live agent',
-        'live chat', 'live support', 'speak with a human',
-        'talk to a real', 'speak to a real', 'representative',
-        'customer support', 'customer service',
-    ]
-
-    @database_sync_to_async
-    def _check_human_request(self, session, message):
-        """Detect human-request keywords; fire C3 takeover alert email once per session."""
-        msg_lower = message.lower()
-        if not any(kw in msg_lower for kw in self._HUMAN_KEYWORDS):
-            return
-        ChatSession.objects.filter(session_id=session.session_id).update(
-            human_requested=True
-        )
-        from chat.tasks import send_takeover_alert
-        send_takeover_alert.delay(str(session.session_id))
 
     # ── Handler for admin-injected messages during takeover ──────────────
     async def chat_message(self, event):
@@ -192,21 +156,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
         }))
 
     @database_sync_to_async
-    def _save_visitor_message(self, session, message):
-        from .models import ChatSession
-        try:
-            s = ChatSession.objects.get(session_id=session.session_id)
-            s.chat_history.append({'role': 'user', 'message': message})
-            s.save(update_fields=['chat_history'])
-        except ChatSession.DoesNotExist:
-            pass
-
-    @database_sync_to_async
     def get_session(self, client_id, session_id):
         from users.models import Client
-        from django.core.exceptions import ValidationError
-        import uuid
-
         try:
             client = Client.objects.get(id=client_id)
         except (Client.DoesNotExist, ValueError, ValidationError):

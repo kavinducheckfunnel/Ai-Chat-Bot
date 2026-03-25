@@ -46,21 +46,25 @@ class ChatSession(models.Model):
     conversation_state = models.CharField(max_length=20, choices=STATE_CHOICES, default='RESEARCH')
     kanban_state = models.CharField(max_length=20, choices=KANBAN_CHOICES, default='NEW')
 
-    # Heat score — computed from EMA scores on every message
+    # Persisted heat score (updated on every AI response)
     heat_score = models.FloatField(default=0.0)
 
     message_count = models.IntegerField(default=0)
     chat_history = models.JSONField(default=list)
+    chat_history_archive = models.JSONField(default=list)
     behavioral_context = models.JSONField(default=dict)
 
-    # God View / Human Takeover
+    lead_email = models.EmailField(null=True, blank=True)
+    lead_phone = models.CharField(max_length=50, null=True, blank=True)
+
+    # God View — admin takeover
+    takeover_active = models.BooleanField(default=False)
     taken_over_by = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='takeover_sessions'
     )
-    takeover_active = models.BooleanField(default=False)
 
-    # Engagement triggers
+    # Trigger flags
     closing_triggered = models.BooleanField(default=False)
     afk_nudge_sent = models.BooleanField(default=False)
     nudge_count = models.IntegerField(default=0)
@@ -70,10 +74,6 @@ class ChatSession(models.Model):
     # Email notification flags
     hot_lead_email_sent = models.BooleanField(default=False)
     human_requested = models.BooleanField(default=False)
-
-    # Lead capture
-    lead_email = models.EmailField(null=True, blank=True)
-    lead_phone = models.CharField(max_length=50, null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -160,6 +160,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
+    'DEFAULT_THROTTLE_RATES': {
+        'chat': os.environ.get('CHAT_RATE_LIMIT', '30/min'),
+    },
 }
 
 from datetime import timedelta

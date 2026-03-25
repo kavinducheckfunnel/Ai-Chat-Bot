@@ -17,6 +17,7 @@ urlpatterns = [
     path('clients/<uuid:client_id>/sessions/', admin_views.client_sessions, name='admin-client-sessions'),
     path('clients/<uuid:client_id>/analytics/', admin_views.client_analytics, name='admin-client-analytics'),
     path('clients/<uuid:client_id>/scrape/', admin_views.trigger_scrape, name='admin-client-scrape'),
+    path('clients/<uuid:client_id>/rotate-secret/', admin_views.rotate_webhook_secret, name='admin-client-rotate-secret'),
     path('clients/<uuid:client_id>/assign-tenant/', admin_views.assign_client_to_tenant, name='admin-client-assign-tenant'),
 
     # Sessions (CRUD + God View)

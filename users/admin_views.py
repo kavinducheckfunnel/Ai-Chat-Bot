@@ -1,5 +1,6 @@
 import csv
 import logging
+import secrets
 import threading
 from datetime import timedelta
 
@@ -868,3 +869,25 @@ def _calc_heat(session):
         session.current_urgency_ema * 0.25
     ) * 100
     return round(min(score, 100), 1)
+
+
+# ─── Webhook secret rotation ──────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def rotate_webhook_secret(request, client_id):
+    """
+    Generate a new cryptographically-random webhook secret for a client.
+    The new secret is returned once in the response body — store it immediately.
+    """
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    new_secret = secrets.token_hex(32)
+    client.webhook_secret = new_secret
+    client.save(update_fields=['webhook_secret'])
+    logger.info(f'[rotate_webhook_secret] Rotated secret for client {client_id}')
+    return Response({'webhook_secret': new_secret, 'detail': 'Webhook secret rotated.'})
