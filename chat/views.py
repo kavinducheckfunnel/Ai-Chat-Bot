@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from .models import ChatSession
 from .ai_service import generate_ai_response
-from .throttles import ChatRateThrottle
+from .throttles import ChatRateThrottle, SessionRateThrottle
 from users.models import Client
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -12,7 +12,7 @@ from asgiref.sync import async_to_sync
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@throttle_classes([ChatRateThrottle])
+@throttle_classes([ChatRateThrottle, SessionRateThrottle])
 def chat_message(request):
     session_id = request.data.get('session_id')
     message = request.data.get('message')

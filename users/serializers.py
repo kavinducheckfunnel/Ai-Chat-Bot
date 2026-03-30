@@ -15,7 +15,7 @@ class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = [
-            'id', 'name', 'domain_url', 'platform', 'webhook_secret',
+            'id', 'name', 'domain_url', 'platform',
             'is_active', 'chatbot_name', 'chatbot_color', 'chatbot_logo_url',
             'notification_email',
             'discount_code', 'cta_message', 'fomo_offer_text', 'fomo_countdown_seconds',

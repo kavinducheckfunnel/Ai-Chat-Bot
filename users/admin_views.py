@@ -300,7 +300,9 @@ def session_send_message(request, session_id):
     history = session.chat_history or []
     history.append({'role': 'ai', 'message': message, 'source': 'admin'})
     session.chat_history = history
-    session.save(update_fields=['chat_history'])
+    from chat.utils import truncate_chat_history
+    update_fields = truncate_chat_history(session)
+    session.save(update_fields=update_fields)
 
     async_to_sync(channel_layer.group_send)(group_name, {
         'type': 'chat_message',

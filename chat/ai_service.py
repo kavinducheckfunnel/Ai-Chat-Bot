@@ -104,15 +104,8 @@ def generate_ai_response(session, user_message, behavior_matrix):
     session.chat_history.append({'role': 'user', 'message': user_message})
     session.chat_history.append({'role': 'ai', 'message': result.get('reply_text')})
 
-    # Truncate: keep latest 200 messages; move oldest batch to archive
-    _MAX_ACTIVE = 200
-    _ARCHIVE_BATCH = 50
-    if len(session.chat_history) > _MAX_ACTIVE:
-        overflow = session.chat_history[:_ARCHIVE_BATCH]
-        session.chat_history_archive = (session.chat_history_archive or []) + overflow
-        session.chat_history = session.chat_history[_ARCHIVE_BATCH:]
-        session.save(update_fields=['chat_history', 'chat_history_archive'])
-    else:
-        session.save(update_fields=['chat_history'])
+    from .utils import truncate_chat_history
+    update_fields = truncate_chat_history(session)
+    session.save(update_fields=update_fields)
     
     return result

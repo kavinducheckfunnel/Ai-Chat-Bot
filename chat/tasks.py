@@ -404,3 +404,31 @@ def send_daily_digest():
             logger.info(f'[send_daily_digest] Sent to {tenant.user.email}')
         except Exception as exc:
             logger.warning(f'[send_daily_digest] Failed for {tenant.user.email}: {exc}')
+
+
+@shared_task
+def archive_long_sessions():
+    """
+    Daily safety net: find any ChatSession where chat_history has grown beyond
+    200 entries (e.g. via admin takeover or direct DB writes) and truncate them.
+    Uses PostgreSQL jsonb_array_length for an efficient server-side filter.
+    """
+    from django.db.models import Func, IntegerField
+    from .models import ChatSession
+    from .utils import truncate_chat_history
+
+    oversized = ChatSession.objects.annotate(
+        history_len=Func(
+            'chat_history',
+            function='jsonb_array_length',
+            output_field=IntegerField(),
+        )
+    ).filter(history_len__gt=200)
+
+    count = 0
+    for session in oversized:
+        fields = truncate_chat_history(session)
+        session.save(update_fields=fields)
+        count += 1
+
+    logger.info(f'[archive_long_sessions] Truncated {count} session(s).')

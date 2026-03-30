@@ -153,6 +153,15 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
 
+# Use Redis as the default cache backend so DRF throttle counters are shared
+# across all Daphne/Gunicorn workers (DB 1 to avoid collisions with Celery on DB 0)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_CACHE_URL', os.environ.get('REDIS_URL', 'redis://localhost:6379/1')),
+    }
+}
+
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
@@ -161,7 +170,8 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_THROTTLE_RATES': {
-        'chat': os.environ.get('CHAT_RATE_LIMIT', '30/min'),
+        'chat':         os.environ.get('CHAT_RATE_LIMIT',         '30/min'),
+        'chat_session': os.environ.get('CHAT_SESSION_RATE_LIMIT', '10/min'),
     },
 }
 
@@ -206,6 +216,11 @@ CELERY_BEAT_SCHEDULE = {
     'daily-digest-8am': {
         'task': 'chat.tasks.send_daily_digest',
         'schedule': crontab(hour='8', minute='0'),
+    },
+    # D3 — Archive oversized chat histories nightly at 03:00 UTC
+    'archive-long-sessions': {
+        'task': 'chat.tasks.archive_long_sessions',
+        'schedule': crontab(hour='3', minute='0'),
     },
 }
 

@@ -81,6 +81,11 @@ def send_monthly_lead_reports(self):
     now = timezone.now()
     month_ago = now - timedelta(days=31)
 
+    # Determine the previous calendar month for accurate session count
+    today = now.date()
+    prev_month = today.month - 1 if today.month > 1 else 12
+    prev_year = today.year if today.month > 1 else today.year - 1
+
     tenants = TenantProfile.objects.select_related('plan', 'user').all()
     for tenant in tenants:
         if not tenant.user.email:
@@ -89,6 +94,14 @@ def send_monthly_lead_reports(self):
         client_ids = list(tenant.clients.values_list('id', flat=True))
         if not client_ids:
             continue
+
+        # Count sessions from the previous calendar month (sessions_this_month
+        # is already reset to 0 by the time this task runs at 01:00 UTC)
+        sessions_used = ChatSession.objects.filter(
+            client_id__in=client_ids,
+            created_at__year=prev_year,
+            created_at__month=prev_month,
+        ).count()
 
         leads = ChatSession.objects.filter(
             client_id__in=client_ids,
@@ -141,7 +154,7 @@ Summary
 Total hot leads:   {total}
 Converted:         {converted}
 Avg heat score:    {avg_heat:.1f} / 100
-Sessions used:     {tenant.sessions_this_month} / {tenant.plan.max_sessions_per_month if tenant.plan else '∞'}
+Sessions used:     {sessions_used} / {tenant.plan.max_sessions_per_month if tenant.plan else '∞'}
 
 Full lead list is attached as a CSV file.
 
