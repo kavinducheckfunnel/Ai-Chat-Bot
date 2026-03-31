@@ -3,7 +3,7 @@ from django.urls import path, include
 from . import widget_views
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path('django-admin/', admin.site.urls),
     path('api/chat/', include('chat.urls')),
     path('api/analytics/', include('analytics.urls')),
     path('api/scraper/', include('scraper.urls')),

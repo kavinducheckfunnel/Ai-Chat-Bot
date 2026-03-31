@@ -246,11 +246,14 @@ def auto_scrape(client):
 
 # ── Shared ingestion pipeline ─────────────────────────────────────────────────
 
-def ingest_documents(client, documents):
+def ingest_documents(client, documents, progress_cb=None):
     """
     Takes a list of {title, content, url, product_id?} dicts,
     chunks them, embeds them, and stores DocumentChunk rows.
     Returns the number of chunks created.
+
+    progress_cb(done, total) is called every 5 chunks so callers can
+    stream real-time progress to the frontend.
     """
     if not documents:
         return 0
@@ -278,6 +281,10 @@ def ingest_documents(client, documents):
     if not chunks_text:
         return 0
 
+    total = len(chunks_text)
+    if progress_cb:
+        progress_cb(0, total)
+
     # Delete existing chunks for this client before re-ingesting
     DocumentChunk.objects.filter(client=client).delete()
 
@@ -296,6 +303,8 @@ def ingest_documents(client, documents):
         elif len(emb) > 1024:
             emb = emb[:1024]
         all_embeddings.append(emb)
+        if progress_cb and (i + 1) % 5 == 0:
+            progress_cb(i + 1, total)
         time.sleep(0.5)
 
     docs_to_create = [

@@ -10,13 +10,13 @@ psycopg2-binary
 pgvector
 langchain
 langchain-community
+langchain-openai
 langchain-text-splitters
-langchain-aws
 python-dotenv
 daphne
 whitenoise
 requests
 beautifulsoup4
-boto3
 playwright
 lxml
+sentence-transformers

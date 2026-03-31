@@ -37,8 +37,7 @@ STATIC_URL = '/static/'
 MEDIA_ROOT = BASE_DIR / 'media'
 MEDIA_URL = '/media/'
 
-# WhiteNoise serves Vue build + Django admin static files efficiently
-MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+# WhiteNoise is already in base MIDDLEWARE — just override storage
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Tell WhiteNoise to also serve the Vue dist output
@@ -74,9 +73,14 @@ LOGGING = {
     },
 }
 
-# ── CORS (production — restrict to known origins) ─────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = False
-CORS_ALLOWED_ORIGINS = os.environ.get(
-    'CORS_ALLOWED_ORIGINS',
-    'https://app.checkfunnel.ai',
+# ── CORS (production) ─────────────────────────────────────────────────────────
+# The widget is embedded via <script> on any customer website, so all origins
+# must be allowed for the widget-facing API paths (/api/chat/, /api/analytics/).
+# Admin API security relies on JWT auth, not CORS, so this is safe.
+CORS_ALLOW_ALL_ORIGINS = True
+
+# ── CSRF trusted origins ─────────────────────────────────────────────────────
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    'CSRF_TRUSTED_ORIGINS',
+    'https://ai.checkfunnels.com',
 ).split(',')

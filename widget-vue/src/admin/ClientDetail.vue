@@ -34,6 +34,30 @@
         </div>
       </div>
 
+      <!-- Scrape Progress Bar -->
+      <div v-if="scrapeProgress" class="scrape-progress-wrap">
+        <div class="scrape-progress-header">
+          <span class="scrape-phase-label">
+            <span class="scrape-pulse-dot"></span>
+            {{ scrapeProgress.phase === 'crawling' ? 'Crawling pages...' : 'Generating embeddings...' }}
+          </span>
+          <span v-if="scrapeProgress.total > 0" class="scrape-count-label">
+            {{ scrapeProgress.done }} / {{ scrapeProgress.total }} chunks
+          </span>
+          <span v-else-if="scrapeProgress.phase === 'crawling'" class="scrape-count-label">
+            Discovering pages...
+          </span>
+        </div>
+        <div class="scrape-track">
+          <div
+            class="scrape-fill"
+            :class="{ 'scrape-fill--indeterminate': scrapeProgress.total === 0 }"
+            :style="scrapeProgress.total > 0 ? { width: Math.round(scrapeProgress.done / scrapeProgress.total * 100) + '%' } : {}"
+          ></div>
+        </div>
+        <p class="scrape-hint">This may take a few minutes depending on the size of your website.</p>
+      </div>
+
       <!-- Tabs -->
       <div class="tabs">
         <button v-for="tab in tabs" :key="tab.id" class="tab" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id">
@@ -442,6 +466,8 @@ const copiedKey = ref('')
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
+const scrapeProgress = ref(null)
+let _scrapePoller = null
 
 const sessionFilters = reactive({
   state: '',
@@ -560,11 +586,37 @@ async function triggerScrape() {
   try {
     await api.triggerScrape(route.params.id)
     client.value.ingestion_status = 'RUNNING'
+    scrapeProgress.value = { phase: 'crawling', done: 0, total: 0 }
+    _startProgressPolling()
   } catch (e) {
     alert(e.message || 'Scrape failed.')
   } finally {
     scraping.value = false
   }
+}
+
+function _startProgressPolling() {
+  clearInterval(_scrapePoller)
+  _scrapePoller = setInterval(async () => {
+    try {
+      const data = await api.getScrapeProgress(route.params.id)
+      if (data.phase) {
+        scrapeProgress.value = { phase: data.phase, done: data.done, total: data.total }
+      }
+      client.value.ingestion_status = data.status
+      if (data.status === 'DONE' || data.status === 'FAILED') {
+        clearInterval(_scrapePoller)
+        _scrapePoller = null
+        scrapeProgress.value = null
+        client.value.total_pages_ingested = data.pages_ingested
+        if (analytics.value) analytics.value.pages_ingested = data.pages_ingested
+      }
+    } catch {
+      clearInterval(_scrapePoller)
+      _scrapePoller = null
+      scrapeProgress.value = null
+    }
+  }, 2000)
 }
 
 async function saveSettings() {
@@ -1021,4 +1073,80 @@ watch(sessionFilters, onFilterChange)
 }
 .an-event-label { font-size: 12px; color: #94A3B8; }
 .an-event-val { font-size: 18px; font-weight: 700; color: #0F172A; }
+
+/* ── Scrape progress bar ─────────────────────────────────────────────── */
+.scrape-progress-wrap {
+  margin-bottom: 20px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.scrape-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.scrape-phase-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1D4ED8;
+}
+
+.scrape-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3B82F6;
+  animation: pulseDot 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+.scrape-count-label {
+  font-size: 12px;
+  color: #2563EB;
+  font-weight: 500;
+}
+
+.scrape-track {
+  height: 6px;
+  background: #DBEAFE;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.scrape-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3B82F6, #6366F1);
+  border-radius: 99px;
+  transition: width 0.5s ease;
+  min-width: 4%;
+}
+
+.scrape-fill--indeterminate {
+  width: 30% !important;
+  animation: indeterminate 1.6s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0%   { transform: translateX(-120%); }
+  100% { transform: translateX(400%); }
+}
+
+.scrape-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #60A5FA;
+}
 </style>

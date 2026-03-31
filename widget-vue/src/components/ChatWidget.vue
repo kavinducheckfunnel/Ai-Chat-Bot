@@ -345,44 +345,66 @@ onBeforeUnmount(() => {
 
 <style scoped>
 /* ── Container ──────────────────────────────────────────────────────── */
+/* !important on all positioning/visibility rules to resist WordPress theme overrides */
 #cf-chat-container {
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  z-index: 999999;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  all: initial !important;
+  position: fixed !important;
+  bottom: 28px !important;
+  right: 28px !important;
+  z-index: 2147483647 !important;   /* max possible z-index */
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  box-sizing: border-box !important;
+  direction: ltr !important;
+  text-align: left !important;
+  line-height: normal !important;
+  font-size: 14px !important;
+  color: #0F172A !important;
 }
 
 #cf-chat-button {
-  width: 65px;
-  height: 65px;
-  border-radius: 50%;
-  background: var(--cf-primary, #3B82F6);
-  color: white;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.25);
-  transition: transform 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 65px !important;
+  height: 65px !important;
+  border-radius: 50% !important;
+  background: var(--cf-primary, #3B82F6) !important;
+  color: white !important;
+  border: none !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.25) !important;
+  transition: transform 0.3s ease !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  outline: none !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
 }
-#cf-chat-button:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(0,0,0,0.3); }
+#cf-chat-button:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(0,0,0,0.3) !important; }
 
 /* ── Chat window ────────────────────────────────────────────────────── */
 #cf-chat-window {
-  position: absolute;
-  bottom: 80px;
-  right: 0;
-  width: 420px;
-  max-height: 640px;
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  position: absolute !important;
+  bottom: 80px !important;
+  right: 0 !important;
+  width: 420px !important;
+  max-height: 640px !important;
+  background: #fff !important;
+  border-radius: 20px !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
   animation: slideUp 0.25s ease;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(16px); }

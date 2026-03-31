@@ -437,27 +437,67 @@ def trigger_scrape(request, client_id):
 
     cid = str(client.id)
 
+    _cache_key = f'scrape_progress:{cid}'
+
     def _run_scrape():
         """Run scrape in a background thread — no Celery required."""
         from django.db import connection
+        from django.core.cache import cache
         connection.close()  # Let Django open a fresh DB connection in this thread
         try:
             from scraper.ingestion import auto_scrape, ingest_documents
             _client = Client.objects.get(pk=cid)
             logger.info(f'[trigger_scrape] Starting scrape for "{_client.name}"')
+
+            # Phase 1: crawling
+            cache.set(_cache_key, {'phase': 'crawling', 'done': 0, 'total': 0}, 3600)
             documents = auto_scrape(_client)
-            count = ingest_documents(_client, documents)
+
+            # Phase 2: embedding
+            cache.set(_cache_key, {'phase': 'embedding', 'done': 0, 'total': 0}, 3600)
+
+            def _progress(done, total):
+                cache.set(_cache_key, {'phase': 'embedding', 'done': done, 'total': total}, 3600)
+
+            count = ingest_documents(_client, documents, progress_cb=_progress)
             Client.objects.filter(pk=cid).update(
                 ingestion_status='DONE',
                 total_pages_ingested=count,
             )
+            cache.delete(_cache_key)
             logger.info(f'[trigger_scrape] Done — {count} chunks ingested for "{_client.name}"')
         except Exception as exc:
             logger.error(f'[trigger_scrape] Failed for client {cid}: {exc}')
             Client.objects.filter(pk=cid).update(ingestion_status='FAILED')
+            from django.core.cache import cache as _c
+            _c.delete(_cache_key)
 
     threading.Thread(target=_run_scrape, daemon=True).start()
     return Response({'detail': 'Scrape started.', 'status': 'RUNNING'})
+
+
+# ─── Scrape progress (polling endpoint) ──────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def scrape_progress(request, client_id):
+    from django.core.cache import cache
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    cache_key = f'scrape_progress:{client_id}'
+    progress = cache.get(cache_key) or {}
+
+    return Response({
+        'status': client.ingestion_status,
+        'pages_ingested': client.total_pages_ingested,
+        'phase': progress.get('phase', ''),
+        'done': progress.get('done', 0),
+        'total': progress.get('total', 0),
+    })
 
 
 # ─── Platform stats (superadmin only) ─────────────────────────────────────────

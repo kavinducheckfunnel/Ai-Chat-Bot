@@ -103,6 +103,8 @@ export function useAdminApi() {
 
     triggerScrape: (id) => apiFetch(`/api/admin/clients/${id}/scrape/`, { method: 'POST' }),
 
+    getScrapeProgress: (id) => apiFetch(`/api/admin/clients/${id}/scrape-progress/`),
+
     // ── Sessions ─────────────────────────────────────────────────────────
     getSession: (id) => apiFetch(`/api/admin/sessions/${id}/`),
 

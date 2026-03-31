@@ -1,37 +1,29 @@
-import os
-import json
-import boto3
+from sentence_transformers import SentenceTransformer
+
+_model = None
 
 
-def _get_bedrock_client():
-    return boto3.client(
-        service_name='bedrock-runtime',
-        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-        region_name=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"),
-    )
+def _get_model():
+    global _model
+    if _model is None:
+        _model = SentenceTransformer('BAAI/bge-large-en-v1.5')
+    return _model
 
 
-class TitanEmbeddings:
-    """Amazon Titan Embed Text v2 — 1024 dims, no Marketplace subscription needed."""
+class LocalEmbeddings:
+    """BAAI/bge-large-en-v1.5 — 1024 dims, runs locally, zero API cost."""
 
     def embed_query(self, text: str) -> list:
-        client = _get_bedrock_client()
-        body = json.dumps({"inputText": text, "dimensions": 1024, "normalize": True})
-        resp = client.invoke_model(
-            modelId="amazon.titan-embed-text-v2:0",
-            body=body,
-            contentType="application/json",
-            accept="application/json",
-        )
-        return json.loads(resp['body'].read())['embedding']
+        model = _get_model()
+        return model.encode(text, normalize_embeddings=True).tolist()
 
     def embed_documents(self, texts: list) -> list:
-        return [self.embed_query(t) for t in texts]
+        model = _get_model()
+        return model.encode(texts, normalize_embeddings=True).tolist()
 
 
 def get_embeddings_model():
-    return TitanEmbeddings()
+    return LocalEmbeddings()
 
 
 def batch_embed_texts(texts):

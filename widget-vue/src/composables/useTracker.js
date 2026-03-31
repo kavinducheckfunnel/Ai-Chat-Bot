@@ -30,6 +30,10 @@ export function useTracker() {
 
     // ── API helpers ───────────────────────────────────────────────────────────
     const getApiBase = () => {
+        // On third-party embeds, __CF_BACKEND_URL__ is set by main.js from the
+        // script src (e.g. "https://ai.checkfunnels.com"). Use it so analytics
+        // calls go to *our* server, not the host website.
+        if (window.__CF_BACKEND_URL__) return window.__CF_BACKEND_URL__;
         const h = window.location.hostname;
         return (h === 'localhost' || h === '127.0.0.1') ? 'http://127.0.0.1:8000' : '';
     };
