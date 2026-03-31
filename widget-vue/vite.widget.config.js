@@ -36,7 +36,7 @@ function inlineCssPlugin() {
       if (!fs.existsSync(widgetJs)) return
 
       const cssFiles = fs.readdirSync(assetsDir).filter(
-        f => f.endsWith('.css') && f !== 'admin.css'
+        f => f.endsWith('.css') && !f.startsWith('admin.')
       )
       if (cssFiles.length === 0) return
 
