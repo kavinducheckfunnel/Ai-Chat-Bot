@@ -513,19 +513,19 @@ const settingsForm = ref({
 
 const embedCode = computed(() =>
   client.value
-    ? `<script src="${WIDGET_URL}" data-client-id="${client.value.id}"><\/script>`
+    ? `<script src="${WIDGET_URL}?client_id=${client.value.id}"><\/script>`
     : ''
 )
 
 const phpSnippet = computed(() =>
   client.value
-    ? `<?php\nfunction checkfunnel_widget() {\n    echo '<script src="${WIDGET_URL}" data-client-id="${client.value.id}"><\\/script>';\n}\nadd_action( 'wp_footer', 'checkfunnel_widget' );`
+    ? `<?php\nfunction checkfunnel_widget() {\n    echo '<script src="${WIDGET_URL}?client_id=${client.value.id}"><\\/script>';\n}\nadd_action( 'wp_footer', 'checkfunnel_widget' );`
     : ''
 )
 
 const webhookUrl = computed(() =>
   client.value
-    ? `http://localhost:8000/api/scraper/webhooks/wordpress/${client.value.id}/`
+    ? `${WIDGET_URL.replace('/widget/widget.js', '')}/api/scraper/webhooks/wordpress/${client.value.id}/`
     : ''
 )
 

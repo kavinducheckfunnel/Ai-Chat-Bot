@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from django.conf import settings
 from django.http import HttpResponse
@@ -28,6 +29,20 @@ def serve_widget_js(request):
         )
 
     content = widget_path.read_text(encoding='utf-8')
+
+    # If ?client_id=<uuid> is in the query string, bake the globals directly
+    # into the top of the served JS.  This bypasses ALL WordPress caching,
+    # script-optimization, and document.currentScript issues — the client ID
+    # is part of the JavaScript bytes, not an HTML attribute that can be lost.
+    client_id = request.GET.get('client_id', '').strip()
+    if client_id and re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', client_id, re.IGNORECASE):
+        backend_url = request.build_absolute_uri('/').rstrip('/')
+        prefix = (
+            f'window.__CF_CLIENT_ID__="{client_id}";'
+            f'window.__CF_BACKEND_URL__="{backend_url}";\n'
+        )
+        content = prefix + content
+
     return _js_response(content)
 
 
