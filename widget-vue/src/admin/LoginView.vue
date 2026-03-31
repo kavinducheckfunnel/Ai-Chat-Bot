@@ -90,8 +90,9 @@ async function handleLogin() {
   }
   loading.value = true
   try {
-    await api.login(form.value.username, form.value.password)
-    router.push('/admin')
+    const data = await api.login(form.value.username, form.value.password)
+    const isTenant = data.user?.role === 'tenant_admin' && !data.user?.is_superuser
+    router.push(isTenant ? '/portal/inbox' : '/admin')
   } catch (e) {
     error.value = e.message || 'Invalid credentials.'
   } finally {

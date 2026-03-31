@@ -19,6 +19,15 @@ class Client(models.Model):
         ('SHOPIFY', 'Shopify'),
         ('CUSTOM', 'Custom'),
     ]
+    GOAL_CHOICES = [
+        ('sales', 'Grow Sales'),
+        ('support', 'Automate Support'),
+        ('leads', 'Generate Leads'),
+    ]
+    THEME_CHOICES = [
+        ('dark', 'Dark'),
+        ('light', 'Light'),
+    ]
     INGESTION_CHOICES = [
         ('PENDING', 'Pending'),
         ('RUNNING', 'Running'),
@@ -37,6 +46,11 @@ class Client(models.Model):
     chatbot_name = models.CharField(max_length=100, default='AI Assistant')
     chatbot_color = models.CharField(max_length=20, default='#3B82F6')
     chatbot_logo_url = models.URLField(max_length=500, blank=True, null=True)
+    chatbot_theme = models.CharField(max_length=10, choices=THEME_CHOICES, default='dark')
+
+    # Tenant onboarding
+    primary_goal = models.CharField(max_length=20, choices=GOAL_CHOICES, default='leads')
+    onboarding_complete = models.BooleanField(default=False)
 
     # Notifications
     notification_email = models.EmailField(blank=True, null=True)
@@ -90,6 +104,7 @@ class TenantProfile(models.Model):
     plan = models.ForeignKey(Plan, on_delete=models.SET_NULL, null=True, blank=True)
     company_name = models.CharField(max_length=255, blank=True)
     sessions_this_month = models.IntegerField(default=0)
+    onboarding_complete = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.company_name or self.user.username}"

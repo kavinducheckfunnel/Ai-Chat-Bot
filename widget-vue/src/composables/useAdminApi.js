@@ -194,6 +194,25 @@ export function useAdminApi() {
       method: 'POST', body: JSON.stringify({ tenant_id: tenantId }),
     }),
 
+    // ── Portal helpers ────────────────────────────────────────────────
+    async getPortalClient() {
+      const clients = await apiFetch('/api/admin/clients/')
+      return clients?.[0] || null
+    },
+
+    updatePortalClient: (id, data) => apiFetch(`/api/admin/clients/${id}/`, {
+      method: 'PATCH', body: JSON.stringify(data),
+    }),
+
+    getPortalSessions: (clientId, params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+      ).toString()
+      return apiFetch(`/api/admin/clients/${clientId}/sessions/${qs ? '?' + qs : ''}`)
+    },
+
+    getPortalAnalytics: (clientId) => apiFetch(`/api/admin/clients/${clientId}/analytics/`),
+
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {
       const token = localStorage.getItem('cf_access_token')

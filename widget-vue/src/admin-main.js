@@ -11,11 +11,31 @@ import GodView from './admin/GodView.vue'
 import TenantManagement from './admin/TenantManagement.vue'
 import LeadManagement from './admin/LeadManagement.vue'
 
+import PortalLayout from './portal/PortalLayout.vue'
+import OnboardingWizard from './portal/OnboardingWizard.vue'
+import PortalInbox from './portal/PortalInbox.vue'
+import PortalCustomers from './portal/PortalCustomers.vue'
+import PortalReports from './portal/PortalReports.vue'
+import PortalSettings from './portal/PortalSettings.vue'
+
+function getUser() {
+  try { return JSON.parse(localStorage.getItem('cf_user') || 'null') } catch { return null }
+}
+
+function isTenantAdmin(user) {
+  return user?.role === 'tenant_admin' && !user?.is_superuser
+}
+
 const routes = [
+  // ── Shared login ─────────────────────────────────────────────────────────
   { path: '/admin/login', component: LoginView, meta: { public: true } },
+  { path: '/portal/login', redirect: '/admin/login' },
+
+  // ── Superadmin / staff admin SPA ─────────────────────────────────────────
   {
     path: '/admin',
     component: AdminLayout,
+    meta: { adminOnly: true },
     children: [
       { path: '', component: LiveDashboard },
       { path: 'clients', component: ClientList },
@@ -26,7 +46,24 @@ const routes = [
       { path: 'tenants', component: TenantManagement, meta: { superadminOnly: true } },
     ],
   },
-  { path: '/:pathMatch(.*)*', redirect: '/admin' },
+
+  // ── Tenant self-service portal ────────────────────────────────────────────
+  {
+    path: '/portal',
+    component: PortalLayout,
+    meta: { portalOnly: true },
+    children: [
+      { path: '', redirect: '/portal/inbox' },
+      { path: 'setup', component: OnboardingWizard },
+      { path: 'inbox', component: PortalInbox },
+      { path: 'customers', component: PortalCustomers },
+      { path: 'reports', component: PortalReports },
+      { path: 'settings', component: PortalSettings },
+    ],
+  },
+
+  // ── Fallback ──────────────────────────────────────────────────────────────
+  { path: '/:pathMatch(.*)*', redirect: '/admin/login' },
 ]
 
 const router = createRouter({
@@ -36,16 +73,28 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const token = localStorage.getItem('cf_access_token')
-  if (!to.meta.public && !token) return '/admin/login'
 
-  // Guard superadmin-only routes
+  // Public routes always pass
+  if (to.meta.public) return true
+
+  // No token → login
+  if (!token) return '/admin/login'
+
+  const user = getUser()
+
+  // Tenant admins must stay in /portal/
+  if (to.meta.adminOnly && isTenantAdmin(user)) {
+    return '/portal/inbox'
+  }
+
+  // Superadmins can't access portalOnly unless impersonating a tenant
+  if (to.meta.portalOnly && !isTenantAdmin(user) && !localStorage.getItem('cf_impersonating')) {
+    return '/admin'
+  }
+
+  // Superadmin-only guard
   if (to.meta.superadminOnly) {
-    try {
-      const user = JSON.parse(localStorage.getItem('cf_user') || 'null')
-      if (!user?.is_superuser && user?.role !== 'superadmin') return '/admin'
-    } catch {
-      return '/admin'
-    }
+    if (!user?.is_superuser && user?.role !== 'superadmin') return '/admin'
   }
 })
 
