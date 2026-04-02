@@ -17,6 +17,8 @@ import PortalInbox from './portal/PortalInbox.vue'
 import PortalCustomers from './portal/PortalCustomers.vue'
 import PortalReports from './portal/PortalReports.vue'
 import PortalSettings from './portal/PortalSettings.vue'
+import PortalLiveView from './portal/PortalLiveView.vue'
+import PortalKanban from './portal/PortalKanban.vue'
 
 function getUser() {
   try { return JSON.parse(localStorage.getItem('cf_user') || 'null') } catch { return null }
@@ -59,6 +61,8 @@ const routes = [
       { path: 'customers', component: PortalCustomers },
       { path: 'reports', component: PortalReports },
       { path: 'settings', component: PortalSettings },
+      { path: 'live', component: PortalLiveView },
+      { path: 'pipeline', component: PortalKanban },
     ],
   },
 

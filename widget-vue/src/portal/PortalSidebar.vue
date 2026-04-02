@@ -45,6 +45,20 @@
         Overview
       </router-link>
 
+      <!-- LIVE VIEW -->
+      <p class="nav-section">Live</p>
+      <router-link to="/portal/live" class="nav-item" :class="{ active: $route.path === '/portal/live' }">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+        Live View
+      </router-link>
+
+      <!-- PIPELINE -->
+      <p class="nav-section">Pipeline</p>
+      <router-link to="/portal/pipeline" class="nav-item" :class="{ active: $route.path === '/portal/pipeline' }">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="4" height="18" rx="1" stroke="currentColor" stroke-width="2"/><rect x="10" y="3" width="4" height="13" rx="1" stroke="currentColor" stroke-width="2"/><rect x="17" y="3" width="4" height="8" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+        Pipeline
+      </router-link>
+
       <!-- SETTINGS -->
       <p class="nav-section">Settings</p>
       <router-link to="/portal/settings" class="nav-item" :class="{ active: $route.path.startsWith('/portal/settings') }">

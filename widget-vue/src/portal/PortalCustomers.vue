@@ -62,7 +62,7 @@
           <tr v-if="filtered.length === 0">
             <td colspan="5" class="empty-row">No leads match your filters</td>
           </tr>
-          <tr v-for="lead in filtered" :key="lead.session_id">
+          <tr v-for="lead in filtered" :key="lead.session_id" class="clickable-row" @click="openSession(lead)">
             <td>
               <div class="visitor-cell">
                 <div class="visitor-avatar" :style="{ background: heatColor(lead.heat_score) }">
@@ -89,6 +89,41 @@
         </tbody>
       </table>
     </div>
+
+    <!-- Chat History Modal -->
+    <div v-if="selectedSession" class="modal-overlay" @click.self="selectedSession = null">
+      <div class="modal">
+        <div class="modal-header">
+          <div>
+            <h3 class="modal-title">Chat History</h3>
+            <p class="modal-sub">{{ selectedSession.lead_email || selectedSession.visitor_id?.slice(0, 28) || 'Anonymous' }}</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="modal-heat-badge" :class="heatBadgeClass(selectedSession.heat_score)">
+              {{ Math.round(selectedSession.heat_score || 0) }}% heat
+            </div>
+            <button class="modal-close" @click="selectedSession = null">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+        <div v-if="loadingSession" class="modal-loading">
+          <div class="modal-loader"></div>
+        </div>
+        <div v-else class="chat-history">
+          <div
+            v-for="(msg, i) in sessionDetail?.chat_history || []"
+            :key="i"
+            class="chat-msg"
+            :class="msg.role === 'user' ? 'user-msg' : 'ai-msg'"
+          >
+            <span class="msg-role">{{ msg.role === 'user' ? 'Visitor' : 'AI' }}</span>
+            <p class="msg-text">{{ msg.message || msg.content }}</p>
+          </div>
+          <p v-if="!sessionDetail?.chat_history?.length" class="no-history">No messages yet.</p>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -105,6 +140,9 @@ const activeTab = ref('all')
 const search = ref('')
 const sortBy = ref('-heat_score')
 const exporting = ref(false)
+const selectedSession = ref(null)
+const sessionDetail = ref(null)
+const loadingSession = ref(false)
 
 const hotLeads = computed(() => leads.value.filter(l => l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD'))
 
@@ -141,6 +179,22 @@ async function exportCSV() {
   } catch {} finally {
     exporting.value = false
   }
+}
+
+async function openSession(lead) {
+  selectedSession.value = lead
+  sessionDetail.value = null
+  loadingSession.value = true
+  try {
+    sessionDetail.value = await api.getSession(lead.session_id)
+  } catch {}
+  loadingSession.value = false
+}
+
+function heatBadgeClass(score) {
+  if (score >= 75) return 'badge-heat-hot'
+  if (score >= 40) return 'badge-heat-warm'
+  return 'badge-heat-cool'
 }
 
 function heatColor(score) {
@@ -296,4 +350,87 @@ watch(() => props.client, loadLeads)
 .sk-cell { height: 14px; background: #1e293b; border-radius: 4px; flex: 1; }
 .sk-cell.wide { flex: 2; }
 .sk-cell.narrow { flex: 0.5; }
+
+.clickable-row { cursor: pointer; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+}
+
+.modal {
+  background: #161616;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  width: 100%; max-width: 600px; max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.5);
+}
+
+.modal-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.modal-title { font-size: 16px; font-weight: 600; color: #f1f5f9; }
+.modal-sub { font-size: 12px; color: #475569; font-family: monospace; margin-top: 3px; }
+
+.modal-heat-badge {
+  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
+}
+.badge-heat-hot { background: rgba(239,68,68,0.15); color: #ef4444; }
+.badge-heat-warm { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.badge-heat-cool { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+
+.modal-close {
+  background: none; border: none; cursor: pointer; padding: 4px;
+  color: #475569; border-radius: 6px; transition: all 0.12s;
+}
+.modal-close:hover { background: rgba(255,255,255,0.06); color: #94a3b8; }
+
+.modal-loading { display: flex; justify-content: center; padding: 48px; }
+.modal-loader {
+  width: 28px; height: 28px;
+  border: 2px solid rgba(255,255,255,0.08);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.chat-history {
+  overflow-y: auto; padding: 16px 20px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.chat-msg { max-width: 88%; }
+.user-msg { align-self: flex-end; }
+.ai-msg { align-self: flex-start; }
+
+.msg-role {
+  font-size: 10px; font-weight: 600; color: #334155;
+  margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;
+}
+.user-msg .msg-role { text-align: right; }
+
+.msg-text {
+  font-size: 13px; line-height: 1.5; padding: 10px 14px; border-radius: 12px; margin: 0;
+}
+.user-msg .msg-text {
+  background: rgba(99,102,241,0.15);
+  color: #c7d2fe;
+  border-bottom-right-radius: 4px;
+}
+.ai-msg .msg-text {
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid rgba(255,255,255,0.05);
+  border-bottom-left-radius: 4px;
+}
+
+.no-history { color: #334155; font-size: 13px; text-align: center; padding: 24px; }
 </style>
