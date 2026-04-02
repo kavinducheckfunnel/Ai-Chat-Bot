@@ -78,9 +78,9 @@
             <td>
               <div class="heat-cell">
                 <div class="heat-track">
-                  <div class="heat-fill" :style="{ width: (lead.heat_score * 100) + '%', background: heatColor(lead.heat_score) }"></div>
+                  <div class="heat-fill" :style="{ width: (lead.heat_score || 0) + '%', background: heatColor(lead.heat_score) }"></div>
                 </div>
-                <span class="heat-pct">{{ Math.round((lead.heat_score || 0) * 100) }}%</span>
+                <span class="heat-pct">{{ Math.round(lead.heat_score || 0) }}%</span>
               </div>
             </td>
             <td class="count-cell">{{ lead.message_count || 0 }}</td>
@@ -106,7 +106,7 @@ const search = ref('')
 const sortBy = ref('-heat_score')
 const exporting = ref(false)
 
-const hotLeads = computed(() => leads.value.filter(l => l.heat_score > 0.65 || l.kanban_state === 'HOT_LEAD'))
+const hotLeads = computed(() => leads.value.filter(l => l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD'))
 
 const filtered = computed(() => {
   let list = leads.value
@@ -145,8 +145,8 @@ async function exportCSV() {
 
 function heatColor(score) {
   if (!score) return '#1e293b'
-  if (score > 0.7) return '#ef4444'
-  if (score > 0.4) return '#f59e0b'
+  if (score >= 75) return '#ef4444'
+  if (score >= 40) return '#f59e0b'
   return '#6366f1'
 }
 

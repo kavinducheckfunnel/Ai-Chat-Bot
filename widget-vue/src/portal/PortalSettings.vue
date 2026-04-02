@@ -176,8 +176,9 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
+import { generateEmbedCode } from './embedCodeGenerator'
 
 const props = defineProps({ client: Object })
 const emit = defineEmits(['client-updated'])
@@ -213,69 +214,15 @@ const formats = [
 
 const embedCode = computed(() => {
   if (!props.client) return ''
-  const id = props.client.id
-  const url = backendUrl
-
-  // Build html tag strings at runtime via array-join to keep tag literals
-  // out of this source file (the Vue SFC tokenizer reads them as real tags)
-  const openMod  = () => ['<scr','ipt type="module">'].join('')
-  const closeTag = () => ['</scr','ipt>'].join('')
-
-  const jsLines = [
-    `window.__CF_CLIENT_ID__ = "${id}";`,
-    `window.__CF_BACKEND_URL__ = "${url}";`,
-    `const s = document.createElement('script');`,
-    `s.src = "${url}/widget/widget.js";`,
-    `document.head.appendChild(s);`,
-  ]
-
-  if (embedFormat.value === 'html') {
-    return [
-      '<!-- Start of Checkfunnel code -->',
-      openMod(),
-      jsLines.join('\n'),
-      closeTag(),
-      '<!-- End of Checkfunnel code -->',
-    ].join('\n')
-  }
-
-  if (embedFormat.value === 'wordpress') {
-    // PHP echo with single-quoted string; JS content uses double-quoted strings
-    // Build php open tag at runtime — Vue SFC tokenizer rejects that literal in source
-    const phpOpen = '<' + '?php'
-    const jsLinesPHP = [
-      `window.__CF_CLIENT_ID__ = "${id}";`,
-      `window.__CF_BACKEND_URL__ = "${url}";`,
-      `const s = document.createElement("script");`,
-      `s.src = "${url}/widget/widget.js";`,
-      `document.head.appendChild(s);`,
-    ]
-    return `${phpOpen}
-function checkfunnel_widget() {
-  echo '${openMod()}
-${jsLinesPHP.join('\n')}
-${closeTag()}';
-}
-add_action('wp_footer', 'checkfunnel_widget');`
-  }
-
-  if (embedFormat.value === 'react') {
-    return `import { useEffect } from 'react';
-
-export function CheckfunnelWidget() {
-  useEffect(() => {
-    window.__CF_CLIENT_ID__ = '${id}';
-    window.__CF_BACKEND_URL__ = '${url}';
-    const s = document.createElement('script');
-    s.src = '${url}/widget/widget.js';
-    document.head.appendChild(s);
-    return () => document.head.removeChild(s);
-  }, []);
-  return null;
-}`
-  }
-  return ''
+  return generateEmbedCode(
+    props.client.id,
+    backendUrl,
+    form.value.chatbot_color || '#6366f1',
+    form.value.chatbot_name || 'AI Assistant',
+    embedFormat.value,
+  )
 })
+
 
 // Sync form with client prop
 watch(() => props.client, (c) => {
