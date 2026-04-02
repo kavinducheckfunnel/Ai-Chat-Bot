@@ -4,7 +4,15 @@ import { reactive, onMounted, onUnmounted } from 'vue';
 const PRICING_PATTERNS = ['/pricing', '/plans', '/checkout', '/subscribe', '/upgrade', '/buy'];
 
 export function useTracker() {
-    const sessionId = crypto.randomUUID();
+    // Persist session ID across page refreshes within the same browser tab.
+    // sessionStorage resets only when the tab/browser is closed — no more
+    // "new visitor" sound on every page reload.
+    const SESSION_KEY = '__cf_sid__'
+    const sessionId = sessionStorage.getItem(SESSION_KEY) || (() => {
+        const id = crypto.randomUUID()
+        sessionStorage.setItem(SESSION_KEY, id)
+        return id
+    })()
     const events = [];
 
     const behaviorMatrix = reactive({

@@ -48,6 +48,10 @@ class Client(models.Model):
     chatbot_logo_url = models.URLField(max_length=500, blank=True, null=True)
     chatbot_theme = models.CharField(max_length=10, choices=THEME_CHOICES, default='dark')
 
+    # Widget feature toggles
+    voice_input_enabled = models.BooleanField(default=False)
+    image_input_enabled = models.BooleanField(default=False)
+
     # Tenant onboarding
     primary_goal = models.CharField(max_length=20, choices=GOAL_CHOICES, default='leads')
     onboarding_complete = models.BooleanField(default=False)

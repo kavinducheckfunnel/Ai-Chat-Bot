@@ -133,6 +133,34 @@
         </button>
         <p v-if="saved" class="save-success">Changes saved.</p>
       </div>
+
+      <!-- Widget feature toggles -->
+      <div class="section-card">
+        <h2 class="section-title">Widget features</h2>
+        <p class="section-sub">Enable or disable interactive features in the chat widget.</p>
+
+        <div class="feature-row">
+          <div class="feature-info">
+            <span class="feature-name">Voice input</span>
+            <span class="feature-desc">Visitors can dictate messages using their microphone (Web Speech API)</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" v-model="form.voice_input_enabled" @change="saveConfig">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="feature-row">
+          <div class="feature-info">
+            <span class="feature-name">Image input</span>
+            <span class="feature-desc">Visitors can attach and send images in the chat</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" v-model="form.image_input_enabled" @change="saveConfig">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
     </div>
 
     <!-- ── Knowledge base ──────────────────────────────────────────────────── -->
@@ -202,6 +230,8 @@ const form = ref({
   notification_email: '',
   cta_message: '',
   domain_url: '',
+  voice_input_enabled: false,
+  image_input_enabled: false,
 })
 
 const presetColors = ['#ffffff', '#3B82F6', '#22c55e', '#ef4444', '#6366f1', '#f59e0b']
@@ -233,6 +263,8 @@ watch(() => props.client, (c) => {
   form.value.notification_email = c.notification_email || ''
   form.value.cta_message = c.cta_message || ''
   form.value.domain_url = c.domain_url || ''
+  form.value.voice_input_enabled = c.voice_input_enabled || false
+  form.value.image_input_enabled = c.image_input_enabled || false
   scrapePages.value = c.total_pages_ingested || 0
 }, { immediate: true })
 
@@ -585,4 +617,39 @@ const scrapeStatusLabel = computed(() => {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Widget feature toggles */
+.feature-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.feature-row:last-child { border-bottom: none; padding-bottom: 0; }
+.feature-info { display: flex; flex-direction: column; gap: 3px; }
+.feature-name { font-size: 14px; font-weight: 500; color: #e2e8f0; }
+.feature-desc { font-size: 12px; color: #475569; }
+
+.toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  transition: all 0.2s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #475569;
+  transition: all 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(20px); background: #6366f1; }
 </style>

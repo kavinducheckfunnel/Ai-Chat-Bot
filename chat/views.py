@@ -55,6 +55,8 @@ def widget_config(request, client_id):
         'fomo_offer_text': client.fomo_offer_text,
         'fomo_countdown_seconds': client.fomo_countdown_seconds,
         'discount_code': client.discount_code,
+        'voice_input_enabled': client.voice_input_enabled,
+        'image_input_enabled': client.image_input_enabled,
     })
 
 

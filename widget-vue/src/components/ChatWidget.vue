@@ -1,357 +1,453 @@
 <template>
   <div id="cf-chat-container">
-    <!-- Chat Window -->
+    <!-- ── Chat Window ─────────────────────────────────────────────────── -->
     <div id="cf-chat-window" v-show="isOpen">
+      <!-- Header -->
       <div id="cf-chat-header">
         <div class="header-info">
-          <img v-if="branding.chatbot_logo_url" :src="branding.chatbot_logo_url" class="header-logo" alt="logo" />
-          <div v-else class="status-dot"></div>
+          <div class="header-avatar" :style="{ background: branding.chatbot_color || '#6366f1' }">
+            <img v-if="branding.chatbot_logo_url" :src="branding.chatbot_logo_url" class="header-logo-img" alt="logo" />
+            <svg v-else width="18" height="18" viewBox="0 0 24 24" fill="white">
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+            </svg>
+          </div>
           <div class="header-text">
-            <span class="header-name">{{ branding.chatbot_name }}</span>
-            <span class="header-status">● Online</span>
+            <span class="header-name">{{ branding.chatbot_name || 'AI Assistant' }}</span>
+            <span class="header-status"><span class="status-dot"></span>Online</span>
           </div>
         </div>
-        <button id="cf-close-btn" @click="toggleWindow" aria-label="Close chat">&times;</button>
+        <button id="cf-close-btn" @click="toggleWindow" aria-label="Close chat">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
 
+      <!-- Messages -->
       <div id="cf-chat-messages" ref="messagesContainer">
         <div
           v-for="(msg, index) in chatMessages"
           :key="index"
           :class="['cf-msg', msg.sender === 'user' ? 'cf-msg-user' : 'cf-msg-ai']"
-          :style="msg.sender === 'user' ? { background: branding.chatbot_color } : {}"
+          :style="msg.sender === 'user' ? { background: branding.chatbot_color || '#6366f1' } : {}"
         >
           <template v-if="msg.type === 'text'">
             <div v-if="msg.sender === 'ai'" v-html="renderMarkdown(msg.text)" class="markdown-body"></div>
             <div v-else>{{ msg.text }}</div>
+            <!-- Emoji reactions (AI messages only) -->
+            <div v-if="msg.sender === 'ai' && msg.text" class="msg-reactions">
+              <button
+                class="reaction-btn"
+                :class="{ active: msg.reaction === '👍' }"
+                @click="react(index, '👍')"
+                title="Helpful"
+              >👍</button>
+              <button
+                class="reaction-btn"
+                :class="{ active: msg.reaction === '👎' }"
+                @click="react(index, '👎')"
+                title="Not helpful"
+              >👎</button>
+            </div>
+          </template>
+          <template v-else-if="msg.type === 'image'">
+            <img :src="msg.src" class="chat-image" alt="Sent image" />
           </template>
           <template v-else-if="msg.type === 'typing'">
             <div class="typing-indicator">
               <span></span><span></span><span></span>
             </div>
           </template>
-          <template v-else-if="msg.type === 'product'">
-            <ProductCard :productId="msg.productId" :clientId="clientId" />
-          </template>
         </div>
       </div>
 
+      <!-- Image preview strip -->
+      <div v-if="pendingImage" class="image-preview-bar">
+        <div class="image-preview-wrap">
+          <img :src="pendingImage" class="preview-thumb" alt="" />
+          <button class="preview-remove" @click="clearPendingImage">
+            <svg width="10" height="10" fill="none" viewBox="0 0 24 24">
+              <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Input area -->
       <div id="cf-chat-input-area">
+        <input
+          v-if="branding.image_input_enabled"
+          ref="fileInput"
+          type="file"
+          accept="image/*"
+          style="display:none"
+          @change="handleFileSelect"
+        />
+        <button
+          v-if="branding.image_input_enabled"
+          class="media-btn"
+          @click="fileInput.click()"
+          title="Attach image"
+          aria-label="Attach image"
+        >
+          <svg width="17" height="17" fill="none" viewBox="0 0 24 24">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button
+          v-if="branding.voice_input_enabled"
+          class="media-btn"
+          :class="{ recording: isRecording }"
+          @click="toggleVoice"
+          title="Voice input"
+          aria-label="Voice input"
+        >
+          <svg width="17" height="17" fill="none" viewBox="0 0 24 24">
+            <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
         <input
           type="text"
           id="cf-chat-input"
           v-model="inputValue"
           @keydown.enter.prevent="sendMessage"
-          placeholder="Type your message…"
+          :placeholder="isRecording ? '🎙 Listening...' : 'Type a message…'"
           autocomplete="off"
           :disabled="isTyping"
         />
         <button
           id="cf-send-btn"
           @click="sendMessage"
-          :style="{ background: branding.chatbot_color }"
-          :disabled="isTyping || !inputValue.trim()"
+          :style="{ background: branding.chatbot_color || '#6366f1' }"
+          :disabled="isTyping || (!inputValue.trim() && !pendingImage)"
           aria-label="Send message"
         >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <line x1="22" y1="2" x2="11" y2="13"></line>
             <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
           </svg>
         </button>
       </div>
+
+      <div class="powered-by">Powered by <a href="https://checkfunnels.com" target="_blank" rel="noopener">Checkfunnels</a></div>
     </div>
 
-    <!-- Lead Capture Modal -->
+    <!-- ── Lead Capture Modal ──────────────────────────────────────────── -->
     <div v-if="showLeadForm" class="cf-lead-overlay" @click.self="dismissLeadForm">
       <div class="cf-lead-modal">
         <button class="cf-lead-close" @click="dismissLeadForm">&times;</button>
         <div class="cf-lead-icon">📬</div>
         <h3 class="cf-lead-title">Stay in touch</h3>
         <p class="cf-lead-sub">Leave your contact and we'll follow up with a personalised answer.</p>
-        <input
-          v-model="leadEmail"
-          type="email"
-          class="cf-lead-input"
-          placeholder="Your email address"
-          @keydown.enter="submitLead"
-        />
-        <input
-          v-model="leadPhone"
-          type="tel"
-          class="cf-lead-input"
-          placeholder="Phone number (optional)"
-          @keydown.enter="submitLead"
-        />
-        <button
-          class="cf-lead-submit"
-          :style="{ background: branding.chatbot_color }"
-          @click="submitLead"
-          :disabled="!leadEmail.trim()"
-        >
+        <input v-model="leadEmail" type="email" class="cf-lead-input" placeholder="Your email address" @keydown.enter="submitLead" />
+        <input v-model="leadPhone" type="tel" class="cf-lead-input" placeholder="Phone number (optional)" @keydown.enter="submitLead" />
+        <button class="cf-lead-submit" :style="{ background: branding.chatbot_color }" @click="submitLead" :disabled="!leadEmail.trim()">
           {{ leadSubmitting ? 'Saving…' : 'Send my details' }}
         </button>
       </div>
     </div>
 
-    <!-- Floating Bubble -->
-    <button id="cf-chat-button" @click="toggleWindow" :style="{ background: branding.chatbot_color }" aria-label="Open chat">
-      <svg v-if="!isOpen" width="28" height="28" viewBox="0 0 24 24" fill="white">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-      </svg>
-      <svg v-else width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
-        <line x1="18" y1="6" x2="6" y2="18"></line>
-        <line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>
-    </button>
+    <!-- ── Pill Bar (idle state) ──────────────────────────────────────── -->
+    <div id="cf-pill-bar" @click="toggleWindow" v-show="!isOpen">
+      <div class="pill-icon" :style="{ background: branding.chatbot_color || '#6366f1' }">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+      </div>
+      <span class="pill-text">Write a message...</span>
+      <div class="pill-send" :style="{ background: branding.chatbot_color || '#6366f1' }">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2" fill="white" stroke="none"/>
+        </svg>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
-import ProductCard from './ProductCard.vue';
-import { useTracker } from '../composables/useTracker';
-import { marked } from 'marked';
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useTracker } from '../composables/useTracker'
+import { marked } from 'marked'
 
-const renderer = new marked.Renderer();
+const renderer = new marked.Renderer()
 renderer.link = (token) =>
-  `<a target="_blank" rel="noopener noreferrer" href="${token.href}">${token.text}</a>`;
-marked.setOptions({ renderer, breaks: true });
+  `<a target="_blank" rel="noopener noreferrer" href="${token.href}">${token.text}</a>`
+marked.setOptions({ renderer, breaks: true })
+const renderMarkdown = (text) => marked.parse(text || '')
 
-const renderMarkdown = (text) => marked.parse(text || '');
+// ── Tracker ───────────────────────────────────────────────────────────────────
+const { sessionId, behaviorMatrix, setNudgeCallback } = useTracker()
 
-// ─── Tracker ─────────────────────────────────────────────────────────────────
-const { sessionId, behaviorMatrix, setNudgeCallback } = useTracker();
-
-// ─── State ────────────────────────────────────────────────────────────────────
-const clientId = window.__CF_CLIENT_ID__ || null;
-const isOpen     = ref(false);
-const isTyping   = ref(false);
-const inputValue = ref('');
-const branding   = ref({
-  chatbot_name: 'AI Assistant',
-  chatbot_color: '#3B82F6',
-  chatbot_logo_url: null,
-});
+// ── State ─────────────────────────────────────────────────────────────────────
+const clientId    = window.__CF_CLIENT_ID__ || null
+const isOpen      = ref(false)
+const isTyping    = ref(false)
+const inputValue  = ref('')
+const branding    = ref({ chatbot_name: 'AI Assistant', chatbot_color: '#6366f1', chatbot_logo_url: null, voice_input_enabled: false, image_input_enabled: false })
 const chatMessages = ref([
   { type: 'text', text: "Hi! 👋 I'm your AI Assistant. How can I help you today?", sender: 'ai' },
-]);
-const messagesContainer = ref(null);
-const userMessageCount = ref(0);
+])
+const messagesContainer  = ref(null)
+const fileInput          = ref(null)
+const userMessageCount   = ref(0)
+const pendingImage       = ref(null)   // base64 data URI of image to send
+const isRecording        = ref(false)
 
-// ─── Lead capture state ───────────────────────────────────────────────────────
-const showLeadForm    = ref(false);
-const leadEmail       = ref('');
-const leadPhone       = ref('');
-const leadSubmitting  = ref(false);
-const leadCaptured    = ref(false);  // only show once per session
+// ── Lead capture ──────────────────────────────────────────────────────────────
+const showLeadForm   = ref(false)
+const leadEmail      = ref('')
+const leadPhone      = ref('')
+const leadSubmitting = ref(false)
+const leadCaptured   = ref(false)
 
-// ─── WebSocket ────────────────────────────────────────────────────────────────
-let socket = null;
-let reconnectTimer = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT = 5;
-const pendingMessages = [];
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+let socket = null
+let reconnectTimer = null
+let reconnectAttempts = 0
+const MAX_RECONNECT = 5
+const pendingMessages = []
 
 function getApiBase() {
-  // Production embed: main.js sets this from the <script src> URL so the widget
-  // always calls back to the correct Django server, not the host page.
-  if (window.__CF_BACKEND_URL__) return window.__CF_BACKEND_URL__;
-  // Dev (Vite proxy) or same-origin Django: use relative paths (proxy handles it).
-  return '';
+  if (window.__CF_BACKEND_URL__) return window.__CF_BACKEND_URL__
+  return ''
 }
-
 function getWsBase() {
-  // Production embed: derive ws(s):// from the known backend HTTP URL.
-  if (window.__CF_BACKEND_URL__) {
-    return window.__CF_BACKEND_URL__.replace(/^http/, 'ws');
-  }
-  // Dev / same-origin: WebSocket to the current host (Vite proxies /ws → Django).
-  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${window.location.host}`;
+  if (window.__CF_BACKEND_URL__) return window.__CF_BACKEND_URL__.replace(/^http/, 'ws')
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${window.location.host}`
 }
 
 function connectWebSocket() {
-  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
-
-  const globalClientId = clientId || '00000000-0000-0000-0000-000000000000';
-  socket = new WebSocket(`${getWsBase()}/ws/chat/${globalClientId}/${sessionId}/`);
-
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return
+  const globalClientId = clientId || '00000000-0000-0000-0000-000000000000'
+  socket = new WebSocket(`${getWsBase()}/ws/chat/${globalClientId}/${sessionId}/`)
   socket.onopen = () => {
-    reconnectAttempts = 0;
-    while (pendingMessages.length > 0) {
-      socket.send(JSON.stringify(pendingMessages.shift()));
-    }
-  };
-
+    reconnectAttempts = 0
+    while (pendingMessages.length > 0) socket.send(JSON.stringify(pendingMessages.shift()))
+  }
   socket.onmessage = (event) => {
     try {
-      const data = JSON.parse(event.data);
-      removeTypingIndicator();
-      isTyping.value = false;
-
-      if (data.type === 'ai_message') {
-        if (data.message) {
-          chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai' });
-        }
-        if (data.suggested_product_id) {
-          chatMessages.value.push({ type: 'product', productId: data.suggested_product_id, sender: 'ai' });
-        }
-        // Trigger lead capture after 3rd AI response if not already captured
+      const data = JSON.parse(event.data)
+      removeTypingIndicator()
+      isTyping.value = false
+      if (data.type === 'ai_message' && data.message) {
+        chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai', reaction: null })
+        playChime()
         if (!leadCaptured.value && userMessageCount.value >= 3) {
-          setTimeout(() => { showLeadForm.value = true; }, 1500);
+          setTimeout(() => { showLeadForm.value = true }, 1500)
         }
       }
     } catch {
-      removeTypingIndicator();
-      isTyping.value = false;
+      removeTypingIndicator()
+      isTyping.value = false
     }
-  };
-
-  socket.onerror = () => {};
-
+  }
+  socket.onerror = () => {}
   socket.onclose = (event) => {
-    removeTypingIndicator();
-    isTyping.value = false;
-    socket = null;
+    removeTypingIndicator()
+    isTyping.value = false
+    socket = null
     if (event.code !== 1000 && reconnectAttempts < MAX_RECONNECT) {
-      const delay = Math.min(1000 * 2 ** reconnectAttempts, 15000);
-      reconnectAttempts++;
-      reconnectTimer = setTimeout(connectWebSocket, delay);
+      const delay = Math.min(1000 * 2 ** reconnectAttempts, 15000)
+      reconnectAttempts++
+      reconnectTimer = setTimeout(connectWebSocket, delay)
     }
-  };
-}
-
-function disconnectWebSocket() {
-  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-  if (socket) { socket.close(1000, 'Component unmounted'); socket = null; }
-}
-
-// ─── Typing indicator ─────────────────────────────────────────────────────────
-const TYPING_MSG_ID = '__typing__';
-function showTypingIndicator() {
-  chatMessages.value.push({ type: 'typing', sender: 'ai', id: TYPING_MSG_ID });
-}
-function removeTypingIndicator() {
-  const idx = chatMessages.value.findIndex((m) => m.id === TYPING_MSG_ID);
-  if (idx !== -1) chatMessages.value.splice(idx, 1);
-}
-
-// ─── Send message ─────────────────────────────────────────────────────────────
-function sendMessage() {
-  const text = inputValue.value.trim();
-  if (!text || isTyping.value) return;
-
-  chatMessages.value.push({ type: 'text', text, sender: 'user' });
-  inputValue.value = '';
-  isTyping.value = true;
-  userMessageCount.value++;
-  showTypingIndicator();
-
-  const payload = { message: text, behavior_matrix: behaviorMatrix };
-  if (socket && socket.readyState === WebSocket.OPEN) {
-    socket.send(JSON.stringify(payload));
-  } else {
-    pendingMessages.push(payload);
-    if (!socket || socket.readyState === WebSocket.CLOSED) connectWebSocket();
   }
 }
 
-// ─── Lead capture ─────────────────────────────────────────────────────────────
+function disconnectWebSocket() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  if (socket) { socket.close(1000, 'Component unmounted'); socket = null }
+}
+
+// ── Typing indicator ──────────────────────────────────────────────────────────
+const TYPING_MSG_ID = '__typing__'
+function showTypingIndicator() {
+  chatMessages.value.push({ type: 'typing', sender: 'ai', id: TYPING_MSG_ID })
+}
+function removeTypingIndicator() {
+  const idx = chatMessages.value.findIndex((m) => m.id === TYPING_MSG_ID)
+  if (idx !== -1) chatMessages.value.splice(idx, 1)
+}
+
+// ── AI response chime ─────────────────────────────────────────────────────────
+function playChime() {
+  if (!isOpen.value) return
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    [[880, 0], [1100, 0.14], [1320, 0.26]].forEach(([freq, delay]) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      const t = ctx.currentTime + delay
+      gain.gain.setValueAtTime(0, t)
+      gain.gain.linearRampToValueAtTime(0.09, t + 0.04)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38)
+      osc.start(t)
+      osc.stop(t + 0.38)
+    })
+    setTimeout(() => ctx.close(), 1400)
+  } catch {}
+}
+
+// ── Send message ──────────────────────────────────────────────────────────────
+function sendMessage() {
+  const text = inputValue.value.trim()
+  if ((!text && !pendingImage) || isTyping.value) return
+
+  // If there's a pending image, show it in chat first
+  if (pendingImage.value) {
+    chatMessages.value.push({ type: 'image', src: pendingImage.value, sender: 'user' })
+  }
+
+  const messageText = text || (pendingImage.value ? '[User sent an image]' : '')
+  if (messageText) {
+    chatMessages.value.push({ type: 'text', text: messageText, sender: 'user' })
+  }
+
+  inputValue.value = ''
+  pendingImage.value = null
+  isTyping.value = true
+  userMessageCount.value++
+  showTypingIndicator()
+
+  const payload = { message: messageText, behavior_matrix: behaviorMatrix }
+  if (socket && socket.readyState === WebSocket.OPEN) {
+    socket.send(JSON.stringify(payload))
+  } else {
+    pendingMessages.push(payload)
+    if (!socket || socket.readyState === WebSocket.CLOSED) connectWebSocket()
+  }
+}
+
+// ── Image handling ────────────────────────────────────────────────────────────
+function handleFileSelect(e) {
+  const file = e.target.files?.[0]
+  if (!file) return
+  const reader = new FileReader()
+  reader.onload = (ev) => { pendingImage.value = ev.target.result }
+  reader.readAsDataURL(file)
+  e.target.value = ''   // reset so same file can be re-selected
+}
+
+function clearPendingImage() {
+  pendingImage.value = null
+}
+
+// ── Voice input ───────────────────────────────────────────────────────────────
+let recognition = null
+function toggleVoice() {
+  if (isRecording.value) {
+    recognition?.stop()
+    isRecording.value = false
+    return
+  }
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+  if (!SR) { return }
+  recognition = new SR()
+  recognition.continuous = false
+  recognition.interimResults = false
+  recognition.lang = 'en-US'
+  recognition.onresult = (e) => {
+    inputValue.value = e.results[0][0].transcript
+    isRecording.value = false
+  }
+  recognition.onerror = () => { isRecording.value = false }
+  recognition.onend = () => { isRecording.value = false }
+  recognition.start()
+  isRecording.value = true
+}
+
+// ── Emoji reactions ───────────────────────────────────────────────────────────
+function react(index, emoji) {
+  const msg = chatMessages.value[index]
+  if (!msg) return
+  msg.reaction = msg.reaction === emoji ? null : emoji
+}
+
+// ── Lead capture ──────────────────────────────────────────────────────────────
 function dismissLeadForm() {
-  showLeadForm.value = false;
-  leadCaptured.value = true;  // don't show again this session
+  showLeadForm.value = false
+  leadCaptured.value = true
 }
 
 async function submitLead() {
-  const email = leadEmail.value.trim();
-  if (!email || leadSubmitting.value) return;
-
-  leadSubmitting.value = true;
+  const email = leadEmail.value.trim()
+  if (!email || leadSubmitting.value) return
+  leadSubmitting.value = true
   try {
     await fetch(`${getApiBase()}/api/chat/lead/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: sessionId,
-        email,
-        phone: leadPhone.value.trim() || null,
-      }),
-    });
-  } catch { /* silent fail — lead saved on best-effort */ }
-
-  leadSubmitting.value = false;
-  leadCaptured.value = true;
-  showLeadForm.value = false;
-  chatMessages.value.push({
-    type: 'text',
-    text: '✅ Thanks! We\'ll be in touch soon.',
-    sender: 'ai',
-  });
+      body: JSON.stringify({ session_id: sessionId, email, phone: leadPhone.value.trim() || null }),
+    })
+  } catch {}
+  leadSubmitting.value = false
+  leadCaptured.value = true
+  showLeadForm.value = false
+  chatMessages.value.push({ type: 'text', text: "✅ Thanks! We'll be in touch soon.", sender: 'ai', reaction: null })
 }
 
-// ─── Auto-scroll ──────────────────────────────────────────────────────────────
+// ── Auto-scroll ───────────────────────────────────────────────────────────────
 watch(chatMessages, async () => {
-  await nextTick();
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-  }
-}, { deep: true });
+  await nextTick()
+  if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+}, { deep: true })
 
-// ─── Toggle ───────────────────────────────────────────────────────────────────
+// ── Toggle ────────────────────────────────────────────────────────────────────
 function toggleWindow() {
-  isOpen.value = !isOpen.value;
+  isOpen.value = !isOpen.value
   if (isOpen.value) {
-    connectWebSocket();
+    connectWebSocket()
     nextTick(() => {
-      if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-    });
+      if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    })
   }
 }
 
-// ─── Nudge callback ───────────────────────────────────────────────────────────
+// ── Nudge callback ────────────────────────────────────────────────────────────
 setNudgeCallback((nudgeText) => {
-  if (!nudgeText) return;
-  chatMessages.value.push({ type: 'text', text: nudgeText, sender: 'ai' });
-  if (!isOpen.value) isOpen.value = true;
-});
+  if (!nudgeText) return
+  chatMessages.value.push({ type: 'text', text: nudgeText, sender: 'ai', reaction: null })
+  if (!isOpen.value) isOpen.value = true
+})
 
-// ─── Branding ─────────────────────────────────────────────────────────────────
+// ── Branding ──────────────────────────────────────────────────────────────────
 async function loadBranding() {
-  if (!clientId) return;
+  if (!clientId) return
   try {
-    const res = await fetch(`${getApiBase()}/api/chat/widget-config/${clientId}/`);
-    if (!res.ok) return;
-    const cfg = await res.json();
-    branding.value = cfg;
-    const root = document.getElementById('cf-app-root');
-    if (root) {
-      root.style.setProperty('--cf-primary', cfg.chatbot_color);
-      root.style.setProperty('--cf-primary-dark', cfg.chatbot_color + 'cc');
-    }
-    window.__CF_BRANDING__ = cfg;
-  } catch { /* use defaults */ }
+    const res = await fetch(`${getApiBase()}/api/chat/widget-config/${clientId}/`)
+    if (!res.ok) return
+    const cfg = await res.json()
+    branding.value = cfg
+    window.__CF_BRANDING__ = cfg
+  } catch {}
 }
 
-// ─── Lifecycle ────────────────────────────────────────────────────────────────
+// ── Lifecycle ─────────────────────────────────────────────────────────────────
 onMounted(() => {
-  loadBranding();
-  connectWebSocket();
-});
+  loadBranding()
+  connectWebSocket()
+})
 
 onBeforeUnmount(() => {
-  disconnectWebSocket();
-});
+  disconnectWebSocket()
+})
 </script>
 
 <style scoped>
 /* ── Container ──────────────────────────────────────────────────────── */
-/* !important on all positioning/visibility rules to resist WordPress theme overrides */
 #cf-chat-container {
   all: initial !important;
   position: fixed !important;
-  bottom: 28px !important;
-  right: 28px !important;
-  z-index: 2147483647 !important;   /* max possible z-index */
+  bottom: 24px !important;
+  right: 24px !important;
+  z-index: 2147483647 !important;
   display: block !important;
   visibility: visible !important;
   opacity: 1 !important;
@@ -362,79 +458,103 @@ onBeforeUnmount(() => {
   text-align: left !important;
   line-height: normal !important;
   font-size: 14px !important;
-  color: #0F172A !important;
+  color: #f1f5f9 !important;
 }
 
-#cf-chat-button {
-  width: 65px !important;
-  height: 65px !important;
-  border-radius: 50% !important;
-  background: var(--cf-primary, #3B82F6) !important;
-  color: white !important;
-  border: none !important;
-  cursor: pointer !important;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.25) !important;
-  transition: transform 0.3s ease !important;
+/* ── Pill bar (idle) ────────────────────────────────────────────────── */
+#cf-pill-bar {
   display: flex !important;
   align-items: center !important;
-  justify-content: center !important;
-  visibility: visible !important;
-  opacity: 1 !important;
-  position: relative !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  outline: none !important;
-  min-width: 0 !important;
-  min-height: 0 !important;
+  gap: 10px !important;
+  padding: 10px 12px 10px 10px !important;
+  background: rgba(17, 17, 17, 0.96) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 100px !important;
+  cursor: pointer !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  transition: transform 0.2s, box-shadow 0.2s !important;
+  min-width: 220px !important;
+  max-width: 280px !important;
+  user-select: none !important;
+  animation: cf-pill-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards !important;
 }
-#cf-chat-button:hover { transform: scale(1.08); box-shadow: 0 8px 28px rgba(0,0,0,0.3) !important; }
+@keyframes cf-pill-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+#cf-pill-bar:hover { transform: translateY(-2px) !important; box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3) !important; }
+
+.pill-icon {
+  width: 32px !important; height: 32px !important;
+  border-radius: 50% !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  flex-shrink: 0 !important;
+}
+.pill-text {
+  flex: 1 !important;
+  font-size: 13px !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  font-weight: 400 !important;
+  white-space: nowrap !important;
+}
+.pill-send {
+  width: 30px !important; height: 30px !important;
+  border-radius: 50% !important;
+  display: flex !important; align-items: center !important; justify-content: center !important;
+  flex-shrink: 0 !important;
+}
 
 /* ── Chat window ────────────────────────────────────────────────────── */
 #cf-chat-window {
   position: absolute !important;
-  bottom: 80px !important;
+  bottom: 0 !important;
   right: 0 !important;
-  width: 420px !important;
-  max-height: 640px !important;
-  background: #fff !important;
+  width: 380px !important;
+  max-height: 620px !important;
+  background: #111111 !important;
   border-radius: 20px !important;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.18) !important;
+  border: 1px solid rgba(255,255,255,0.07) !important;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 4px 20px rgba(0,0,0,0.4) !important;
   display: flex !important;
   flex-direction: column !important;
   overflow: hidden !important;
-  animation: slideUp 0.25s ease;
+  animation: cf-win-in 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
   visibility: visible !important;
   opacity: 1 !important;
 }
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
+@keyframes cf-win-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */
 #cf-chat-header {
-  background: var(--cf-primary, #3B82F6);
-  color: white;
-  padding: 16px 18px;
-  font-weight: 600;
-  font-size: 15px;
+  background: #161616;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 14px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-shrink: 0;
 }
 .header-info { display: flex; align-items: center; gap: 10px; }
-.header-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid rgba(255,255,255,0.5); }
-.status-dot { width: 36px; height: 36px; background: rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 18px; }
-.status-dot::after { content: '🤖'; }
-.header-text { display: flex; flex-direction: column; gap: 1px; }
-.header-name { font-size: 15px; font-weight: 600; line-height: 1.2; }
-.header-status { font-size: 11px; opacity: 0.85; }
-#cf-close-btn {
-  background: rgba(255,255,255,0.2); border: none; color: white; cursor: pointer;
-  font-size: 20px; border-radius: 50%; width: 30px; height: 30px;
-  display: flex; align-items: center; justify-content: center; transition: background 0.2s; flex-shrink: 0;
+.header-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
+.header-logo-img { width: 38px; height: 38px; border-radius: 50%; object-fit: cover; }
+.header-text { display: flex; flex-direction: column; gap: 2px; }
+.header-name { font-size: 14px; font-weight: 600; color: #f1f5f9; letter-spacing: -0.2px; }
+.header-status { font-size: 11px; color: #64748b; display: flex; align-items: center; gap: 4px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; }
+#cf-close-btn {
+  background: rgba(255,255,255,0.06); border: none; color: #94a3b8; cursor: pointer;
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; transition: background 0.15s; flex-shrink: 0;
+}
+#cf-close-btn:hover { background: rgba(255,255,255,0.12); color: #f1f5f9; }
 
 /* ── Messages ───────────────────────────────────────────────────────── */
 #cf-chat-messages {
@@ -444,109 +564,183 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #f8f9fb;
+  background: #111111;
+  min-height: 200px;
+  max-height: 360px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
 }
+#cf-chat-messages::-webkit-scrollbar { width: 4px; }
+#cf-chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
 .cf-msg {
-  padding: 13px 18px;
+  padding: 11px 15px;
   border-radius: 18px;
-  max-width: 85%;
+  max-width: 84%;
   word-wrap: break-word;
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.55;
-  animation: fadeIn 0.25s ease;
+  animation: cf-msg-in 0.22s ease;
 }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-.cf-msg-user { color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
-.cf-msg-ai { background: #fff; color: #1a1a2e; align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid #ececec; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+@keyframes cf-msg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.cf-msg-user {
+  color: white;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+.cf-msg-ai {
+  background: #1e2433;
+  color: #e2e8f0;
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── Emoji reactions ────────────────────────────────────────────────── */
+.msg-reactions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.reaction-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
+  padding: 2px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: rgba(255,255,255,0.5);
+}
+.reaction-btn:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+.reaction-btn.active { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
+
+/* ── Chat image ─────────────────────────────────────────────────────── */
+.chat-image {
+  max-width: 200px;
+  max-height: 180px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+}
 
 /* ── Typing indicator ───────────────────────────────────────────────── */
 .typing-indicator { display: flex; gap: 5px; align-items: center; height: 20px; }
-.typing-indicator span { width: 8px; height: 8px; background: #adb5bd; border-radius: 50%; animation: bounce 1.2s infinite ease-in-out; }
-.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-@keyframes bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+.typing-indicator span { width: 7px; height: 7px; background: #475569; border-radius: 50%; animation: cf-bounce 1.2s infinite ease-in-out; }
+.typing-indicator span:nth-child(2) { animation-delay: 0.18s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.36s; }
+@keyframes cf-bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-6px); } }
+
+/* ── Image preview bar ──────────────────────────────────────────────── */
+.image-preview-bar {
+  padding: 8px 14px 0;
+  background: #111111;
+}
+.image-preview-wrap { position: relative; display: inline-block; }
+.preview-thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; display: block; border: 1px solid rgba(255,255,255,0.1); }
+.preview-remove {
+  position: absolute; top: -6px; right: -6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #ef4444; border: none; color: white; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
 
 /* ── Input area ─────────────────────────────────────────────────────── */
 #cf-chat-input-area {
   display: flex;
-  border-top: 1px solid #efefef;
-  padding: 12px 14px;
-  background: white;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  padding: 10px 12px;
+  background: #161616;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex-shrink: 0;
 }
+.media-btn {
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+  color: #64748b; width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; transition: all 0.15s;
+}
+.media-btn:hover { background: rgba(255,255,255,0.1); color: #94a3b8; }
+.media-btn.recording { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #f87171; animation: cf-pulse-rec 1s ease-in-out infinite; }
+@keyframes cf-pulse-rec { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 6px transparent; } }
+
 #cf-chat-input {
   flex: 1;
-  padding: 11px 18px;
-  border: 1.5px solid #e1e5ea;
-  border-radius: 24px;
+  padding: 9px 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px;
   outline: none;
-  font-size: 14px;
-  background: #f8f9fb;
-  transition: border 0.2s, box-shadow 0.2s;
+  font-size: 13px;
+  background: rgba(255,255,255,0.05);
+  color: #e2e8f0;
   font-family: inherit;
+  transition: border-color 0.2s, background 0.2s;
 }
-#cf-chat-input:focus { border-color: var(--cf-primary, #3B82F6); background: #fff; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
-#cf-chat-input:disabled { opacity: 0.6; cursor: not-allowed; }
+#cf-chat-input:focus { border-color: rgba(99,102,241,0.4); background: rgba(255,255,255,0.07); }
+#cf-chat-input::placeholder { color: rgba(255,255,255,0.25); }
+#cf-chat-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
 #cf-send-btn {
-  color: white; border: none; padding: 11px 14px; border-radius: 50%;
+  color: white; border: none; border-radius: 50%;
   cursor: pointer; transition: opacity 0.2s, transform 0.15s;
   display: flex; align-items: center; justify-content: center;
-  width: 44px; height: 44px; flex-shrink: 0;
+  width: 36px; height: 36px; flex-shrink: 0;
 }
-#cf-send-btn:hover:not(:disabled) { opacity: 0.88; transform: scale(1.05); }
-#cf-send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+#cf-send-btn:hover:not(:disabled) { opacity: 0.85; transform: scale(1.06); }
+#cf-send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+/* ── Powered-by footer ──────────────────────────────────────────────── */
+.powered-by {
+  text-align: center; font-size: 10px; color: rgba(255,255,255,0.2);
+  padding: 5px 0 8px; background: #161616;
+}
+.powered-by a { color: rgba(255,255,255,0.3); text-decoration: none; }
+.powered-by a:hover { color: rgba(255,255,255,0.5); }
 
 /* ── Markdown ───────────────────────────────────────────────────────── */
-.markdown-body :deep(p) { margin: 0 0 8px 0; }
+.markdown-body :deep(p) { margin: 0 0 8px 0; color: #e2e8f0; }
 .markdown-body :deep(p:last-child) { margin-bottom: 0; }
-.markdown-body :deep(ol), .markdown-body :deep(ul) { margin: 6px 0; padding-left: 18px; }
+.markdown-body :deep(ol), .markdown-body :deep(ul) { margin: 6px 0; padding-left: 18px; color: #e2e8f0; }
 .markdown-body :deep(li) { margin-bottom: 5px; }
-.markdown-body :deep(a) { color: #3B82F6; text-decoration: none; font-weight: 600; }
+.markdown-body :deep(a) { color: #a5b4fc; text-decoration: none; font-weight: 600; }
 .markdown-body :deep(a:hover) { text-decoration: underline; }
-.markdown-body :deep(strong) { font-weight: 700; }
-.markdown-body :deep(code) { background: #f1f3f5; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+.markdown-body :deep(strong) { font-weight: 700; color: #f1f5f9; }
+.markdown-body :deep(code) { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #c4b5fd; }
 
 /* ── Lead capture modal ─────────────────────────────────────────────── */
 .cf-lead-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.45);
-  z-index: 1000000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn 0.2s ease;
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000000;
+  display: flex; align-items: center; justify-content: center;
+  animation: cf-msg-in 0.2s ease;
 }
 .cf-lead-modal {
-  background: #fff;
-  border-radius: 20px;
-  padding: 32px 28px;
-  width: 320px;
-  max-width: 90vw;
-  position: relative;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
-  animation: slideUp 0.2s ease;
+  background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; padding: 32px 28px; width: 320px; max-width: 90vw;
+  position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
 }
 .cf-lead-close {
   position: absolute; top: 12px; right: 14px;
-  background: none; border: none; font-size: 22px; cursor: pointer; color: #999;
+  background: none; border: none; font-size: 22px; cursor: pointer; color: #64748b;
 }
 .cf-lead-icon { font-size: 36px; text-align: center; margin-bottom: 12px; }
-.cf-lead-title { margin: 0 0 6px; font-size: 18px; font-weight: 700; color: #1a1a2e; text-align: center; }
+.cf-lead-title { margin: 0 0 6px; font-size: 18px; font-weight: 700; color: #f1f5f9; text-align: center; }
 .cf-lead-sub { margin: 0 0 20px; font-size: 13px; color: #64748b; text-align: center; line-height: 1.5; }
 .cf-lead-input {
-  width: 100%; padding: 11px 14px; border: 1.5px solid #e1e5ea; border-radius: 10px;
+  width: 100%; padding: 11px 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
   font-size: 14px; margin-bottom: 10px; box-sizing: border-box; outline: none; font-family: inherit;
-  transition: border 0.2s;
+  background: rgba(255,255,255,0.05); color: #e2e8f0; transition: border 0.2s;
 }
-.cf-lead-input:focus { border-color: var(--cf-primary, #3B82F6); }
+.cf-lead-input:focus { border-color: rgba(99,102,241,0.5); }
+.cf-lead-input::placeholder { color: rgba(255,255,255,0.25); }
 .cf-lead-submit {
   width: 100%; padding: 12px; border: none; border-radius: 10px;
   color: white; font-size: 15px; font-weight: 600; cursor: pointer;
   transition: opacity 0.2s; margin-top: 4px;
 }
 .cf-lead-submit:hover:not(:disabled) { opacity: 0.88; }
-.cf-lead-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.cf-lead-submit:disabled { opacity: 0.45; cursor: not-allowed; }
 </style>
