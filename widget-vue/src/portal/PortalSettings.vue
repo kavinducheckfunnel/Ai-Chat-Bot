@@ -214,19 +214,25 @@ const embedCode = computed(() => {
   const id = props.client.id
   const url = backendUrl
 
+  // Split tag strings to prevent the Vue SFC parser from treating them as real HTML tags
+  const cfgTag = (i, u) => ['<scr','ipt>window.__CF_CLIENT_ID__="',i,'";window.__CF_BACKEND_URL__="',u,'";</scr','ipt>'].join('')
   const scriptTag = (attrs) => ['<scr','ipt ',attrs,'></scr','ipt>'].join('')
 
   if (embedFormat.value === 'html') {
-    return `<!-- Start of Checkfunnel code -->\n${scriptTag(`src="${url}/widget/widget.js?client_id=${id}" defer`)}\n<!-- End of Checkfunnel code -->`
+    const cfg = cfgTag(id, url)
+    const scr = scriptTag(`src="${url}/widget/widget.js" async`)
+    return `<!-- Start of Checkfunnel code -->\n${cfg}\n${scr}\n<!-- End of Checkfunnel code -->`
   }
 
   if (embedFormat.value === 'wordpress') {
-    const tag = scriptTag(`src="${url}/widget/widget.js?client_id=${id}" defer`)
+    const cfg = cfgTag(id, url)
+    const scr = scriptTag(`src="${url}/widget/widget.js" async`)
     return `<?php
 function checkfunnel_widget() {
-  echo '${tag}';
+  echo '${cfg}';
+  echo '${scr}';
 }
-add_action('wp_footer','checkfunnel_widget');`
+add_action('wp_footer', 'checkfunnel_widget');`
   }
 
   if (embedFormat.value === 'react') {
@@ -234,9 +240,11 @@ add_action('wp_footer','checkfunnel_widget');`
 
 export function CheckfunnelWidget() {
   useEffect(() => {
+    window.__CF_CLIENT_ID__ = '${id}';
+    window.__CF_BACKEND_URL__ = '${url}';
     const s = document.createElement('script');
-    s.src = '${url}/widget/widget.js?client_id=${id}';
-    s.defer = true;
+    s.src = '${url}/widget/widget.js';
+    s.async = true;
     document.head.appendChild(s);
     return () => document.head.removeChild(s);
   }, []);
