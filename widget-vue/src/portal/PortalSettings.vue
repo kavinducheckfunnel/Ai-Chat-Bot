@@ -38,7 +38,9 @@
             </button>
           </div>
 
-          <p class="embed-instruction">Paste this code before the <code>&lt;/body&gt;</code> tag on every page.</p>
+          <p class="embed-instruction" v-if="embedFormat === 'wordpress'">Paste into your theme's <code>functions.php</code>, or use the "Insert Headers and Footers" plugin → Footer section.</p>
+          <p class="embed-instruction" v-else-if="embedFormat === 'react'">Drop this component anywhere in your React app tree.</p>
+          <p class="embed-instruction" v-else>Paste before the <code>&lt;/body&gt;</code> tag on every page.</p>
 
           <!-- Code block -->
           <div class="code-block" v-if="props.client">
@@ -214,23 +216,45 @@ const embedCode = computed(() => {
   const id = props.client.id
   const url = backendUrl
 
-  // Split tag strings to prevent the Vue SFC parser from treating them as real HTML tags
-  const cfgTag = (i, u) => ['<scr','ipt>window.__CF_CLIENT_ID__="',i,'";window.__CF_BACKEND_URL__="',u,'";</scr','ipt>'].join('')
-  const scriptTag = (attrs) => ['<scr','ipt ',attrs,'></scr','ipt>'].join('')
+  // Build html tag strings at runtime via array-join to keep tag literals
+  // out of this source file (the Vue SFC tokenizer reads them as real tags)
+  const openMod  = () => ['<scr','ipt type="module">'].join('')
+  const closeTag = () => ['</scr','ipt>'].join('')
+
+  const jsLines = [
+    `window.__CF_CLIENT_ID__ = "${id}";`,
+    `window.__CF_BACKEND_URL__ = "${url}";`,
+    `const s = document.createElement('script');`,
+    `s.src = "${url}/widget/widget.js";`,
+    `document.head.appendChild(s);`,
+  ]
 
   if (embedFormat.value === 'html') {
-    const cfg = cfgTag(id, url)
-    const scr = scriptTag(`src="${url}/widget/widget.js" async`)
-    return `<!-- Start of Checkfunnel code -->\n${cfg}\n${scr}\n<!-- End of Checkfunnel code -->`
+    return [
+      '<!-- Start of Checkfunnel code -->',
+      openMod(),
+      jsLines.join('\n'),
+      closeTag(),
+      '<!-- End of Checkfunnel code -->',
+    ].join('\n')
   }
 
   if (embedFormat.value === 'wordpress') {
-    const cfg = cfgTag(id, url)
-    const scr = scriptTag(`src="${url}/widget/widget.js" async`)
-    return `<?php
+    // PHP echo with single-quoted string; JS content uses double-quoted strings
+    // Build php open tag at runtime — Vue SFC tokenizer rejects that literal in source
+    const phpOpen = '<' + '?php'
+    const jsLinesPHP = [
+      `window.__CF_CLIENT_ID__ = "${id}";`,
+      `window.__CF_BACKEND_URL__ = "${url}";`,
+      `const s = document.createElement("script");`,
+      `s.src = "${url}/widget/widget.js";`,
+      `document.head.appendChild(s);`,
+    ]
+    return `${phpOpen}
 function checkfunnel_widget() {
-  echo '${cfg}';
-  echo '${scr}';
+  echo '${openMod()}
+${jsLinesPHP.join('\n')}
+${closeTag()}';
 }
 add_action('wp_footer', 'checkfunnel_widget');`
   }
@@ -244,7 +268,6 @@ export function CheckfunnelWidget() {
     window.__CF_BACKEND_URL__ = '${url}';
     const s = document.createElement('script');
     s.src = '${url}/widget/widget.js';
-    s.async = true;
     document.head.appendChild(s);
     return () => document.head.removeChild(s);
   }, []);
