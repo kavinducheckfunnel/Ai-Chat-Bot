@@ -171,10 +171,15 @@ import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useTracker } from '../composables/useTracker'
 import { marked } from 'marked'
 
-const renderer = new marked.Renderer()
-renderer.link = (token) =>
-  `<a target="_blank" rel="noopener noreferrer" href="${token.href}">${token.text}</a>`
-marked.setOptions({ renderer, breaks: true })
+// marked v17+ uses marked.use() — setOptions is removed
+marked.use({
+  breaks: true,
+  renderer: {
+    link({ href, text }) {
+      return `<a target="_blank" rel="noopener noreferrer" href="${href}">${text || href}</a>`
+    },
+  },
+})
 const renderMarkdown = (text) => marked.parse(text || '')
 
 // ── Tracker ───────────────────────────────────────────────────────────────────
@@ -551,8 +556,11 @@ onBeforeUnmount(() => {
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; }
 #cf-close-btn {
   background: rgba(255,255,255,0.06); border: none; color: #94a3b8; cursor: pointer;
-  width: 28px; height: 28px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; transition: background 0.15s; flex-shrink: 0;
+  width: 28px; height: 28px;
+  min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px;
+  border-radius: 50%; flex: 0 0 28px; align-self: center;
+  display: flex; align-items: center; justify-content: center; transition: background 0.15s;
+  padding: 0;
 }
 #cf-close-btn:hover { background: rgba(255,255,255,0.12); color: #f1f5f9; }
 
@@ -660,9 +668,12 @@ onBeforeUnmount(() => {
 }
 .media-btn {
   background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-  color: #64748b; width: 34px; height: 34px; border-radius: 50%;
+  color: #64748b;
+  width: 34px; height: 34px;
+  min-width: 34px; max-width: 34px; min-height: 34px; max-height: 34px;
+  border-radius: 50%; flex: 0 0 34px; align-self: center;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; flex-shrink: 0; transition: all 0.15s;
+  cursor: pointer; transition: all 0.15s; padding: 0;
 }
 .media-btn:hover { background: rgba(255,255,255,0.1); color: #94a3b8; }
 .media-btn.recording { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #f87171; animation: cf-pulse-rec 1s ease-in-out infinite; }
@@ -688,7 +699,9 @@ onBeforeUnmount(() => {
   color: white; border: none; border-radius: 50%;
   cursor: pointer; transition: opacity 0.2s, transform 0.15s;
   display: flex; align-items: center; justify-content: center;
-  width: 36px; height: 36px; flex-shrink: 0;
+  width: 36px; height: 36px;
+  min-width: 36px; max-width: 36px; min-height: 36px; max-height: 36px;
+  flex: 0 0 36px; align-self: center; padding: 0;
 }
 #cf-send-btn:hover:not(:disabled) { opacity: 0.85; transform: scale(1.06); }
 #cf-send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
@@ -702,14 +715,35 @@ onBeforeUnmount(() => {
 .powered-by a:hover { color: rgba(255,255,255,0.5); }
 
 /* ── Markdown ───────────────────────────────────────────────────────── */
-.markdown-body :deep(p) { margin: 0 0 8px 0; color: #e2e8f0; }
+.markdown-body { color: #e2e8f0; line-height: 1.6; }
+.markdown-body :deep(p) { margin: 0 0 10px 0; color: #e2e8f0; line-height: 1.6; }
 .markdown-body :deep(p:last-child) { margin-bottom: 0; }
-.markdown-body :deep(ol), .markdown-body :deep(ul) { margin: 6px 0; padding-left: 18px; color: #e2e8f0; }
-.markdown-body :deep(li) { margin-bottom: 5px; }
-.markdown-body :deep(a) { color: #a5b4fc; text-decoration: none; font-weight: 600; }
-.markdown-body :deep(a:hover) { text-decoration: underline; }
+.markdown-body :deep(ol) {
+  margin: 8px 0 10px 0; padding-left: 20px; color: #e2e8f0;
+  list-style-type: decimal !important; display: block;
+}
+.markdown-body :deep(ul) {
+  margin: 8px 0 10px 0; padding-left: 20px; color: #e2e8f0;
+  list-style-type: disc !important; display: block;
+}
+.markdown-body :deep(li) {
+  margin-bottom: 6px; color: #e2e8f0; line-height: 1.55;
+  display: list-item !important;
+}
+.markdown-body :deep(li:last-child) { margin-bottom: 0; }
+.markdown-body :deep(a) { color: #a5b4fc; text-decoration: underline; font-weight: 500; word-break: break-all; }
+.markdown-body :deep(a:hover) { color: #c4b5fd; }
 .markdown-body :deep(strong) { font-weight: 700; color: #f1f5f9; }
-.markdown-body :deep(code) { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #c4b5fd; }
+.markdown-body :deep(em) { font-style: italic; color: #cbd5e1; }
+.markdown-body :deep(code) { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: #c4b5fd; font-family: monospace; }
+.markdown-body :deep(pre) { background: rgba(0,0,0,0.3); border-radius: 8px; padding: 10px 12px; margin: 8px 0; overflow-x: auto; }
+.markdown-body :deep(pre code) { background: none; padding: 0; font-size: 12px; color: #a5b4fc; }
+.markdown-body :deep(h1), .markdown-body :deep(h2), .markdown-body :deep(h3) { color: #f1f5f9; font-weight: 700; margin: 10px 0 6px; line-height: 1.3; }
+.markdown-body :deep(h1) { font-size: 16px; }
+.markdown-body :deep(h2) { font-size: 15px; }
+.markdown-body :deep(h3) { font-size: 14px; }
+.markdown-body :deep(blockquote) { border-left: 3px solid rgba(99,102,241,0.5); margin: 8px 0; padding: 4px 12px; color: #94a3b8; font-style: italic; }
+.markdown-body :deep(hr) { border: none; border-top: 1px solid rgba(255,255,255,0.08); margin: 10px 0; }
 
 /* ── Lead capture modal ─────────────────────────────────────────────── */
 .cf-lead-overlay {
