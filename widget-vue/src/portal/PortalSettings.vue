@@ -214,34 +214,18 @@ const embedCode = computed(() => {
   const id = props.client.id
   const url = backendUrl
 
+  const scriptTag = (attrs) => ['<scr','ipt ',attrs,'></scr','ipt>'].join('')
+
   if (embedFormat.value === 'html') {
-    return `<!-- Start of Checkfunnel code -->
-<script>
-  window.__CF_CLIENT_ID__ = "${id}";
-  window.__CF_BACKEND_URL__ = "${url}";
-  ;(function(d,s,i){
-    var j=d.createElement(s);
-    j.async=1;
-    j.src=i+'/widget/widget.js';
-    d.head.appendChild(j);
-  }(document,'script',window.__CF_BACKEND_URL__));
-<\/script>
-<!-- End of Checkfunnel code -->`
+    return `<!-- Start of Checkfunnel code -->\n${scriptTag(`src="${url}/widget/widget.js?client_id=${id}" defer`)}\n<!-- End of Checkfunnel code -->`
   }
 
   if (embedFormat.value === 'wordpress') {
+    const tag = scriptTag(`src="${url}/widget/widget.js?client_id=${id}" defer`)
     return `<?php
-function checkfunnel_widget() { ?>
-  <script>
-    window.__CF_CLIENT_ID__ = "${id}";
-    window.__CF_BACKEND_URL__ = "${url}";
-    ;(function(d,s,i){
-      var j=d.createElement(s);j.async=1;
-      j.src=i+'/widget/widget.js';
-      d.head.appendChild(j);
-    }(document,'script',window.__CF_BACKEND_URL__));
-  <\/script>
-<?php }
+function checkfunnel_widget() {
+  echo '${tag}';
+}
 add_action('wp_footer','checkfunnel_widget');`
   }
 
@@ -250,13 +234,11 @@ add_action('wp_footer','checkfunnel_widget');`
 
 export function CheckfunnelWidget() {
   useEffect(() => {
-    window.__CF_CLIENT_ID__ = "${id}";
-    window.__CF_BACKEND_URL__ = "${url}";
     const s = document.createElement('script');
-    s.async = true;
-    s.src = \`\${window.__CF_BACKEND_URL__}/widget/widget.js\`;
+    s.src = '${url}/widget/widget.js?client_id=${id}';
+    s.defer = true;
     document.head.appendChild(s);
-    return () => { document.head.removeChild(s); };
+    return () => document.head.removeChild(s);
   }, []);
   return null;
 }`
