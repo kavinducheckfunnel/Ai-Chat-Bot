@@ -41,8 +41,8 @@ export function generateEmbedCode(id, url, color, botName, format) {
 .cf-hn{font-size:14px;font-weight:600;color:#f1f5f9;letter-spacing:-.2px}
 .cf-hs{font-size:11px;color:#64748b;display:flex;align-items:center;gap:4px;margin-top:2px}
 .cf-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;flex-shrink:0}
-#cf-xb{background:rgba(255,255,255,0.06);border:none;color:#94a3b8;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:background .15s;flex-shrink:0}
-#cf-xb:hover{background:rgba(255,255,255,0.12);color:#f1f5f9}
+#cf-xb{background:rgba(255,255,255,0.06)!important;border:none!important;color:#94a3b8!important;width:28px!important;height:28px!important;min-width:28px!important;max-width:28px!important;min-height:28px!important;max-height:28px!important;border-radius:50%!important;cursor:pointer;font-size:16px;display:flex!important;align-items:center!important;justify-content:center!important;transition:background .15s;flex:0 0 28px!important;padding:0!important;line-height:1!important}
+#cf-xb:hover{background:rgba(255,255,255,0.12)!important;color:#f1f5f9!important}
 
 /* ── Messages ── */
 #cf-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:9px;background:#111111;min-height:180px;max-height:340px;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,0.1) transparent}
@@ -76,17 +76,17 @@ export function generateEmbedCode(id, url, color, botName, format) {
 
 /* ── Input area ── */
 #cf-foot{display:flex;gap:7px;padding:10px 12px;background:#161616;border-top:1px solid rgba(255,255,255,0.06);flex-shrink:0;align-items:center}
-.cf-mb{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);color:#64748b;width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;transition:all .15s}
-.cf-mb:hover{background:rgba(255,255,255,0.1);color:#94a3b8}
+.cf-mb{background:rgba(255,255,255,0.06)!important;border:1px solid rgba(255,255,255,0.08)!important;color:#64748b!important;width:34px!important;height:34px!important;min-width:34px!important;max-width:34px!important;min-height:34px!important;max-height:34px!important;border-radius:50%!important;display:flex!important;align-items:center!important;justify-content:center!important;cursor:pointer;flex:0 0 34px!important;padding:0!important;transition:all .15s;line-height:1!important;align-self:center!important}
+.cf-mb:hover{background:rgba(255,255,255,0.1)!important;color:#94a3b8!important}
 .cf-mb.rec{background:rgba(239,68,68,0.15);border-color:rgba(239,68,68,0.4);color:#f87171;animation:cf-prec 1s ease-in-out infinite}
 @keyframes cf-prec{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.3)}50%{box-shadow:0 0 0 5px transparent}}
 #cf-inp{flex:1;padding:9px 14px;border:1px solid rgba(255,255,255,0.08);border-radius:20px;outline:none;font-size:13px;font-family:inherit;background:rgba(255,255,255,0.05);color:#e2e8f0;transition:border-color .2s,background .2s}
 #cf-inp:focus{border-color:rgba(99,102,241,0.4);background:rgba(255,255,255,0.07)}
 #cf-inp::placeholder{color:rgba(255,255,255,0.25)}
 #cf-inp:disabled{opacity:.5;cursor:not-allowed}
-#cf-sb{width:36px;height:36px;border-radius:50%;background:${color};border:none;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:opacity .15s,transform .15s}
+#cf-sb{width:36px!important;height:36px!important;min-width:36px!important;max-width:36px!important;min-height:36px!important;max-height:36px!important;border-radius:50%!important;background:${color}!important;border:none!important;color:#fff!important;cursor:pointer;display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 36px!important;padding:0!important;transition:opacity .15s,transform .15s;align-self:center!important;line-height:1!important}
 #cf-sb:hover:not(:disabled){opacity:.85;transform:scale(1.07)}
-#cf-sb:disabled{opacity:.3;cursor:not-allowed}
+#cf-sb:disabled{opacity:.3!important;cursor:not-allowed}
 #cf-pby{text-align:center;font-size:10px;color:rgba(255,255,255,0.2);padding:5px 0 7px;background:#161616}
 #cf-pby a{color:rgba(255,255,255,0.3);text-decoration:none}
 </style>`
