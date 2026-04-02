@@ -9,6 +9,10 @@
       <div class="header-right">
         <div class="live-dot"></div>
         <span class="live-label">Live</span>
+        <button class="mute-btn" @click="toggleMute" :title="muted ? 'Unmute notifications' : 'Mute notifications'">
+          <svg v-if="!muted" width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg v-else width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
         <button class="refresh-btn" @click="loadData" :disabled="loading">
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" :class="{ spin: loading }"><path d="M23 4v6h-6M1 20v-6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           Refresh
@@ -248,6 +252,35 @@ const activeFilter = ref('all')
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
+const muted = ref(localStorage.getItem('cf_inbox_muted') === '1')
+
+function toggleMute() {
+  muted.value = !muted.value
+  localStorage.setItem('cf_inbox_muted', muted.value ? '1' : '0')
+}
+
+function playNotificationSound() {
+  if (muted.value) return
+  try {
+    const AudioCtx = window.AudioContext || window['webkitAudioContext']
+    const ctx = new AudioCtx()
+    const tones = [880, 1100]
+    tones.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.18)
+      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.18 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.35)
+      osc.start(ctx.currentTime + i * 0.18)
+      osc.stop(ctx.currentTime + i * 0.18 + 0.35)
+    })
+    setTimeout(() => ctx.close(), 1200)
+  } catch {}
+}
 
 const filters = [
   { label: 'All', value: 'all' },
@@ -329,6 +362,7 @@ function handleWsMessage(msg) {
       sessions.value[idx] = { ...sessions.value[idx], ...incoming }
     } else {
       sessions.value.unshift(incoming)
+      playNotificationSound()
     }
     // Keep sorted by heat
     sessions.value.sort((a, b) => b.heat_score - a.heat_score)
@@ -432,6 +466,21 @@ onUnmounted(() => {
 @keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.5 } }
 
 .live-label { font-size: 13px; font-weight: 500; color: #22C55E; }
+
+.mute-btn {
+  background: transparent;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  color: #94A3B8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  transition: background 0.15s, color 0.15s;
+}
+.mute-btn:hover { background: #F1F5F9; color: #64748B; }
 
 .refresh-btn {
   display: flex; align-items: center; gap: 6px;

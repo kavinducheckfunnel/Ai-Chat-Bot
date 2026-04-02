@@ -6,6 +6,17 @@
         <p class="page-sub">Real-time conversations from your website</p>
       </div>
       <div class="header-actions">
+        <button class="mute-btn" @click="toggleMute" :title="muted ? 'Unmute notifications' : 'Mute notifications'">
+          <svg v-if="!muted" width="16" height="16" fill="none" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg v-else width="16" height="16" fill="none" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
         <div class="live-indicator">
           <span class="live-dot"></span>
           Live
@@ -126,6 +137,38 @@ const selectedId = ref(null)
 const messagesEl = ref(null)
 let ws = null
 
+// ── Notification sound ────────────────────────────────────────────────────────
+const muted = ref(localStorage.getItem('cf_inbox_muted') === '1')
+
+function toggleMute() {
+  muted.value = !muted.value
+  localStorage.setItem('cf_inbox_muted', muted.value ? '1' : '0')
+}
+
+function playNotificationSound() {
+  if (muted.value) return
+  try {
+    const AudioCtx = window.AudioContext || window['webkitAudioContext']
+    const ctx = new AudioCtx()
+    // Two-tone "new visitor" chime
+    const tones = [880, 1100]
+    tones.forEach((freq, i) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.value = freq
+      gain.gain.setValueAtTime(0, ctx.currentTime + i * 0.18)
+      gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + i * 0.18 + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.35)
+      osc.start(ctx.currentTime + i * 0.18)
+      osc.stop(ctx.currentTime + i * 0.18 + 0.35)
+    })
+    setTimeout(() => ctx.close(), 1200)
+  } catch {}
+}
+
 const selected = computed(() => sessions.value.find(s => s.session_id === selectedId.value) || null)
 
 const chatHistory = computed(() => {
@@ -197,7 +240,12 @@ function kanbanClass(state) {
 onMounted(async () => {
   await loadSessions()
   ws = api.connectAdminDashboard((msg) => {
-    if (msg.type === 'session_update') loadSessions()
+    if (msg.type === 'session_update') {
+      const prevCount = sessions.value.length
+      loadSessions().then(() => {
+        if (sessions.value.length > prevCount) playNotificationSound()
+      })
+    }
   })
 })
 
@@ -233,6 +281,21 @@ watch(selected, () => {
 .page-sub { font-size: 13px; color: #475569; margin-top: 3px; }
 
 .header-actions { display: flex; align-items: center; gap: 10px; }
+
+.mute-btn {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  transition: background 0.15s, color 0.15s;
+}
+.mute-btn:hover { background: rgba(255,255,255,0.1); color: #94a3b8; }
 
 .live-indicator {
   display: flex; align-items: center; gap: 6px;
