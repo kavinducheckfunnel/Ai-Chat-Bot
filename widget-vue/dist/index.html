@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CheckFunnel — AI Chat That Converts</title>
+  <meta name="description" content="CheckFunnel turns website visitors into qualified leads with intent-tracking AI, FOMO triggers, and real-time admin control. Not just a chatbot — a revenue engine." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@1,400;1,700&display=swap" rel="stylesheet" />
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{--accent:#6366f1;--accent-light:#818cf8;--dark:#0f0f11;--text:#1a1a2e;--muted:#6b7280;--light-bg:#f7f7f5;--border:#e5e7eb;--white:#ffffff;--radius:16px}
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text);background:var(--white);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+    .italic-accent{font-family:'Playfair Display',Georgia,serif;font-style:italic;color:var(--accent)}
+
+    /* NAV */
+    nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(255,255,255,0.9);backdrop-filter:blur(16px);border-bottom:1px solid rgba(0,0,0,0.06);height:64px;display:flex;align-items:center}
+    .nav-inner{max-width:1200px;margin:0 auto;padding:0 24px;width:100%;display:flex;align-items:center}
+    .nav-logo{font-size:17px;font-weight:800;color:var(--text);text-decoration:none;letter-spacing:-0.5px;display:flex;align-items:center;gap:8px}
+    .nav-logo-icon{width:30px;height:30px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:800}
+    .nav-links{display:flex;align-items:center;gap:2px;margin-left:auto;list-style:none}
+    .nav-links a{padding:7px 14px;font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;border-radius:8px;transition:color .15s,background .15s}
+    .nav-links a:hover{color:var(--text);background:var(--light-bg)}
+    .nav-cta{display:flex;align-items:center;gap:8px;margin-left:20px}
+    .btn-ghost{padding:8px 16px;font-size:14px;font-weight:500;color:var(--text);background:none;border:none;border-radius:8px;cursor:pointer;text-decoration:none;transition:background .15s}
+    .btn-ghost:hover{background:var(--light-bg)}
+    .btn-primary{padding:9px 18px;font-size:14px;font-weight:600;color:white;background:#e5484d;border:none;border-radius:9px;cursor:pointer;text-decoration:none;transition:background .15s,transform .1s;display:inline-block}
+    .btn-primary:hover{background:#c53030;transform:translateY(-1px)}
+    .btn-indigo{background:var(--accent)}.btn-indigo:hover{background:#4f46e5}
+
+    /* HERO */
+    .hero{position:relative;min-height:100vh;display:flex;align-items:center;overflow:hidden}
+    .hero-bg{position:absolute;inset:0;background:linear-gradient(135deg,#0f0a2e 0%,#1a1040 30%,#0d1a3a 60%,#091224 100%)}
+    .hero-bg::before{content:'';position:absolute;width:900px;height:900px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,.35) 0%,transparent 70%);top:-200px;left:-200px;animation:drift1 20s ease-in-out infinite alternate}
+    .hero-bg::after{content:'';position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(139,92,246,.25) 0%,transparent 70%);bottom:-100px;right:-100px;animation:drift2 25s ease-in-out infinite alternate}
+    @keyframes drift1{from{transform:translate(0,0) scale(1)}to{transform:translate(80px,60px) scale(1.15)}}
+    @keyframes drift2{from{transform:translate(0,0) scale(1)}to{transform:translate(-60px,-40px) scale(1.1)}}
+    .hero-grid{position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1px);background-size:40px 40px}
+    .hero-content{position:relative;z-index:2;max-width:1200px;margin:0 auto;padding:120px 24px 80px;width:100%}
+    .hero-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(99,102,241,.15);border:1px solid rgba(99,102,241,.3);border-radius:100px;padding:6px 14px;font-size:12px;font-weight:600;color:#a5b4fc;letter-spacing:.04em;text-transform:uppercase;margin-bottom:32px}
+    .hero-eyebrow .dot{width:6px;height:6px;background:#a5b4fc;border-radius:50%;animation:blink 2s ease-in-out infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+    .hero-headline{font-size:clamp(44px,7vw,88px);font-weight:800;line-height:1.05;letter-spacing:-2px;color:white;max-width:820px;margin-bottom:24px}
+    .hero-headline .italic-accent{color:#a5b4fc}
+    .hero-sub{font-size:clamp(16px,2vw,20px);color:rgba(255,255,255,.65);line-height:1.65;max-width:560px;margin-bottom:44px}
+    .hero-form{display:flex;gap:10px;max-width:500px;margin-bottom:16px}
+    .hero-input{flex:1;padding:14px 18px;font-size:15px;font-family:'Inter',sans-serif;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:11px;color:white;outline:none;transition:border-color .2s,background .2s}
+    .hero-input::placeholder{color:rgba(255,255,255,.4)}
+    .hero-input:focus{border-color:var(--accent-light);background:rgba(255,255,255,.14)}
+    .hero-form .btn-primary{padding:14px 22px;font-size:15px;border-radius:11px;white-space:nowrap}
+    .hero-fine{font-size:12px;color:rgba(255,255,255,.3)}
+    .hero-stats{display:flex;gap:48px;margin-top:72px;padding-top:48px;border-top:1px solid rgba(255,255,255,.1);flex-wrap:wrap}
+    .hero-stat-val{font-size:34px;font-weight:800;color:white;letter-spacing:-1px}
+    .hero-stat-label{font-size:13px;color:rgba(255,255,255,.4);margin-top:4px}
+
+    /* GENERIC */
+    section{padding:100px 24px}
+    .container{max-width:1200px;margin:0 auto}
+    .section-eyebrow{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:16px}
+    .section-title{font-size:clamp(32px,4.5vw,56px);font-weight:800;line-height:1.08;letter-spacing:-1.5px;color:var(--text);margin-bottom:20px}
+    .section-sub{font-size:18px;color:var(--muted);line-height:1.6;max-width:560px}
+
+    /* LOGOS BAR */
+    .logos-bar{background:var(--light-bg);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:26px 24px}
+    .logos-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:center;gap:52px;flex-wrap:wrap}
+    .logos-label{font-size:11px;font-weight:600;color:#9ca3af;letter-spacing:.06em;text-transform:uppercase}
+    .logo-pill{font-size:15px;font-weight:700;color:#9ca3af;letter-spacing:-.3px}
+
+    /* FEATURE INTRO */
+    .feat-intro{background:var(--light-bg)}
+    .feat-intro-header{max-width:680px;margin-bottom:64px}
+    .cards-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+    .card{border-radius:20px;overflow:hidden;position:relative}
+    .card-dark{background:var(--dark);padding:40px 36px 44px;color:white;display:flex;flex-direction:column;justify-content:flex-end;min-height:400px}
+    .card-dark-bg{position:absolute;inset:0;background:linear-gradient(135deg,#1e1b4b 0%,#0f0a2e 100%)}
+    .card-dark-glow{position:absolute;width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,.4) 0%,transparent 70%);top:-60px;right:-60px}
+    .card-dark-content{position:relative;z-index:2}
+    .card-dark h3{font-size:26px;font-weight:800;letter-spacing:-.7px;line-height:1.15;margin-bottom:10px}
+    .card-dark h3 em{font-family:'Playfair Display',serif;font-style:italic;color:#a5b4fc}
+    .card-dark p{font-size:14px;color:rgba(255,255,255,.5);line-height:1.6}
+    .card-cta{display:inline-flex;align-items:center;gap:6px;margin-top:20px;font-size:13px;font-weight:600;color:#a5b4fc;text-decoration:none}
+    .card-light{background:white;border:1px solid var(--border);padding:36px;min-height:400px;display:flex;flex-direction:column;justify-content:space-between}
+    .card-muted{background:#f0f0ec;border:1px solid var(--border);padding:36px;min-height:400px;display:flex;flex-direction:column;justify-content:space-between}
+    .card-light h3,.card-muted h3{font-size:22px;font-weight:700;letter-spacing:-.5px;color:var(--text)}
+    .card-light p,.card-muted p{font-size:14px;color:var(--muted);line-height:1.6;margin-top:8px}
+
+    /* MOCK UI bits */
+    .mock-heat-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(255,255,255,.04);border-radius:10px;margin-bottom:6px}
+    .m-av{width:30px;height:30px;border-radius:50%;font-size:11px;font-weight:700;color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .m-name{font-size:12px;color:#94a3b8;flex:1}
+    .m-bw{width:72px;height:4px;background:rgba(255,255,255,.08);border-radius:2px}
+    .m-b{height:100%;border-radius:2px}
+    .m-pct{font-size:11px;width:34px;text-align:right;font-weight:700}
+    .mock-chat{background:white;border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+    .mc-msg{padding:8px 12px;border-radius:10px;font-size:12px;line-height:1.45;margin-bottom:7px;max-width:82%}
+    .mc-msg.ai{background:#f3f4f6;color:#374151}
+    .mc-msg.user{background:var(--accent);color:white;margin-left:auto}
+    .badge{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:600}
+    .badge-hot{background:rgba(239,68,68,.1);color:#ef4444}
+    .badge-warm{background:rgba(245,158,11,.1);color:#f59e0b}
+    .badge-eng{background:rgba(99,102,241,.1);color:#6366f1}
+    .badge-dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+
+    /* SHOWCASE */
+    .feat-showcase{background:white}
+    .showcase-header{text-align:center;max-width:700px;margin:0 auto 64px}
+    .showcase-layout{display:grid;grid-template-columns:260px 1fr 280px;gap:28px;align-items:start}
+    .tab-list{display:flex;flex-direction:column;gap:4px}
+    .tab-btn{display:block;width:100%;text-align:left;padding:13px 16px;background:none;border:none;border-radius:12px;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .15s;font-family:'Inter',sans-serif}
+    .tab-btn:hover{background:var(--light-bg);color:var(--text)}
+    .tab-btn.active{background:var(--light-bg);color:var(--text);font-weight:600}
+    .tab-btn.active .tab-bar{display:inline-block}
+    .tab-bar{display:none;width:3px;height:14px;background:var(--accent);border-radius:2px;margin-right:10px;vertical-align:middle}
+    .demo-win{background:var(--dark);border-radius:20px;overflow:hidden;min-height:420px}
+    .dw-header{background:rgba(255,255,255,.04);border-bottom:1px solid rgba(255,255,255,.06);padding:13px 18px;display:flex;align-items:center;gap:7px}
+    .dw-dot{width:10px;height:10px;border-radius:50%}
+    .dw-title{font-size:12px;color:rgba(255,255,255,.28);margin:0 auto}
+    .dw-body{padding:20px}
+    .demo-panel{display:none}.demo-panel.active{display:block}
+    .hv-row{display:flex;align-items:center;gap:12px;padding:11px 13px;border-radius:10px;margin-bottom:5px;background:rgba(255,255,255,.04)}
+    .hv-av{width:32px;height:32px;border-radius:50%;font-size:12px;font-weight:700;color:white;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .hv-info{flex:1}
+    .hv-name{font-size:13px;color:#e2e8f0;font-weight:500}
+    .hv-state{font-size:11px;color:#64748b;margin-top:2px}
+    .hv-score{font-size:15px;font-weight:700;text-align:right}
+    .hv-bw{width:56px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;margin-top:5px;margin-left:auto}
+    .hv-b{height:100%;border-radius:2px}
+    .showcase-desc{padding-top:4px}
+    .showcase-desc h3{font-size:24px;font-weight:800;letter-spacing:-.6px;color:var(--text);margin-bottom:12px}
+    .showcase-desc p{font-size:14px;color:var(--muted);line-height:1.65;margin-bottom:22px}
+    .feat-list{list-style:none;display:flex;flex-direction:column;gap:10px}
+    .feat-list li{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:#374151}
+    .feat-list li::before{content:'';width:18px;height:18px;border-radius:50%;background:rgba(99,102,241,.1) url("data:image/svg+xml,%3Csvg width='10' height='8' viewBox='0 0 10 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4L3.5 6.5L9 1' stroke='%236366f1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat center;border:1.5px solid rgba(99,102,241,.2);flex-shrink:0;margin-top:1px}
+
+    /* CHANNELS */
+    .channels{background:var(--light-bg);text-align:center}
+    .channels-header{max-width:580px;margin:0 auto 44px}
+    .ch-pills{display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
+    .ch-pill{display:flex;align-items:center;gap:9px;padding:11px 20px;background:white;border:1px solid var(--border);border-radius:100px;font-size:14px;font-weight:500;color:var(--text);cursor:pointer;transition:all .15s;text-decoration:none}
+    .ch-pill:hover,.ch-pill.active{border-color:var(--accent);color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 14px rgba(99,102,241,.12)}
+
+    /* CONTROL */
+    .control-section{background:var(--dark);color:white;overflow:hidden}
+    .ctrl-inner{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+    .ctrl-text .section-title{color:white}
+    .ctrl-text .section-eyebrow{color:#a5b4fc}
+    .ctrl-text .section-sub{color:rgba(255,255,255,.5)}
+    .ctrl-feats{display:flex;flex-direction:column;gap:20px;margin-top:40px}
+    .cf-item{display:flex;gap:16px;align-items:flex-start}
+    .cf-icon{width:40px;height:40px;border-radius:10px;background:rgba(99,102,241,.12);border:1px solid rgba(99,102,241,.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:18px}
+    .cf-text h4{font-size:15px;font-weight:600;color:white;margin-bottom:4px}
+    .cf-text p{font-size:13px;color:rgba(255,255,255,.4);line-height:1.5}
+    .ctrl-window{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:20px;overflow:hidden}
+    .cw-hdr{background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.06);padding:13px 18px;display:flex;align-items:center;gap:8px}
+    .cw-live{display:flex;align-items:center;gap:6px;font-size:12px;color:#22c55e;margin-left:auto}
+    .cw-live-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;animation:blink 2s infinite}
+    .cw-body{padding:18px}
+    .cw-msg{display:flex;gap:9px;margin-bottom:12px;align-items:flex-start}
+    .cw-av{width:27px;height:27px;border-radius:50%;flex-shrink:0;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;color:white}
+    .cw-bub{padding:9px 13px;border-radius:12px;font-size:12px;line-height:1.5;max-width:78%}
+    .cw-bub.visitor{background:rgba(255,255,255,.07);color:rgba(255,255,255,.8)}
+    .cw-bub.ai{background:rgba(99,102,241,.15);color:#a5b4fc;border:1px solid rgba(99,102,241,.2)}
+    .cw-bub.admin{background:#22c55e;color:white}
+    .cw-takeover{background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:100px;padding:5px 13px;font-size:11px;font-weight:600;color:#a5b4fc;text-align:center;margin:10px 0}
+    .cw-input-row{display:flex;gap:7px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.06)}
+    .cw-input-fake{flex:1;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 12px;font-size:12px;color:rgba(255,255,255,.3)}
+    .cw-send{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+
+    /* STEPS */
+    .steps-section{background:white}
+    .steps-header{text-align:center;max-width:620px;margin:0 auto 68px}
+    .steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;position:relative}
+    .steps-grid::before{content:'';position:absolute;top:27px;left:calc(33.33% + 14px);right:calc(33.33% + 14px);height:1px;background:linear-gradient(90deg,var(--border) 0%,var(--accent) 50%,var(--border) 100%)}
+    .step{padding:32px}
+    .step-num{width:54px;height:54px;border-radius:14px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:var(--text);margin-bottom:28px;background:white;position:relative}
+    .step-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+    .step h3{font-size:20px;font-weight:700;letter-spacing:-.4px;color:var(--text);margin-bottom:12px}
+    .step p{font-size:14px;color:var(--muted);line-height:1.65;margin-bottom:18px}
+    .step-proof{background:var(--light-bg);border-radius:10px;padding:13px;font-size:12px;color:var(--muted);line-height:1.5}
+    .step-proof strong{color:var(--text);font-weight:600}
+
+    /* STATS */
+    .stats-section{background:var(--light-bg);text-align:center}
+    .stats-header{max-width:520px;margin:0 auto 56px}
+    .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-radius:20px;overflow:hidden}
+    .stat-item{background:var(--light-bg);padding:40px 20px}
+    .stat-val{font-size:44px;font-weight:800;letter-spacing:-2px;color:var(--text);line-height:1}
+    .stat-val em{font-family:'Playfair Display',serif;font-style:italic;color:var(--accent)}
+    .stat-desc{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5}
+
+    /* CTA */
+    .cta-section{background:var(--dark);position:relative;overflow:hidden;text-align:center}
+    .cta-section::before{content:'';position:absolute;width:700px;height:700px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,.18) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%)}
+    .cta-inner{position:relative;z-index:2;max-width:640px;margin:0 auto}
+    .cta-section .section-title{color:white;margin-bottom:16px}
+    .cta-section .section-sub{color:rgba(255,255,255,.5);margin:0 auto 40px;max-width:460px}
+    .cta-form{display:flex;gap:10px;justify-content:center;max-width:440px;margin:0 auto 14px}
+    .cta-fine{font-size:12px;color:rgba(255,255,255,.28)}
+
+    /* FOOTER */
+    footer{background:var(--dark);border-top:1px solid rgba(255,255,255,.06);padding:60px 24px 36px}
+    .footer-inner{max-width:1200px;margin:0 auto}
+    .footer-top{display:grid;grid-template-columns:220px repeat(4,1fr);gap:36px;padding-bottom:44px;border-bottom:1px solid rgba(255,255,255,.06)}
+    .footer-brand p{font-size:13px;color:rgba(255,255,255,.3);margin-top:12px;line-height:1.6}
+    .footer-col h4{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.3);margin-bottom:14px}
+    .footer-col ul{list-style:none;display:flex;flex-direction:column;gap:9px}
+    .footer-col ul a{font-size:13px;color:rgba(255,255,255,.45);text-decoration:none;transition:color .15s}
+    .footer-col ul a:hover{color:white}
+    .footer-bottom{display:flex;align-items:center;justify-content:space-between;padding-top:28px;font-size:12px;color:rgba(255,255,255,.22)}
+    .footer-bottom a{color:rgba(255,255,255,.28);text-decoration:none}.footer-bottom a:hover{color:rgba(255,255,255,.6)}
+    .footer-links{display:flex;gap:20px}
+
+    /* ANIMATION */
+    .fade-up{opacity:0;transform:translateY(26px);transition:opacity .6s ease,transform .6s ease}
+    .fade-up.visible{opacity:1;transform:translateY(0)}
+
+    /* RESPONSIVE */
+    @media(max-width:1024px){.cards-grid{grid-template-columns:1fr 1fr}.showcase-layout{grid-template-columns:1fr}.ctrl-inner{grid-template-columns:1fr;gap:44px}.footer-top{grid-template-columns:1fr 1fr}}
+    @media(max-width:768px){section{padding:72px 20px}.nav-links{display:none}.hero-stats{gap:28px}.cards-grid{grid-template-columns:1fr}.hero-form{flex-direction:column}.steps-grid{grid-template-columns:1fr}.steps-grid::before{display:none}.stats-grid{grid-template-columns:1fr 1fr}.footer-top{grid-template-columns:1fr 1fr}.cta-form{flex-direction:column;align-items:stretch}}
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <div class="nav-logo-icon">CF</div>
+      CheckFunnel
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Product</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#features">Resources</a></li>
+    </ul>
+    <div class="nav-cta">
+      <a href="/portal" class="btn-ghost">Log in</a>
+      <a href="/portal" class="btn-primary">Sign up free</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-grid"></div>
+  <div class="hero-content container">
+    <div class="hero-eyebrow">
+      <span class="dot"></span>
+      AI-powered conversion engine
+    </div>
+    <h1 class="hero-headline">
+      Great conversations.<br>
+      <span class="italic-accent">Convert.</span> Every time.
+    </h1>
+    <p class="hero-sub">
+      Most chatbots answer questions and stop there. CheckFunnel tracks every visitor's intent in real time — and turns every chat into a qualified lead.
+    </p>
+    <form class="hero-form" onsubmit="return false;">
+      <input class="hero-input" type="email" placeholder="Your business email" />
+      <a href="/portal" class="btn-primary">Start converting free</a>
+    </form>
+    <p class="hero-fine">First 14 days free · No credit card required</p>
+    <div class="hero-stats">
+      <div>
+        <div class="hero-stat-val">3× more</div>
+        <div class="hero-stat-label">leads vs. passive chat</div>
+      </div>
+      <div>
+        <div class="hero-stat-val">Real-time</div>
+        <div class="hero-stat-label">intent heat scoring</div>
+      </div>
+      <div>
+        <div class="hero-stat-val">2 min</div>
+        <div class="hero-stat-label">to deploy on any site</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<div class="logos-bar">
+  <div class="logos-inner">
+    <span class="logos-label">Works with</span>
+    <span class="logo-pill">WordPress</span>
+    <span class="logo-pill">Shopify</span>
+    <span class="logo-pill">Webflow</span>
+    <span class="logo-pill">Squarespace</span>
+    <span class="logo-pill">Wix</span>
+    <span class="logo-pill">Any website</span>
+  </div>
+</div>
+
+<!-- FEATURE CARDS -->
+<section class="feat-intro" id="features">
+  <div class="container">
+    <div class="feat-intro-header fade-up">
+      <p class="section-eyebrow">Go beyond replies</p>
+      <h2 class="section-title">Aim <span class="italic-accent">beyond</span> conversation</h2>
+      <p class="section-sub">Smart teams convert up to 3× more visitors with CheckFunnel — turning every chat into a pipeline entry.</p>
+    </div>
+    <div class="cards-grid">
+
+      <!-- Card 1: Dark -->
+      <div class="card card-dark fade-up">
+        <div class="card-dark-bg"></div>
+        <div class="card-dark-glow"></div>
+        <div class="card-dark-content">
+          <div style="margin-bottom:60px">
+            <div class="mock-heat-row"><div class="m-av" style="background:#ef4444">AK</div><span class="m-name">alex@startup.io</span><div class="m-bw"><div class="m-b" style="width:91%;background:#ef4444"></div></div><span class="m-pct" style="color:#ef4444">91%</span></div>
+            <div class="mock-heat-row"><div class="m-av" style="background:#f59e0b">SM</div><span class="m-name">Visitor #b9d1a</span><div class="m-bw"><div class="m-b" style="width:65%;background:#f59e0b"></div></div><span class="m-pct" style="color:#f59e0b">65%</span></div>
+            <div class="mock-heat-row"><div class="m-av" style="background:#6366f1">RP</div><span class="m-name">Visitor #f2e03</span><div class="m-bw"><div class="m-b" style="width:34%;background:#6366f1"></div></div><span class="m-pct" style="color:#6366f1">34%</span></div>
+          </div>
+          <h3>Generate <em>leads</em></h3>
+          <p>Live heat scores show exactly which visitors are ready to buy — so you never miss a hot prospect.</p>
+          <a href="/portal" class="card-cta">See live dashboard →</a>
+        </div>
+      </div>
+
+      <!-- Card 2: Light -->
+      <div class="card card-light fade-up">
+        <div>
+          <div class="mock-chat">
+            <div class="mc-msg ai">Hi! I noticed you've been looking at our Pro plan. Want me to walk you through it?</div>
+            <div class="mc-msg user">Yes, what's included?</div>
+            <div class="mc-msg ai">Great question! Pro includes unlimited seats, advanced analytics, and priority support...</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <span class="badge badge-eng"><span class="badge-dot"></span>Evaluation mode</span>
+            <span class="badge badge-warm"><span class="badge-dot"></span>Intent rising</span>
+          </div>
+        </div>
+        <div>
+          <h3>Automate <span class="italic-accent">support</span></h3>
+          <p>Your AI handles routine questions while continuously scoring intent — escalating to a human the moment it matters.</p>
+        </div>
+      </div>
+
+      <!-- Card 3: Muted -->
+      <div class="card card-muted fade-up">
+        <div>
+          <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px">
+            <div style="font-size:11px;color:#9ca3af;margin-bottom:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Lead captured</div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <div style="width:32px;height:32px;border-radius:50%;background:#6366f1;color:white;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">AK</div>
+              <div>
+                <div style="font-size:13px;font-weight:600;color:#1a1a2e">alex@company.io</div>
+                <div style="font-size:11px;color:#9ca3af">Ready to buy · Heat 91%</div>
+              </div>
+            </div>
+            <span class="badge badge-hot"><span class="badge-dot"></span>Hot lead</span>
+          </div>
+          <div style="font-size:12px;color:#9ca3af;text-align:center">+12 leads captured today</div>
+        </div>
+        <div>
+          <h3>Increase <span class="italic-accent">sales</span></h3>
+          <p>FOMO triggers fire at the perfect moment — exit intent, pricing hesitation — turning browsers into buyers.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FEATURE SHOWCASE -->
+<section class="feat-showcase">
+  <div class="container">
+    <div class="showcase-header fade-up">
+      <p class="section-eyebrow">Everything in one platform</p>
+      <h2 class="section-title">Customer service AI that <span class="italic-accent">sells</span>, not just solves</h2>
+      <p class="section-sub" style="margin:0 auto">CheckFunnel partners with your team to lift the metrics that matter — going well beyond queue relief.</p>
+    </div>
+    <div class="showcase-layout fade-up">
+      <div class="tab-list">
+        <button class="tab-btn active" onclick="switchTab(this,'t-heat')"><span class="tab-bar"></span>Intent heat scoring</button>
+        <button class="tab-btn" onclick="switchTab(this,'t-lead')"><span class="tab-bar"></span>Lead capture</button>
+        <button class="tab-btn" onclick="switchTab(this,'t-inbox')"><span class="tab-bar"></span>Admin inbox</button>
+        <button class="tab-btn" onclick="switchTab(this,'t-fomo')"><span class="tab-bar"></span>FOMO triggers</button>
+        <button class="tab-btn" onclick="switchTab(this,'t-analytics')"><span class="tab-bar"></span>Analytics</button>
+      </div>
+
+      <div class="demo-win">
+        <div class="dw-header">
+          <div class="dw-dot" style="background:#ef4444"></div>
+          <div class="dw-dot" style="background:#f59e0b"></div>
+          <div class="dw-dot" style="background:#22c55e"></div>
+          <div class="dw-title">CheckFunnel Dashboard</div>
+        </div>
+        <div class="dw-body">
+
+          <div class="demo-panel active" id="t-heat">
+            <div style="font-size:11px;color:#475569;margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Live visitors — by heat</div>
+            <div class="hv-row">
+              <div class="hv-av" style="background:linear-gradient(135deg,#ef4444,#dc2626)">AK</div>
+              <div class="hv-info"><div class="hv-name">alex@startup.io</div><div class="hv-state">READY TO BUY · 8 msgs</div></div>
+              <div><div class="hv-score" style="color:#ef4444">91%</div><div class="hv-bw"><div class="hv-b" style="width:91%;background:#ef4444"></div></div></div>
+            </div>
+            <div class="hv-row">
+              <div class="hv-av" style="background:linear-gradient(135deg,#f59e0b,#d97706)">SM</div>
+              <div class="hv-info"><div class="hv-name">Visitor #b9d1a</div><div class="hv-state">EVALUATION · 5 msgs</div></div>
+              <div><div class="hv-score" style="color:#f59e0b">67%</div><div class="hv-bw"><div class="hv-b" style="width:67%;background:#f59e0b"></div></div></div>
+            </div>
+            <div class="hv-row">
+              <div class="hv-av" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">RP</div>
+              <div class="hv-info"><div class="hv-name">Visitor #f2e03</div><div class="hv-state">RESEARCH · 2 msgs</div></div>
+              <div><div class="hv-score" style="color:#6366f1">34%</div><div class="hv-bw"><div class="hv-b" style="width:34%;background:#6366f1"></div></div></div>
+            </div>
+            <div class="hv-row">
+              <div class="hv-av" style="background:linear-gradient(135deg,#64748b,#475569)">KM</div>
+              <div class="hv-info"><div class="hv-name">Visitor #c4a12</div><div class="hv-state">RESEARCH · 1 msg</div></div>
+              <div><div class="hv-score" style="color:#64748b">18%</div><div class="hv-bw"><div class="hv-b" style="width:18%;background:#64748b"></div></div></div>
+            </div>
+          </div>
+
+          <div class="demo-panel" id="t-lead">
+            <div style="font-size:11px;color:#475569;margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Lead capture — triggered at 70%+ heat</div>
+            <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px;margin-bottom:14px">
+              <div style="font-size:14px;font-weight:700;color:white;margin-bottom:5px">Before you go...</div>
+              <div style="font-size:12px;color:rgba(255,255,255,.45);margin-bottom:14px">Get our exclusive offer sent straight to your inbox</div>
+              <div style="background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:9px 12px;font-size:12px;color:rgba(255,255,255,.35);margin-bottom:8px">Your email address</div>
+              <div style="background:var(--accent);border-radius:8px;padding:9px 12px;font-size:12px;color:white;font-weight:600;text-align:center">Claim my offer →</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b"><span>Leads captured today</span><span style="color:#22c55e;font-weight:600">+14 leads</span></div>
+          </div>
+
+          <div class="demo-panel" id="t-inbox">
+            <div style="font-size:11px;color:#475569;margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Inbox — 4 active chats</div>
+            <div style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.2);border-radius:10px;padding:11px;margin-bottom:5px;display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#ef4444,#dc2626);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0">AK</div>
+              <div style="flex:1"><div style="font-size:13px;color:#e2e8f0;font-weight:500">alex@startup.io</div><div style="font-size:11px;color:#64748b;margin-top:2px">What's included in Pro?</div></div>
+              <div style="text-align:right"><div style="font-size:10px;color:#475569">now</div><div style="width:8px;height:8px;border-radius:50%;background:var(--accent);margin:4px 0 0 auto"></div></div>
+            </div>
+            <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:11px;margin-bottom:5px;display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0">SM</div>
+              <div style="flex:1"><div style="font-size:13px;color:#e2e8f0;font-weight:500">Visitor #b9d1a</div><div style="font-size:11px;color:#64748b;margin-top:2px">Do you offer a discount?</div></div>
+              <div style="font-size:10px;color:#475569">2m ago</div>
+            </div>
+            <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:11px;display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#4f46e5);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:white;flex-shrink:0">RP</div>
+              <div style="flex:1"><div style="font-size:13px;color:#e2e8f0;font-weight:500">Visitor #f2e03</div><div style="font-size:11px;color:#64748b;margin-top:2px">How does the AI work?</div></div>
+              <div style="font-size:10px;color:#475569">8m ago</div>
+            </div>
+          </div>
+
+          <div class="demo-panel" id="t-fomo">
+            <div style="font-size:11px;color:#475569;margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">FOMO trigger — exit intent detected</div>
+            <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.18);border-radius:12px;padding:14px;margin-bottom:14px">
+              <div style="font-size:11px;color:#ef4444;font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">⚡ Exit intent detected</div>
+              <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.6">Wait! Use code <strong style="color:#f59e0b">SAVE20</strong> for an exclusive discount. This offer expires in <strong style="color:#ef4444">10 minutes</strong>!</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:white">47%</div><div style="font-size:11px;color:#64748b;margin-top:3px">Trigger conversion</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:800;color:#f59e0b">$2.4k</div><div style="font-size:11px;color:#64748b;margin-top:3px">Recovered this week</div></div>
+            </div>
+          </div>
+
+          <div class="demo-panel" id="t-analytics">
+            <div style="font-size:11px;color:#475569;margin-bottom:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">30-day overview</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px"><div style="font-size:22px;font-weight:800;color:white">142</div><div style="font-size:11px;color:#64748b;margin-top:3px">Total chats</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px"><div style="font-size:22px;font-weight:800;color:#22c55e">38</div><div style="font-size:11px;color:#64748b;margin-top:3px">Leads captured</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px"><div style="font-size:22px;font-weight:800;color:#f59e0b">62%</div><div style="font-size:11px;color:#64748b;margin-top:3px">Avg heat score</div></div>
+              <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:14px"><div style="font-size:22px;font-weight:800;color:#ef4444">12</div><div style="font-size:11px;color:#64748b;margin-top:3px">Hot leads</div></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="showcase-desc" id="sdesc">
+        <h3 id="sd-title">Real-time intent heat scoring</h3>
+        <p id="sd-desc">Every visitor gets a live heat score based on their intent, budget signals, and urgency — updated with every message. Know exactly who's ready to buy before they leave.</p>
+        <ul class="feat-list" id="sd-feats">
+          <li>3-signal EMA scoring: intent, budget, urgency</li>
+          <li>Colour-coded live dashboard</li>
+          <li>Automatic state detection (Research → Ready to Buy)</li>
+          <li>Heat-triggered lead capture forms</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHANNELS -->
+<section class="channels">
+  <div class="container">
+    <div class="channels-header fade-up">
+      <p class="section-eyebrow">Works everywhere</p>
+      <h2 class="section-title">From chat to <span class="italic-accent">every</span> platform.</h2>
+      <p class="section-sub" style="margin:0 auto">Paste one script tag. CheckFunnel goes live instantly. No developer needed.</p>
+    </div>
+    <div class="ch-pills fade-up">
+      <a class="ch-pill active" href="#">🌐 Website</a>
+      <a class="ch-pill" href="#">📝 WordPress</a>
+      <a class="ch-pill" href="#">🛍 Shopify</a>
+      <a class="ch-pill" href="#">🎨 Webflow</a>
+      <a class="ch-pill" href="#">⬛ Squarespace</a>
+    </div>
+  </div>
+</section>
+
+<!-- CONTROL -->
+<section class="control-section">
+  <div class="container">
+    <div class="ctrl-inner">
+      <div class="ctrl-text fade-up">
+        <p class="section-eyebrow">AI you control. Completely.</p>
+        <h2 class="section-title">Supervise your AI. Step in <span class="italic-accent">anytime</span>.</h2>
+        <p class="section-sub">Watch the AI qualify prospects — and when a hot lead needs a human touch, take over in one click. No lag, no friction, no dropped context.</p>
+        <div class="ctrl-feats">
+          <div class="cf-item">
+            <div class="cf-icon">👁</div>
+            <div class="cf-text"><h4>Live View</h4><p>See every active visitor and conversation in real time from your admin dashboard.</p></div>
+          </div>
+          <div class="cf-item">
+            <div class="cf-icon">⚡</div>
+            <div class="cf-text"><h4>Instant takeover</h4><p>Take over any AI conversation with one click. The visitor experience is seamless.</p></div>
+          </div>
+          <div class="cf-item">
+            <div class="cf-icon">🔔</div>
+            <div class="cf-text"><h4>Hot lead alerts</h4><p>Get notified the moment a visitor crosses your heat threshold — never miss a sale.</p></div>
+          </div>
+        </div>
+      </div>
+      <div class="fade-up">
+        <div class="ctrl-window">
+          <div class="cw-hdr">
+            <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,.7)">alex@startup.io</div>
+            <div style="font-size:11px;color:#ef4444;margin-left:8px;background:rgba(239,68,68,.1);padding:3px 9px;border-radius:100px">Heat 91%</div>
+            <div class="cw-live"><div class="cw-live-dot"></div>Live</div>
+          </div>
+          <div class="cw-body">
+            <div class="cw-msg">
+              <div class="cw-av" style="background:#475569">A</div>
+              <div class="cw-bub visitor">What's the difference between Pro and Enterprise?</div>
+            </div>
+            <div class="cw-msg">
+              <div class="cw-av" style="background:var(--accent)">AI</div>
+              <div class="cw-bub ai">Great question! Pro is perfect for growing teams — unlimited seats and advanced analytics. Enterprise adds custom integrations and a dedicated success manager...</div>
+            </div>
+            <div class="cw-msg">
+              <div class="cw-av" style="background:#475569">A</div>
+              <div class="cw-bub visitor">How much is Enterprise per month?</div>
+            </div>
+            <div class="cw-takeover">⚡ Admin takeover active — you're now chatting directly</div>
+            <div class="cw-msg">
+              <div class="cw-av" style="background:#22c55e">You</div>
+              <div class="cw-bub admin">Hi Alex! Let me put together a custom Enterprise quote for you. Can I grab 15 minutes this week?</div>
+            </div>
+            <div class="cw-input-row">
+              <div class="cw-input-fake">Type a message...</div>
+              <div class="cw-send"><svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="steps-section" id="how">
+  <div class="container">
+    <div class="steps-header fade-up">
+      <p class="section-eyebrow">Get started in minutes</p>
+      <h2 class="section-title">Deploy <span class="italic-accent">fast</span> and with confidence</h2>
+      <p class="section-sub" style="margin:0 auto;text-align:center">CheckFunnel learns from your website automatically. You'll see results from the very first conversation.</p>
+    </div>
+    <div class="steps-grid fade-up">
+      <div class="step">
+        <div class="step-num">1</div>
+        <p class="step-label">Step 1</p>
+        <h3>Create your AI agent</h3>
+        <p>Add your website URL and CheckFunnel automatically crawls and ingests your content — product pages, FAQs, pricing, everything. Your AI is trained and ready in minutes.</p>
+        <div class="step-proof"><strong>Takes 2 minutes.</strong> No code, no uploads, no manual training required.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <p class="step-label">Step 2</p>
+        <h3>Deploy and watch results</h3>
+        <p>Copy one script tag into your site. CheckFunnel goes live instantly — tracking intent, answering questions, and capturing leads around the clock.</p>
+        <div class="step-proof"><strong>Works on any site.</strong> WordPress, Shopify, Webflow, or custom HTML — one tag does it all.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <p class="step-label">Step 3</p>
+        <h3>Scale what converts</h3>
+        <p>Use the admin dashboard to see which conversations, triggers, and heat thresholds drive the most leads — then tune your setup for maximum revenue.</p>
+        <div class="step-proof"><strong>Full analytics.</strong> Heat scores, funnel stages, lead capture rates, FOMO performance — all in one place.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<section class="stats-section">
+  <div class="container">
+    <div class="stats-header fade-up">
+      <p class="section-eyebrow">Impact over busywork</p>
+      <h2 class="section-title">Numbers that <span class="italic-accent">matter</span></h2>
+    </div>
+    <div class="stats-grid fade-up">
+      <div class="stat-item">
+        <div class="stat-val">3<em>×</em></div>
+        <div class="stat-desc">more leads vs. passive chat widgets</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val">2<em>min</em></div>
+        <div class="stat-desc">average time from install to first live conversation</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val">91<em>%</em></div>
+        <div class="stat-desc">of routine questions handled by AI with no human needed</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-val">47<em>%</em></div>
+        <div class="stat-desc">FOMO trigger conversion rate on exit-intent visitors</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="container">
+    <div class="cta-inner fade-up">
+      <p class="section-eyebrow" style="color:#a5b4fc">Start today</p>
+      <h2 class="section-title">Your website is ready to <span class="italic-accent">sell</span>.</h2>
+      <p class="section-sub">Join hundreds of businesses using CheckFunnel to turn every visitor into a qualified lead — automatically.</p>
+      <form class="cta-form" onsubmit="return false;">
+        <input class="hero-input" type="email" placeholder="Your business email" />
+        <a href="/portal" class="btn-primary" style="padding:14px 22px;font-size:15px;border-radius:11px;white-space:nowrap">Start free trial</a>
+      </form>
+      <p class="cta-fine">14 days free · No credit card · Cancel anytime</p>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a href="/" class="nav-logo" style="color:white;text-decoration:none"><div class="nav-logo-icon">CF</div>CheckFunnel</a>
+        <p>AI chat that tracks intent, captures leads, and converts visitors — automatically.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="#">Heat scoring</a></li>
+          <li><a href="#">Lead capture</a></li>
+          <li><a href="#">Admin inbox</a></li>
+          <li><a href="#">FOMO triggers</a></li>
+          <li><a href="#">Analytics</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Platform</h4>
+        <ul>
+          <li><a href="#">WordPress</a></li>
+          <li><a href="#">Shopify</a></li>
+          <li><a href="#">Webflow</a></li>
+          <li><a href="#">Any website</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#">About</a></li>
+          <li><a href="#">Pricing</a></li>
+          <li><a href="#">Contact</a></li>
+          <li><a href="/portal">Log in</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="#">Privacy policy</a></li>
+          <li><a href="#">Terms of service</a></li>
+          <li><a href="#">Cookie policy</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 CheckFunnel. All rights reserved.</span>
+      <div class="footer-links">
+        <a href="#">Twitter / X</a>
+        <a href="#">LinkedIn</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+const tabData = {
+  't-heat':     { title:'Real-time intent heat scoring',     desc:'Every visitor gets a live heat score based on intent, budget signals, and urgency — updated with every message. Know exactly who\'s ready to buy before they leave.',           feats:['3-signal EMA scoring: intent, budget, urgency','Colour-coded live visitor dashboard','Automatic state detection (Research → Ready to Buy)','Heat-triggered lead capture forms'] },
+  't-lead':     { title:'Intelligent lead capture',           desc:'When a visitor\'s heat score crosses your threshold, CheckFunnel surfaces a lead capture form at the exact moment they\'re most likely to convert.',                             feats:['Triggered by heat score threshold','Email + phone capture','Syncs to your inbox instantly','GDPR-friendly consent flow'] },
+  't-inbox':    { title:'Unified admin inbox',                desc:'All active conversations in one place, sorted by heat score. See who\'s hot, take over any chat with one click, and message visitors directly.',                                  feats:['Live conversation monitoring','One-click admin takeover','Send messages as yourself','Full chat history and context'] },
+  't-fomo':     { title:'FOMO conversion triggers',           desc:'Exit intent detected? Pricing hesitation? CheckFunnel fires perfectly-timed FOMO messages — with discount codes, countdown timers, and personalised offers.',                    feats:['Exit-intent detection','Pricing hesitation trigger','Custom discount codes','Countdown timer urgency'] },
+  't-analytics':{ title:'Revenue analytics',                  desc:'Track every metric that matters — total chats, leads captured, heat distribution, funnel stages, and FOMO trigger performance. See what converts and optimise.',                 feats:['Lead funnel breakdown','Avg heat score tracking','Daily trend charts','Conversation state analysis'] },
+};
+
+function switchTab(btn, id) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.demo-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const d = tabData[id];
+  document.getElementById('sd-title').textContent = d.title;
+  document.getElementById('sd-desc').textContent = d.desc;
+  document.getElementById('sd-feats').innerHTML = d.feats.map(f => '<li>' + f + '</li>').join('');
+}
+
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); obs.unobserve(e.target); } });
+}, { threshold: 0.1, rootMargin:'0px 0px -40px 0px' });
+document.querySelectorAll('.fade-up').forEach(el => obs.observe(el));
+
+// Stagger cards + steps
+document.querySelectorAll('.cards-grid, .steps-grid, .stats-grid').forEach(g => {
+  [...g.children].forEach((c, i) => { c.style.transitionDelay = (i * 80) + 'ms'; });
+});
+</script>
+
+</body>
+</html>
