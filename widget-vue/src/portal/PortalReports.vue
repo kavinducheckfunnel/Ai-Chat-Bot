@@ -39,7 +39,7 @@
         <div class="stat-icon conv-icon">
           <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><polyline points="20 12 20 22 4 22 4 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="7" width="20" height="5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 22V7M12 7H7.5a2.5 2.5 0 010-5C11 2 12 7 12 7zM12 7h4.5a2.5 2.5 0 000-5C13 2 12 7 12 7z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </div>
-        <div class="stat-value">{{ analytics.hot_leads || 0 }}</div>
+        <div class="stat-value">{{ analytics.hot_sessions || 0 }}</div>
         <div class="stat-label">Hot leads</div>
       </div>
     </div>
@@ -76,10 +76,10 @@
       <div class="card states-card">
         <h3 class="card-title">Conversation states</h3>
         <div class="states-list" v-if="!loading">
-          <div class="state-row" v-for="s in conversationStates" :key="s.key">
+          <div class="state-row" v-for="s in conversationStates" :key="s.label">
             <span class="state-dot" :style="{ background: s.color }"></span>
             <span class="state-name">{{ s.label }}</span>
-            <span class="state-val">{{ analytics[s.key] || 0 }}</span>
+            <span class="state-val">{{ s.count }}</span>
           </div>
         </div>
         <div v-else class="states-skeleton">
@@ -107,8 +107,8 @@
             <td><span class="mini-badge" :class="kanbanClass(s.kanban_state)">{{ s.kanban_state }}</span></td>
             <td>
               <div class="mini-heat">
-                <div class="mini-track"><div class="mini-fill" :style="{ width: (s.heat_score * 100) + '%', background: heatColor(s.heat_score) }"></div></div>
-                <span>{{ Math.round((s.heat_score || 0) * 100) }}%</span>
+                <div class="mini-track"><div class="mini-fill" :style="{ width: (s.heat_score || 0) + '%', background: heatColor(s.heat_score) }"></div></div>
+                <span>{{ Math.round(s.heat_score || 0) }}%</span>
               </div>
             </td>
             <td>{{ s.message_count || 0 }}</td>
@@ -142,26 +142,32 @@ const periods = [
   { val: '90d', label: '90 days' },
 ]
 
-const avgHeat = computed(() => Math.round((analytics.value.avg_heat_score || 0) * 100))
+const avgHeat = computed(() => Math.round(analytics.value.avg_heat_score || 0))
 
 const funnel = computed(() => {
-  const a = analytics.value
-  const max = Math.max(a.new_count || 0, a.engaged_count || 0, a.hot_count || 0, a.converted_count || 0, 1)
+  const kb = analytics.value.kanban_breakdown || {}
+  const newCount = kb.NEW || 0
+  const engagedCount = kb.ENGAGED || 0
+  const hotCount = kb.HOT_LEAD || 0
+  const convertedCount = kb.CONVERTED || 0
   return [
-    { key: 'new_count',       label: 'New',       count: a.new_count || 0,       color: '#64748b', max },
-    { key: 'engaged_count',   label: 'Engaged',   count: a.engaged_count || 0,   color: '#6366f1', max },
-    { key: 'hot_count',       label: 'Hot lead',  count: a.hot_count || 0,       color: '#f59e0b', max },
-    { key: 'converted_count', label: 'Converted', count: a.converted_count || 0, color: '#22c55e', max },
+    { key: 'new',       label: 'New',       count: newCount,       color: '#64748b' },
+    { key: 'engaged',   label: 'Engaged',   count: engagedCount,   color: '#6366f1' },
+    { key: 'hot',       label: 'Hot lead',  count: hotCount,       color: '#f59e0b' },
+    { key: 'converted', label: 'Converted', count: convertedCount, color: '#22c55e' },
   ]
 })
 
-const conversationStates = [
-  { key: 'research_count',    label: 'Research',     color: '#64748b' },
-  { key: 'evaluation_count',  label: 'Evaluation',   color: '#6366f1' },
-  { key: 'objection_count',   label: 'Objection',    color: '#f59e0b' },
-  { key: 'recovery_count',    label: 'Recovery',     color: '#ef4444' },
-  { key: 'ready_count',       label: 'Ready to buy', color: '#22c55e' },
-]
+const conversationStates = computed(() => {
+  const f = analytics.value.funnel || {}
+  return [
+    { label: 'Research',     count: f.RESEARCH    || 0, color: '#64748b' },
+    { label: 'Evaluation',   count: f.EVALUATION  || 0, color: '#6366f1' },
+    { label: 'Objection',    count: f.OBJECTION   || 0, color: '#f59e0b' },
+    { label: 'Recovery',     count: f.RECOVERY    || 0, color: '#ef4444' },
+    { label: 'Ready to buy', count: f.READY_TO_BUY || 0, color: '#22c55e' },
+  ]
+})
 
 function stageWidth(count) {
   const max = Math.max(...funnel.value.map(s => s.count), 1)
@@ -170,8 +176,8 @@ function stageWidth(count) {
 
 function heatColor(score) {
   if (!score) return '#1e293b'
-  if (score > 0.7) return '#ef4444'
-  if (score > 0.4) return '#f59e0b'
+  if (score > 70) return '#ef4444'
+  if (score > 40) return '#f59e0b'
   return '#6366f1'
 }
 

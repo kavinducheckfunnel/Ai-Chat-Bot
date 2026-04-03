@@ -72,7 +72,7 @@
             <div class="session-preview">{{ lastMessage(s) }}</div>
             <div class="session-tags">
               <span class="tag" :class="kanbanClass(s.kanban_state)">{{ s.kanban_state }}</span>
-              <span class="heat-bar" :style="{ background: heatColor(s.heat_score), width: (s.heat_score * 60 + 20) + 'px' }"></span>
+              <span class="heat-bar" :style="{ background: heatColor(s.heat_score), width: (s.heat_score / 100 * 60 + 20) + 'px' }"></span>
             </div>
           </div>
         </button>
@@ -85,7 +85,7 @@
             <div class="chat-avatar" :style="{ background: heatColor(selected.heat_score) }">{{ initials(selected) }}</div>
             <div>
               <p class="chat-name">{{ selected.lead_email || 'Visitor #' + selected.session_id.slice(0,6) }}</p>
-              <p class="chat-sub">{{ selected.conversation_state }} · Heat {{ Math.round((selected.heat_score || 0) * 100) }}%</p>
+              <p class="chat-sub">{{ selected.conversation_state }} · Heat {{ Math.round(selected.heat_score || 0) }}%</p>
             </div>
           </div>
           <span class="kanban-badge" :class="kanbanClass(selected.kanban_state)">{{ selected.kanban_state }}</span>
@@ -180,7 +180,7 @@ const hotCount = computed(() => sessions.value.filter(s => s.kanban_state === 'H
 
 const filteredSessions = computed(() => {
   if (activeTab.value === 'ai') return sessions.value.filter(s => !s.takeover_active)
-  if (activeTab.value === 'hot') return sessions.value.filter(s => s.kanban_state === 'HOT_LEAD' || s.heat_score > 0.65)
+  if (activeTab.value === 'hot') return sessions.value.filter(s => s.kanban_state === 'HOT_LEAD' || s.heat_score > 65)
   return sessions.value
 })
 
@@ -225,8 +225,8 @@ function initials(s) {
 
 function heatColor(score) {
   if (!score) return '#1e293b'
-  if (score > 0.7) return '#ef4444'
-  if (score > 0.4) return '#f59e0b'
+  if (score > 70) return '#ef4444'
+  if (score > 40) return '#f59e0b'
   return '#6366f1'
 }
 
