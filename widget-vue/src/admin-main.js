@@ -2,6 +2,7 @@ import { createApp, defineComponent, h } from 'vue'
 import { createRouter, createWebHistory, RouterView } from 'vue-router'
 
 import LoginView from './admin/LoginView.vue'
+import SignupView from './admin/SignupView.vue'
 import AdminLayout from './admin/AdminLayout.vue'
 import LiveDashboard from './admin/LiveDashboard.vue'
 import ClientList from './admin/ClientList.vue'
@@ -29,9 +30,10 @@ function isTenantAdmin(user) {
 }
 
 const routes = [
-  // ── Shared login ─────────────────────────────────────────────────────────
+  // ── Shared auth ──────────────────────────────────────────────────────────
   { path: '/admin/login', component: LoginView, meta: { public: true } },
   { path: '/portal/login', redirect: '/admin/login' },
+  { path: '/signup', component: SignupView, meta: { public: true } },
 
   // ── Superadmin / staff admin SPA ─────────────────────────────────────────
   {
@@ -78,8 +80,14 @@ const router = createRouter({
 router.beforeEach((to) => {
   const token = localStorage.getItem('cf_access_token')
 
-  // Public routes always pass
-  if (to.meta.public) return true
+  // Public routes: redirect logged-in users to their dashboard
+  if (to.meta.public) {
+    if (token && (to.path === '/signup' || to.path === '/admin/login')) {
+      const user = getUser()
+      return isTenantAdmin(user) ? '/portal/inbox' : '/admin'
+    }
+    return true
+  }
 
   // No token → login
   if (!token) return '/admin/login'

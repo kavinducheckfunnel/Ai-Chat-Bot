@@ -39,6 +39,20 @@ async function apiFetch(path, opts = {}) {
 export function useAdminApi() {
   return {
     // ── Auth ────────────────────────────────────────────────────────────
+    async register(company_name, email, password, confirm_password) {
+      const res = await fetch(`${API_BASE}/api/admin/auth/register/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_name, email, password, confirm_password }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Registration failed')
+      localStorage.setItem('cf_access_token', data.access)
+      localStorage.setItem('cf_refresh_token', data.refresh)
+      localStorage.setItem('cf_user', JSON.stringify(data.user))
+      return data
+    },
+
     async login(username, password) {
       const res = await fetch(`${API_BASE}/api/admin/auth/login/`, {
         method: 'POST',

@@ -27,6 +27,51 @@ from chat.models import ChatSession
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+def register_view(request):
+    """
+    Public self-registration for tenant accounts created from the landing page.
+    Creates User + UserProfile(tenant_admin) + TenantProfile.
+    Returns JWT tokens on success.
+    """
+    company_name = request.data.get('company_name', '').strip()
+    email = request.data.get('email', '').strip().lower()
+    password = request.data.get('password', '')
+    confirm_password = request.data.get('confirm_password', '')
+
+    if not company_name:
+        return Response({'detail': 'Company name is required.'}, status=400)
+    if not email:
+        return Response({'detail': 'Email is required.'}, status=400)
+    if not password:
+        return Response({'detail': 'Password is required.'}, status=400)
+    if len(password) < 8:
+        return Response({'detail': 'Password must be at least 8 characters.'}, status=400)
+    if password != confirm_password:
+        return Response({'detail': 'Passwords do not match.'}, status=400)
+    if User.objects.filter(username=email).exists():
+        return Response({'detail': 'An account with this email already exists.'}, status=400)
+    if User.objects.filter(email=email).exists():
+        return Response({'detail': 'An account with this email already exists.'}, status=400)
+
+    user = User.objects.create_user(username=email, email=email, password=password)
+    UserProfile.objects.create(user=user, role='tenant_admin')
+    TenantProfile.objects.create(user=user, company_name=company_name)
+
+    refresh = RefreshToken.for_user(user)
+    return Response({
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+        'user': {
+            'username': user.username,
+            'email': user.email,
+            'role': 'tenant_admin',
+            'is_superuser': False,
+        }
+    }, status=201)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def login_view(request):
     username = request.data.get('username', '').strip()
     password = request.data.get('password', '').strip()

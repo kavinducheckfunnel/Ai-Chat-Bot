@@ -22,7 +22,7 @@
       </div>
 
       <h1 class="login-title">Welcome back</h1>
-      <p class="login-sub">Sign in to your admin dashboard</p>
+      <p class="login-sub">Sign in to your CheckFunnel account</p>
 
       <form @submit.prevent="handleLogin" class="login-form">
         <div class="field">
@@ -64,7 +64,8 @@
         </button>
       </form>
 
-      <p class="footer-note">Checkfunnel Admin &copy; 2026</p>
+      <p class="signup-prompt">Don't have an account? <router-link to="/signup">Sign up free →</router-link></p>
+      <p class="footer-note">CheckFunnel &copy; 2026</p>
     </div>
   </div>
 </template>
@@ -281,8 +282,22 @@ async function handleLogin() {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.signup-prompt {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #475569;
+}
+
+.signup-prompt a {
+  color: #818cf8;
+  text-decoration: none;
+  font-weight: 500;
+}
+.signup-prompt a:hover { text-decoration: underline; }
+
 .footer-note {
-  margin-top: 24px;
+  margin-top: 12px;
   text-align: center;
   font-size: 12px;
   color: #334155;
