@@ -183,7 +183,7 @@ marked.use({
 const renderMarkdown = (text) => marked.parse(text || '')
 
 // ── Tracker ───────────────────────────────────────────────────────────────────
-const { sessionId, behaviorMatrix, setNudgeCallback } = useTracker()
+const { sessionId, behaviorMatrix, visitorMeta, pageVisits, setNudgeCallback } = useTracker()
 
 // ── State ─────────────────────────────────────────────────────────────────────
 const clientId    = window.__CF_CLIENT_ID__ || null
@@ -230,6 +230,12 @@ function connectWebSocket() {
   socket = new WebSocket(`${getWsBase()}/ws/chat/${globalClientId}/${sessionId}/`)
   socket.onopen = () => {
     reconnectAttempts = 0
+    // Send visitor fingerprint on first connection so the backend can persist it
+    socket.send(JSON.stringify({
+      type: 'visitor_meta',
+      ...visitorMeta.value,
+      page_visits: pageVisits.value,
+    }))
     while (pendingMessages.length > 0) socket.send(JSON.stringify(pendingMessages.shift()))
   }
   socket.onmessage = (event) => {
@@ -321,7 +327,7 @@ function sendMessage() {
   userMessageCount.value++
   showTypingIndicator()
 
-  const payload = { message: messageText, behavior_matrix: behaviorMatrix }
+  const payload = { message: messageText, behavior_matrix: behaviorMatrix, page_visits: pageVisits.value }
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(payload))
   } else {

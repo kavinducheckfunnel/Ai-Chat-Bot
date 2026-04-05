@@ -38,7 +38,7 @@
     </div>
 
     <div class="inbox-layout">
-      <!-- Session list -->
+      <!-- ── Session list ─────────────────────────────────────────────── -->
       <div class="session-list">
         <div v-if="loading" class="loading-state">
           <div class="skeleton-session" v-for="n in 4" :key="n">
@@ -78,7 +78,7 @@
         </button>
       </div>
 
-      <!-- Chat detail panel -->
+      <!-- ── Chat panel ──────────────────────────────────────────────── -->
       <div class="chat-panel" v-if="selected">
         <div class="chat-panel-header">
           <div class="chat-user-info">
@@ -101,23 +101,163 @@
             <div class="bubble">{{ msg.content }}</div>
           </div>
         </div>
-
-        <!-- Lead info footer -->
-        <div class="lead-footer" v-if="selected.lead_email || selected.lead_phone">
-          <div class="lead-field" v-if="selected.lead_email">
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="#6366f1" stroke-width="2"/><polyline points="22,6 12,13 2,6" stroke="#6366f1" stroke-width="2" stroke-linecap="round"/></svg>
-            {{ selected.lead_email }}
-          </div>
-          <div class="lead-field" v-if="selected.lead_phone">
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.17 11.6a19.79 19.79 0 01-3.07-8.7A2 2 0 013.09 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            {{ selected.lead_phone }}
-          </div>
-        </div>
       </div>
 
       <div class="chat-panel empty-panel" v-else>
         <svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/></svg>
         <p>Select a conversation</p>
+      </div>
+
+      <!-- ── Visitor details panel ───────────────────────────────────── -->
+      <div class="visitor-panel" v-if="selected">
+
+        <!-- Customer -->
+        <div class="vp-section customer-section">
+          <div class="vp-customer-header">
+            <div class="vp-avatar" :style="{ background: heatColor(selected.heat_score) }">
+              {{ initials(selected) }}
+            </div>
+            <div class="vp-customer-info">
+              <p class="vp-customer-name">{{ selected.lead_email ? selected.lead_email.split('@')[0] : 'Visitor' }}</p>
+              <span class="status-chip">
+                <span class="status-dot-green"></span>
+                Chatting
+              </span>
+            </div>
+          </div>
+
+          <!-- Quick stats -->
+          <div class="vp-stats-row">
+            <div class="vp-stat">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              {{ selected.message_count || 0 }}
+            </div>
+            <div class="vp-stat">
+              <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M9 12h6M9 16h6M17 21H7a2 2 0 01-2-2V5a2 2 0 012-2h5l5 5v11a2 2 0 01-2 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              0
+            </div>
+            <div class="first-visit-badge">First visit</div>
+          </div>
+        </div>
+
+        <!-- Chat info -->
+        <div class="vp-section">
+          <div class="vp-section-title">Chat info</div>
+          <div class="vp-rows">
+            <div class="vp-row">
+              <span class="vp-label">Assignee</span>
+              <span class="vp-value">
+                <span class="assignee-dot">A</span> You
+              </span>
+            </div>
+            <div class="vp-row">
+              <span class="vp-label">Chat ID</span>
+              <span class="vp-value mono">{{ selected.session_id.slice(0,10).toUpperCase() }}</span>
+            </div>
+            <div class="vp-row">
+              <span class="vp-label">Duration</span>
+              <span class="vp-value">{{ chatDuration }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visitor info -->
+        <div class="vp-section">
+          <div class="vp-section-title">Visitor info</div>
+          <div class="vp-rows">
+            <div class="vp-row" v-if="selected.lead_email">
+              <span class="vp-label">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2"/><polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </span>
+              <span class="vp-value truncate">{{ selected.lead_email }}</span>
+            </div>
+            <div class="vp-row" v-if="selected.visitor_city || selected.visitor_country">
+              <span class="vp-label">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2"/></svg>
+              </span>
+              <span class="vp-value">
+                {{ [selected.visitor_city, selected.visitor_country].filter(Boolean).join(', ') }}
+                {{ countryFlag(selected.visitor_country_code) }}
+              </span>
+            </div>
+            <div class="vp-row" v-if="selected.visitor_timezone">
+              <span class="vp-label">
+                <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              </span>
+              <span class="vp-value">{{ visitorLocalTime }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat tags -->
+        <div class="vp-section" v-if="selected.kanban_state">
+          <div class="vp-section-title">Chat tags</div>
+          <div class="vp-tags-row">
+            <span class="vp-tag" :class="kanbanClass(selected.kanban_state)">{{ selected.kanban_state.replace('_', ' ').toLowerCase() }}</span>
+            <span class="vp-tag vp-tag-state">{{ selected.conversation_state.replace('_', ' ').toLowerCase() }}</span>
+          </div>
+        </div>
+
+        <!-- Visited pages -->
+        <div class="vp-section" v-if="selected.page_visits && selected.page_visits.length">
+          <div class="vp-section-title">Visited pages <span class="vp-count">{{ selected.page_visits.length }}</span></div>
+          <div class="vp-pages">
+            <div class="vp-page-row" v-for="(pv, i) in selected.page_visits.slice().reverse()" :key="i">
+              <span class="page-dot" :class="i === 0 ? 'page-dot-active' : ''"></span>
+              <div class="page-info">
+                <span class="page-title-text">{{ pv.title || pv.url }}</span>
+                <span class="page-duration">{{ formatDuration(pv.duration_seconds) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visit info -->
+        <div class="vp-section">
+          <div class="vp-section-title">Visit info</div>
+          <div class="vp-rows">
+            <div class="vp-row" v-if="selected.visitor_device">
+              <span class="vp-label">Device</span>
+              <span class="vp-value device-row">
+                <span class="device-icon">
+                  <!-- Desktop -->
+                  <svg v-if="selected.visitor_device === 'desktop'" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  <!-- Mobile -->
+                  <svg v-else-if="selected.visitor_device === 'mobile'" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg>
+                  <!-- Tablet -->
+                  <svg v-else width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg>
+                </span>
+                <span>{{ selected.visitor_device }}</span>
+                <span v-if="selected.visitor_os" class="os-badge">{{ selected.visitor_os }}</span>
+              </span>
+            </div>
+            <div class="vp-row" v-if="selected.visitor_browser">
+              <span class="vp-label">Browser</span>
+              <span class="vp-value">{{ selected.visitor_browser }}</span>
+            </div>
+            <div class="vp-row" v-if="selected.visitor_referrer">
+              <span class="vp-label">Referrer</span>
+              <span class="vp-value truncate">{{ referrerHost(selected.visitor_referrer) }}</span>
+            </div>
+            <div class="vp-row" v-if="selected.visitor_ip">
+              <span class="vp-label">IP</span>
+              <span class="vp-value mono">{{ selected.visitor_ip }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty state for new sessions with no data yet -->
+        <div class="vp-no-data" v-if="!selected.visitor_country && !selected.visitor_ip && !selected.page_visits?.length">
+          <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#334155" stroke-width="1.5"/><path d="M12 8v4M12 16h.01" stroke="#334155" stroke-width="2" stroke-linecap="round"/></svg>
+          <p>Visitor data will appear<br>after the next chat message.</p>
+        </div>
+
+      </div>
+
+      <!-- No session selected -->
+      <div class="visitor-panel visitor-panel-empty" v-else>
+        <svg width="28" height="28" fill="none" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/></svg>
+        <p>Visitor details</p>
       </div>
     </div>
   </div>
@@ -137,6 +277,44 @@ const selectedId = ref(null)
 const messagesEl = ref(null)
 let ws = null
 
+// ── Duration timer ────────────────────────────────────────────────────────────
+const chatDuration = ref('0m 0s')
+const visitorLocalTime = ref('')
+let durationTimer = null
+
+function updateDuration() {
+  if (!selected.value?.created_at) { chatDuration.value = '—'; return }
+  const elapsed = Math.floor((Date.now() - new Date(selected.value.created_at).getTime()) / 1000)
+  const m = Math.floor(elapsed / 60)
+  const s = elapsed % 60
+  chatDuration.value = `${m}m ${s}s`
+}
+
+function updateVisitorClock() {
+  const tz = selected.value?.visitor_timezone
+  if (!tz) { visitorLocalTime.value = ''; return }
+  try {
+    const now = new Date()
+    const fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour: 'numeric',
+      minute: '2-digit',
+      weekday: 'short',
+    })
+    visitorLocalTime.value = fmt.format(now)
+  } catch { visitorLocalTime.value = '' }
+}
+
+function startTimers() {
+  clearInterval(durationTimer)
+  updateDuration()
+  updateVisitorClock()
+  durationTimer = setInterval(() => {
+    updateDuration()
+    updateVisitorClock()
+  }, 1000)
+}
+
 // ── Notification sound ────────────────────────────────────────────────────────
 const muted = ref(localStorage.getItem('cf_inbox_muted') === '1')
 
@@ -150,7 +328,6 @@ function playNotificationSound() {
   try {
     const AudioCtx = window.AudioContext || window['webkitAudioContext']
     const ctx = new AudioCtx()
-    // Two-tone "new visitor" chime
     const tones = [880, 1100]
     tones.forEach((freq, i) => {
       const osc = ctx.createOscillator()
@@ -237,6 +414,24 @@ function kanbanClass(state) {
   return 'tag-new'
 }
 
+function countryFlag(code) {
+  if (!code || code.length !== 2) return ''
+  return [...code.toUpperCase()].map(c => String.fromCodePoint(c.codePointAt(0) + 127397)).join('')
+}
+
+function referrerHost(url) {
+  if (!url) return ''
+  try { return new URL(url).hostname.replace('www.', '') } catch { return url }
+}
+
+function formatDuration(seconds) {
+  if (!seconds) return '< 1s'
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  if (m === 0) return `${s}s`
+  return `${m}m ${s}s`
+}
+
 onMounted(async () => {
   await loadSessions()
   ws = api.connectAdminDashboard((msg) => {
@@ -247,12 +442,18 @@ onMounted(async () => {
       })
     }
   })
+  startTimers()
 })
 
-onUnmounted(() => { if (ws) ws.close() })
+onUnmounted(() => {
+  if (ws) ws.close()
+  clearInterval(durationTimer)
+})
 
 watch(() => props.client, loadSessions)
-watch(selected, () => {
+
+watch(selected, (s) => {
+  if (s) startTimers()
   nextTick(() => {
     if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
   })
@@ -285,31 +486,22 @@ watch(selected, () => {
 .mute-btn {
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px;
-  color: #64748b;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  transition: background 0.15s, color 0.15s;
+  border-radius: 8px; color: #64748b; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; transition: background 0.15s, color 0.15s;
 }
 .mute-btn:hover { background: rgba(255,255,255,0.1); color: #94a3b8; }
 
 .live-indicator {
   display: flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 600; color: #22c55e;
-  background: rgba(34,197,94,0.08);
-  padding: 5px 12px;
-  border-radius: 20px;
-  border: 1px solid rgba(34,197,94,0.2);
+  background: rgba(34,197,94,0.08); padding: 5px 12px;
+  border-radius: 20px; border: 1px solid rgba(34,197,94,0.2);
 }
 
 .live-dot {
   width: 7px; height: 7px; border-radius: 50%;
-  background: #22c55e;
-  animation: pulse 1.5s infinite;
+  background: #22c55e; animation: pulse 1.5s infinite;
 }
 
 .tabs {
@@ -320,8 +512,7 @@ watch(selected, () => {
 
 .tab {
   display: flex; align-items: center; gap: 7px;
-  padding: 10px 16px;
-  background: none; border: none;
+  padding: 10px 16px; background: none; border: none;
   border-bottom: 2px solid transparent;
   font-size: 13px; font-weight: 500; color: #475569;
   cursor: pointer; transition: all 0.12s; margin-bottom: -1px;
@@ -336,7 +527,7 @@ watch(selected, () => {
 }
 .tab-badge.hot { background: rgba(239,68,68,0.15); color: #ef4444; }
 
-/* Layout */
+/* ── 3-column layout ─────────────────────────────────────────────────── */
 .inbox-layout {
   display: flex;
   flex: 1;
@@ -345,13 +536,11 @@ watch(selected, () => {
   border-top: 1px solid rgba(255,255,255,0.07);
 }
 
-/* Session list */
+/* ── Session list ────────────────────────────────────────────────────── */
 .session-list {
-  width: 300px;
-  min-width: 300px;
+  width: 280px; min-width: 280px;
   border-right: 1px solid rgba(255,255,255,0.07);
-  overflow-y: auto;
-  padding: 8px 0;
+  overflow-y: auto; padding: 8px 0;
 }
 
 .loading-state { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -369,16 +558,9 @@ watch(selected, () => {
 .empty-state span { font-size: 12px; color: #1e293b; line-height: 1.5; }
 
 .session-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
-  background: none;
-  border: none;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.12s;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; background: none; border: none;
+  width: 100%; text-align: left; cursor: pointer; transition: background 0.12s;
   border-bottom: 1px solid rgba(255,255,255,0.04);
 }
 .session-row:hover { background: rgba(255,255,255,0.03); }
@@ -387,8 +569,7 @@ watch(selected, () => {
 .session-avatar {
   width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: white;
-  flex-shrink: 0;
+  font-size: 12px; font-weight: 700; color: white; flex-shrink: 0;
 }
 
 .session-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -403,29 +584,21 @@ watch(selected, () => {
 .tag-converted { background: rgba(34,197,94,0.12); color: #22c55e; }
 .tag-engaged { background: rgba(99,102,241,0.12); color: #a5b4fc; }
 .tag-new { background: rgba(71,85,105,0.3); color: #64748b; }
-
 .heat-bar { height: 3px; border-radius: 2px; opacity: 0.6; }
 
-/* Chat panel */
+/* ── Chat panel ──────────────────────────────────────────────────────── */
 .chat-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  flex: 1; display: flex; flex-direction: column; overflow: hidden;
+  border-right: 1px solid rgba(255,255,255,0.07);
 }
 
 .empty-panel {
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  color: #1e293b;
-  font-size: 14px;
+  align-items: center; justify-content: center;
+  gap: 12px; color: #1e293b; font-size: 14px;
 }
 
 .chat-panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid rgba(255,255,255,0.07);
 }
@@ -448,12 +621,8 @@ watch(selected, () => {
 }
 
 .messages {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex: 1; overflow-y: auto; padding: 20px;
+  display: flex; flex-direction: column; gap: 10px;
 }
 
 .message { display: flex; }
@@ -461,27 +630,170 @@ watch(selected, () => {
 .ai-msg { justify-content: flex-start; }
 
 .bubble {
-  max-width: 72%;
-  padding: 10px 14px;
-  border-radius: 14px;
-  font-size: 13px;
-  line-height: 1.55;
+  max-width: 72%; padding: 10px 14px; border-radius: 14px;
+  font-size: 13px; line-height: 1.55;
 }
 .user-msg .bubble { background: #6366f1; color: white; border-bottom-right-radius: 4px; }
 .ai-msg .bubble { background: #1e293b; color: #e2e8f0; border-bottom-left-radius: 4px; }
 
-.lead-footer {
-  padding: 12px 20px;
-  border-top: 1px solid rgba(255,255,255,0.07);
+/* ── Visitor panel ───────────────────────────────────────────────────── */
+.visitor-panel {
+  width: 272px; min-width: 272px;
+  overflow-y: auto;
   display: flex;
-  gap: 20px;
-  background: #111111;
+  flex-direction: column;
 }
 
-.lead-field {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 12px; color: #64748b;
+.visitor-panel-empty {
+  align-items: center; justify-content: center; gap: 10px;
+  color: #1e293b; font-size: 13px;
 }
+
+.vp-section {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.customer-section { padding-bottom: 12px; }
+
+.vp-customer-header {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 12px;
+}
+
+.vp-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: white; flex-shrink: 0;
+}
+
+.vp-customer-info { display: flex; flex-direction: column; gap: 5px; }
+.vp-customer-name { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+
+.status-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 500; color: #94a3b8;
+}
+
+.status-dot-green {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #22c55e; flex-shrink: 0;
+}
+
+.vp-stats-row {
+  display: flex; align-items: center; gap: 8px;
+}
+
+.vp-stat {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 500; color: #64748b;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px; padding: 4px 10px;
+}
+
+.first-visit-badge {
+  font-size: 11px; font-weight: 600; color: #6366f1;
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.2);
+  border-radius: 20px; padding: 3px 10px;
+  margin-left: auto;
+}
+
+.vp-section-title {
+  font-size: 11px; font-weight: 700; color: #334155;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+
+.vp-count {
+  background: #334155; color: #64748b;
+  font-size: 10px; padding: 1px 6px; border-radius: 8px;
+}
+
+.vp-rows { display: flex; flex-direction: column; gap: 10px; }
+
+.vp-row {
+  display: flex; align-items: center; gap: 10px; min-height: 20px;
+}
+
+.vp-label {
+  color: #475569; font-size: 12px;
+  flex-shrink: 0; width: 56px;
+  display: flex; align-items: center;
+}
+
+.vp-value {
+  font-size: 12px; color: #cbd5e1;
+  flex: 1; min-width: 0;
+}
+
+.vp-value.truncate {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.vp-value.mono {
+  font-family: 'Fira Mono', 'JetBrains Mono', monospace;
+  font-size: 11px; color: #94a3b8;
+}
+
+.assignee-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #f59e0b; color: white;
+  font-size: 10px; font-weight: 700; margin-right: 5px;
+}
+
+.device-row {
+  display: flex; align-items: center; gap: 6px;
+}
+
+.device-icon { color: #64748b; display: flex; align-items: center; }
+
+.os-badge {
+  font-size: 10px; font-weight: 600; color: #64748b;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px; padding: 1px 6px;
+}
+
+/* Tags */
+.vp-tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.vp-tag {
+  font-size: 11px; font-weight: 600;
+  padding: 3px 10px; border-radius: 20px;
+  text-transform: capitalize;
+}
+
+.vp-tag-state {
+  background: rgba(71,85,105,0.3); color: #64748b;
+}
+
+/* Visited pages */
+.vp-pages { display: flex; flex-direction: column; gap: 10px; }
+
+.vp-page-row {
+  display: flex; align-items: flex-start; gap: 8px;
+}
+
+.page-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #334155; flex-shrink: 0; margin-top: 4px;
+}
+.page-dot-active { background: #22c55e; }
+
+.page-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.page-title-text { font-size: 12px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.page-duration { font-size: 10px; color: #475569; }
+
+/* No data placeholder */
+.vp-no-data {
+  padding: 24px 16px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.vp-no-data p { font-size: 12px; color: #334155; line-height: 1.6; }
 
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 </style>

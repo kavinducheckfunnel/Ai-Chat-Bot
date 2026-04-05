@@ -31,6 +31,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
 
+        # Save visitor IP immediately on connect (server-side, accurate)
+        visitor_ip = self._get_client_ip()
+        if visitor_ip:
+            await self.save_visitor_ip(visitor_ip)
+
     async def disconnect(self, close_code):
         if hasattr(self, 'room_group_name'):
             await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
@@ -44,8 +49,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'type': 'pong'}))
             return
 
+        # Handle visitor fingerprint frame — save once, never overwrite
+        if message_type == 'visitor_meta':
+            await self.save_visitor_meta(data)
+            return
+
         message = data.get('message')
         behavior_matrix = data.get('behavior_matrix', {})
+        page_visits = data.get('page_visits', [])
 
         session = await self.get_session(self.client_id, self.session_id)
 
@@ -66,6 +77,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         # Update last visitor message time for AFK tracking
         await self.update_visitor_timestamp(session)
+
+        # Persist latest page visits from the widget
+        if page_visits:
+            await self.save_page_visits(session.session_id, page_visits)
 
         # Generate AI response
         ai_response = await database_sync_to_async(generate_ai_response)(
@@ -154,6 +169,60 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'message': event['message'],
             'source': event.get('source', 'ai'),
         }))
+
+    def _get_client_ip(self):
+        """Extract real client IP from ASGI scope headers (respects X-Forwarded-For)."""
+        headers = dict(self.scope.get('headers', []))
+        forwarded = headers.get(b'x-forwarded-for', b'').decode()
+        if forwarded:
+            return forwarded.split(',')[0].strip()
+        client = self.scope.get('client')
+        if client:
+            return client[0]
+        return None
+
+    @database_sync_to_async
+    def save_visitor_ip(self, ip):
+        """Save IP on connect — only if not already recorded."""
+        ChatSession.objects.filter(
+            session_id=self.session_id,
+            visitor_ip__isnull=True,
+        ).update(visitor_ip=ip)
+
+    @database_sync_to_async
+    def save_visitor_meta(self, data):
+        """Save visitor fingerprint fields — only fill nulls, never overwrite."""
+        update = {}
+        field_map = {
+            'country': 'visitor_country',
+            'city': 'visitor_city',
+            'country_code': 'visitor_country_code',
+            'device': 'visitor_device',
+            'os': 'visitor_os',
+            'browser': 'visitor_browser',
+            'referrer': 'visitor_referrer',
+            'timezone': 'visitor_timezone',
+        }
+        for key, field in field_map.items():
+            val = data.get(key)
+            if val:
+                update[field] = val
+
+        page_visits = data.get('page_visits', [])
+        if page_visits:
+            update['page_visits'] = page_visits
+
+        if update:
+            # Only update sessions where the fields are still null (first time)
+            ChatSession.objects.filter(
+                session_id=self.session_id,
+                visitor_country__isnull=True,
+            ).update(**update)
+
+    @database_sync_to_async
+    def save_page_visits(self, session_id, page_visits):
+        """Update page_visits on the session (always latest snapshot from widget)."""
+        ChatSession.objects.filter(session_id=session_id).update(page_visits=page_visits)
 
     @database_sync_to_async
     def get_session(self, client_id, session_id):

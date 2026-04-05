@@ -57,6 +57,18 @@ class ChatSession(models.Model):
     lead_email = models.EmailField(null=True, blank=True)
     lead_phone = models.CharField(max_length=50, null=True, blank=True)
 
+    # Visitor fingerprint — populated on first WebSocket connect
+    visitor_ip = models.GenericIPAddressField(null=True, blank=True)
+    visitor_country = models.CharField(max_length=100, null=True, blank=True)
+    visitor_city = models.CharField(max_length=100, null=True, blank=True)
+    visitor_country_code = models.CharField(max_length=10, null=True, blank=True)
+    visitor_device = models.CharField(max_length=20, null=True, blank=True)   # desktop / mobile / tablet
+    visitor_os = models.CharField(max_length=50, null=True, blank=True)       # Windows / macOS / iOS / Android / Linux
+    visitor_browser = models.CharField(max_length=50, null=True, blank=True)  # Chrome / Safari / Firefox / Edge
+    visitor_referrer = models.URLField(max_length=2000, null=True, blank=True)
+    visitor_timezone = models.CharField(max_length=100, null=True, blank=True)
+    page_visits = models.JSONField(default=list)  # [{url, title, duration_seconds, visited_at}]
+
     # God View — admin takeover
     takeover_active = models.BooleanField(default=False)
     taken_over_by = models.ForeignKey(

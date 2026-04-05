@@ -1,18 +1,49 @@
-import { reactive, onMounted, onUnmounted } from 'vue';
+import { reactive, ref, onMounted, onUnmounted } from 'vue';
 
 // Pricing / checkout URL patterns — triggers pricing hesitation FOMO
 const PRICING_PATTERNS = ['/pricing', '/plans', '/checkout', '/subscribe', '/upgrade', '/buy'];
 
+// ── User-agent parsing helpers ────────────────────────────────────────────────
+function parseDevice(ua) {
+    if (/tablet|ipad|playbook|silk/i.test(ua)) return 'tablet';
+    if (/mobile|iphone|ipod|android|blackberry|opera mini|iemobile|wpdesktop/i.test(ua)) return 'mobile';
+    return 'desktop';
+}
+
+function parseOS(ua) {
+    if (/windows nt/i.test(ua)) return 'Windows';
+    if (/mac os x/i.test(ua) && !/iphone|ipad|ipod/i.test(ua)) return 'macOS';
+    if (/iphone|ipad|ipod/i.test(ua)) return 'iOS';
+    if (/android/i.test(ua)) return 'Android';
+    if (/linux/i.test(ua)) return 'Linux';
+    return 'Unknown';
+}
+
+function parseBrowser(ua) {
+    if (/edg\//i.test(ua)) return 'Edge';
+    if (/opr\//i.test(ua) || /opera/i.test(ua)) return 'Opera';
+    if (/firefox/i.test(ua)) return 'Firefox';
+    if (/chrome/i.test(ua)) return 'Chrome';
+    if (/safari/i.test(ua)) return 'Safari';
+    return 'Other';
+}
+
+// ── First-visit detection ─────────────────────────────────────────────────────
+const RETURNING_KEY = '__cf_returning__';
+function checkReturning() {
+    const isReturning = !!localStorage.getItem(RETURNING_KEY);
+    localStorage.setItem(RETURNING_KEY, '1');
+    return isReturning;
+}
+
 export function useTracker() {
-    // Persist session ID across page refreshes within the same browser tab.
-    // sessionStorage resets only when the tab/browser is closed — no more
-    // "new visitor" sound on every page reload.
-    const SESSION_KEY = '__cf_sid__'
+    const SESSION_KEY = '__cf_sid__';
     const sessionId = sessionStorage.getItem(SESSION_KEY) || (() => {
-        const id = crypto.randomUUID()
-        sessionStorage.setItem(SESSION_KEY, id)
-        return id
-    })()
+        const id = crypto.randomUUID();
+        sessionStorage.setItem(SESSION_KEY, id);
+        return id;
+    })();
+
     const events = [];
 
     const behaviorMatrix = reactive({
@@ -20,27 +51,38 @@ export function useTracker() {
         timeOnSite: 0,
         hoverCount: 0,
         scrollDepth: 0,
-        intentLevel: "Casual Browser",
+        intentLevel: 'Casual Browser',
         pricingPageVisits: 0,
         exitIntentFired: false,
     });
 
+    // Visitor metadata (populated asynchronously)
+    const visitorMeta = ref({
+        device: parseDevice(navigator.userAgent),
+        os: parseOS(navigator.userAgent),
+        browser: parseBrowser(navigator.userAgent),
+        referrer: document.referrer || null,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || null,
+        country: null,
+        city: null,
+        country_code: null,
+        ip: null,
+        is_returning: checkReturning(),
+    });
+
+    // Detailed page visit log with durations
+    const pageVisits = ref([]);
+    let currentPageEntry = null;
+
     let startTime = Date.now();
     let timeInterval = null;
     let nudgeTimeout = null;
-
-    // Callback that the widget can override
     let onNudgeTriggered = () => { };
 
-    const setNudgeCallback = (cb) => {
-        onNudgeTriggered = cb;
-    };
+    const setNudgeCallback = (cb) => { onNudgeTriggered = cb; };
 
     // ── API helpers ───────────────────────────────────────────────────────────
     const getApiBase = () => {
-        // On third-party embeds, __CF_BACKEND_URL__ is set by main.js from the
-        // script src (e.g. "https://ai.checkfunnels.com"). Use it so analytics
-        // calls go to *our* server, not the host website.
         if (window.__CF_BACKEND_URL__) return window.__CF_BACKEND_URL__;
         const h = window.location.hostname;
         return (h === 'localhost' || h === '127.0.0.1') ? 'http://127.0.0.1:8000' : '';
@@ -56,22 +98,49 @@ export function useTracker() {
         }).catch(() => { });
     };
 
-    // ── Page view tracking ────────────────────────────────────────────────────
-    const trackPageView = () => {
-        const path = window.location.pathname;
-        behaviorMatrix.pagesViewed.push(path);
-        logEvent("page_view", path);
+    // ── Geo lookup ────────────────────────────────────────────────────────────
+    const fetchGeo = async () => {
+        try {
+            const res = await fetch('https://ipapi.co/json/', { signal: AbortSignal.timeout(5000) });
+            if (!res.ok) return;
+            const data = await res.json();
+            visitorMeta.value.country = data.country_name || null;
+            visitorMeta.value.city = data.city || null;
+            visitorMeta.value.country_code = data.country_code || null;
+            visitorMeta.value.ip = data.ip || null;
+        } catch { /* geo is best-effort */ }
+    };
 
-        // Check if this is a pricing page
+    // ── Page view tracking ────────────────────────────────────────────────────
+    const finalizeCurrentPage = () => {
+        if (!currentPageEntry) return;
+        const duration = Math.round((Date.now() - currentPageEntry.enteredAt) / 1000);
+        pageVisits.value.push({
+            url: currentPageEntry.url,
+            title: currentPageEntry.title,
+            duration_seconds: duration,
+            visited_at: new Date(currentPageEntry.enteredAt).toISOString(),
+        });
+        currentPageEntry = null;
+    };
+
+    const trackPageView = () => {
+        finalizeCurrentPage();
+        const path = window.location.pathname;
+        currentPageEntry = {
+            url: path,
+            title: document.title || path,
+            enteredAt: Date.now(),
+        };
+        behaviorMatrix.pagesViewed.push(path);
+        logEvent('page_view', path);
+
         if (PRICING_PATTERNS.some(p => path.toLowerCase().includes(p))) {
             behaviorMatrix.pricingPageVisits++;
-            logEvent("pricing_visit", path);
-
-            // Fire FOMO after 2nd visit or after 30s on the page
+            logEvent('pricing_visit', path);
             if (behaviorMatrix.pricingPageVisits >= 2) {
                 fireTrigger('pricing_hesitation');
             } else {
-                // First visit: fire after 30 seconds of hesitation on pricing page
                 setTimeout(() => {
                     if (PRICING_PATTERNS.some(p => window.location.pathname.toLowerCase().includes(p))) {
                         fireTrigger('pricing_hesitation');
@@ -94,35 +163,33 @@ export function useTracker() {
                 behaviorMatrix.scrollDepth = Math.round(depth);
             }
         };
-        window.addEventListener("scroll", handleScroll);
-        return () => window.removeEventListener("scroll", handleScroll);
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
     };
 
     // ── Hover tracking ────────────────────────────────────────────────────────
     const trackHovers = () => {
         const handleHover = (el) => {
             behaviorMatrix.hoverCount++;
-            logEvent("hover", el.innerText || el.id || el.tagName);
+            logEvent('hover', el.innerText || el.id || el.tagName);
         };
-        document.querySelectorAll("button, a").forEach(el => {
-            el.addEventListener("mouseenter", () => handleHover(el));
+        document.querySelectorAll('button, a').forEach(el => {
+            el.addEventListener('mouseenter', () => handleHover(el));
         });
     };
 
     // ── Exit-intent detection ─────────────────────────────────────────────────
-    // Fires when the mouse moves above the top ~20px of the viewport (heading to browser bar / back button)
     const trackExitIntent = () => {
         const handleMouseLeave = (e) => {
-            if (e.clientY > 20) return;                      // not heading out of viewport top
-            if (behaviorMatrix.exitIntentFired) return;       // only fire once
-            if (behaviorMatrix.timeOnSite < 5) return;        // ignore immediate bounces
-
+            if (e.clientY > 20) return;
+            if (behaviorMatrix.exitIntentFired) return;
+            if (behaviorMatrix.timeOnSite < 5) return;
             behaviorMatrix.exitIntentFired = true;
-            logEvent("exit_intent", window.location.pathname);
+            logEvent('exit_intent', window.location.pathname);
             fireTrigger('exit_intent');
         };
-        document.addEventListener("mouseleave", handleMouseLeave);
-        return () => document.removeEventListener("mouseleave", handleMouseLeave);
+        document.addEventListener('mouseleave', handleMouseLeave);
+        return () => document.removeEventListener('mouseleave', handleMouseLeave);
     };
 
     const logEvent = (type, data) => {
@@ -132,20 +199,21 @@ export function useTracker() {
     // ── Nudge evaluation ──────────────────────────────────────────────────────
     const evaluateAndTriggerNudge = () => {
         if (behaviorMatrix.timeOnSite >= 30 || behaviorMatrix.scrollDepth >= 50) {
-            behaviorMatrix.intentLevel = "High-Intent Lead";
+            behaviorMatrix.intentLevel = 'High-Intent Lead';
             onNudgeTriggered();
         }
     };
 
     // ── Analytics beacon ──────────────────────────────────────────────────────
     const sendBeacon = () => {
+        finalizeCurrentPage();
         const url = `${getApiBase()}/api/analytics/beacon/`;
         const clientId = window.__CF_CLIENT_ID__;
         const payload = JSON.stringify({ sessionId, clientId, behaviorMatrix, events });
         if (navigator.sendBeacon) {
             navigator.sendBeacon(url, payload);
         } else {
-            fetch(url, { method: "POST", body: payload, keepalive: true }).catch(() => { });
+            fetch(url, { method: 'POST', body: payload, keepalive: true }).catch(() => { });
         }
         events.length = 0;
     };
@@ -156,6 +224,7 @@ export function useTracker() {
     onMounted(() => {
         startTime = Date.now();
         trackPageView();
+        fetchGeo();
         cleanupScroll = trackScroll();
         cleanupExitIntent = trackExitIntent();
 
@@ -167,7 +236,7 @@ export function useTracker() {
         }, 5000);
 
         nudgeTimeout = setTimeout(evaluateAndTriggerNudge, 60000);
-        window.addEventListener("beforeunload", sendBeacon);
+        window.addEventListener('beforeunload', sendBeacon);
     });
 
     onUnmounted(() => {
@@ -175,13 +244,16 @@ export function useTracker() {
         clearTimeout(nudgeTimeout);
         if (cleanupScroll) cleanupScroll();
         if (cleanupExitIntent) cleanupExitIntent();
-        window.removeEventListener("beforeunload", sendBeacon);
+        window.removeEventListener('beforeunload', sendBeacon);
         sendBeacon();
     });
 
     return {
         sessionId,
         behaviorMatrix,
+        visitorMeta,
+        pageVisits,
+        finalizeCurrentPage,
         setNudgeCallback,
     };
 }
