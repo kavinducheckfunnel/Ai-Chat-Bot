@@ -98,7 +98,7 @@
             class="message"
             :class="msg.role === 'user' ? 'user-msg' : 'ai-msg'"
           >
-            <div class="bubble">{{ msg.content }}</div>
+            <div class="bubble">{{ msg.message || msg.content }}</div>
           </div>
         </div>
       </div>
@@ -283,11 +283,21 @@ const visitorLocalTime = ref('')
 let durationTimer = null
 
 function updateDuration() {
-  if (!selected.value?.created_at) { chatDuration.value = '—'; return }
-  const elapsed = Math.floor((Date.now() - new Date(selected.value.created_at).getTime()) / 1000)
+  const s = selected.value
+  if (!s?.created_at) { chatDuration.value = '—'; return }
+
+  const created = new Date(s.created_at).getTime()
+  const lastActivity = new Date(s.updated_at || s.created_at).getTime()
+  const idleMs = Date.now() - lastActivity
+  const IDLE_LIMIT = 10 * 60 * 1000  // 10 minutes
+
+  // If session has been idle for >10 min, freeze at updated_at - created_at
+  const endTime = idleMs > IDLE_LIMIT ? lastActivity : Date.now()
+  const elapsed = Math.floor((endTime - created) / 1000)
+
   const m = Math.floor(elapsed / 60)
-  const s = elapsed % 60
-  chatDuration.value = `${m}m ${s}s`
+  const sec = elapsed % 60
+  chatDuration.value = `${m}m ${sec}s`
 }
 
 function updateVisitorClock() {
@@ -392,7 +402,8 @@ function lastMessage(s) {
   const h = s.chat_history
   if (!h || !h.length) return 'No messages yet'
   const last = h[h.length - 1]
-  return last?.content?.slice(0, 60) + (last?.content?.length > 60 ? '…' : '') || ''
+  const text = last?.message || last?.content || ''
+  return text.slice(0, 60) + (text.length > 60 ? '…' : '')
 }
 
 function initials(s) {
