@@ -255,6 +255,7 @@ def client_sessions(request, client_id):
             'visitor_referrer': s.visitor_referrer,
             'visitor_timezone': s.visitor_timezone,
             'page_visits': s.page_visits,
+            'channel': s.channel,
             'updated_at': s.updated_at.isoformat(),
             'created_at': s.created_at.isoformat(),
         })
@@ -310,6 +311,7 @@ def session_detail(request, session_id):
         'visitor_referrer': session.visitor_referrer,
         'visitor_timezone': session.visitor_timezone,
         'page_visits': session.page_visits,
+        'channel': session.channel,
         'updated_at': session.updated_at.isoformat(),
         'created_at': session.created_at.isoformat(),
     })

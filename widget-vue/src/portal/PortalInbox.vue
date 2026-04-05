@@ -72,6 +72,7 @@
             <div class="session-preview">{{ lastMessage(s) }}</div>
             <div class="session-tags">
               <span class="tag" :class="kanbanClass(s.kanban_state)">{{ s.kanban_state }}</span>
+              <span class="channel-badge" :class="'ch-' + (s.channel || 'website')">{{ channelLabel(s.channel) }}</span>
               <span class="heat-bar" :style="{ background: heatColor(s.heat_score), width: (s.heat_score / 100 * 60 + 20) + 'px' }"></span>
             </div>
           </div>
@@ -425,6 +426,12 @@ function kanbanClass(state) {
   return 'tag-new'
 }
 
+function channelLabel(channel) {
+  if (channel === 'whatsapp') return 'WhatsApp'
+  if (channel === 'messenger') return 'Messenger'
+  return 'Web'
+}
+
 function countryFlag(code) {
   if (!code || code.length !== 2) return ''
   return [...code.toUpperCase()].map(c => String.fromCodePoint(c.codePointAt(0) + 127397)).join('')
@@ -596,6 +603,10 @@ watch(selected, (s) => {
 .tag-engaged { background: rgba(99,102,241,0.12); color: #a5b4fc; }
 .tag-new { background: rgba(71,85,105,0.3); color: #64748b; }
 .heat-bar { height: 3px; border-radius: 2px; opacity: 0.6; }
+.channel-badge { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.ch-website  { background: rgba(99,102,241,0.1); color: #a5b4fc; }
+.ch-whatsapp { background: rgba(37,211,102,0.12); color: #25d366; }
+.ch-messenger { background: rgba(0,132,255,0.12); color: #0084ff; }
 
 /* ── Chat panel ──────────────────────────────────────────────────────── */
 .chat-panel {

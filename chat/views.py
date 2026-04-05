@@ -1,3 +1,8 @@
+import logging
+import uuid
+import requests as http_requests
+from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
@@ -8,6 +13,8 @@ from .throttles import ChatRateThrottle, SessionRateThrottle
 from users.models import Client
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
@@ -165,6 +172,13 @@ def capture_lead(request):
     if not updated:
         return Response({'error': 'session not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Fire HubSpot sync asynchronously if client has integration configured
+    try:
+        from users.tasks import sync_lead_to_hubspot
+        sync_lead_to_hubspot.delay(str(session_id))
+    except Exception:
+        pass
+
     return Response({'status': 'saved'})
 
 
@@ -203,3 +217,167 @@ def product_detail(request, product_id):
         'url': chunk.source_url,
         'image_url': meta.get('image_url') or meta.get('image'),
     })
+
+
+# ─── WhatsApp Business webhook ────────────────────────────────────────────────
+
+def _get_or_create_channel_session(client, visitor_id, channel):
+    """Get the most recent open session (within 24 h) for a channel visitor, or create one."""
+    from datetime import timedelta
+    cutoff = timezone.now() - timedelta(hours=24)
+    session = (
+        ChatSession.objects.filter(
+            client=client,
+            visitor_id=visitor_id,
+            channel=channel,
+            created_at__gte=cutoff,
+        )
+        .order_by('-created_at')
+        .first()
+    )
+    if not session:
+        session = ChatSession.objects.create(
+            client=client,
+            visitor_id=visitor_id,
+            channel=channel,
+        )
+    return session
+
+
+def _send_whatsapp_reply(phone_number_id, access_token, to, text):
+    try:
+        http_requests.post(
+            f'https://graph.facebook.com/v20.0/{phone_number_id}/messages',
+            headers={
+                'Authorization': f'Bearer {access_token}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'messaging_product': 'whatsapp',
+                'to': to,
+                'type': 'text',
+                'text': {'body': text},
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        logger.error(f'[whatsapp_reply] Failed: {e}')
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def whatsapp_webhook(request, client_id):
+    try:
+        client = Client.objects.get(pk=client_id)
+    except (Client.DoesNotExist, Exception):
+        return HttpResponse('Not found', status=404)
+
+    # ── Webhook verification (GET) ────────────────────────────────────────
+    if request.method == 'GET':
+        mode = request.GET.get('hub.mode')
+        token = request.GET.get('hub.verify_token')
+        challenge = request.GET.get('hub.challenge')
+        if mode == 'subscribe' and token == client.whatsapp_verify_token:
+            return HttpResponse(challenge, content_type='text/plain')
+        return HttpResponse('Forbidden', status=403)
+
+    # ── Incoming message (POST) ───────────────────────────────────────────
+    data = request.data
+    try:
+        entry = data['entry'][0]
+        change = entry['changes'][0]['value']
+        messages = change.get('messages', [])
+        if not messages:
+            return HttpResponse('OK')  # delivery receipt / read receipt
+
+        msg = messages[0]
+        if msg.get('type') != 'text':
+            return HttpResponse('OK')  # ignore media for now
+
+        sender_phone = msg['from']
+        text = msg['text']['body']
+    except (KeyError, IndexError):
+        return HttpResponse('OK')
+
+    if not client.whatsapp_phone_number_id or not client.whatsapp_access_token:
+        return HttpResponse('Channel not configured', status=400)
+
+    # Route through AI
+    session = _get_or_create_channel_session(client, sender_phone, 'whatsapp')
+    try:
+        result = generate_ai_response(session, text, {})
+        reply_text = result.get('reply_text', 'Sorry, I could not process your request.')
+    except Exception as e:
+        logger.error(f'[whatsapp_webhook] AI error: {e}')
+        reply_text = 'Sorry, something went wrong on my end.'
+
+    _send_whatsapp_reply(
+        client.whatsapp_phone_number_id,
+        client.whatsapp_access_token,
+        sender_phone,
+        reply_text,
+    )
+    return HttpResponse('OK')
+
+
+# ─── Facebook Messenger webhook ───────────────────────────────────────────────
+
+def _send_messenger_reply(page_access_token, recipient_id, text):
+    try:
+        http_requests.post(
+            'https://graph.facebook.com/v20.0/me/messages',
+            params={'access_token': page_access_token},
+            json={
+                'recipient': {'id': recipient_id},
+                'message': {'text': text},
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        logger.error(f'[messenger_reply] Failed: {e}')
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def messenger_webhook(request, client_id):
+    try:
+        client = Client.objects.get(pk=client_id)
+    except (Client.DoesNotExist, Exception):
+        return HttpResponse('Not found', status=404)
+
+    # ── Webhook verification (GET) ────────────────────────────────────────
+    if request.method == 'GET':
+        mode = request.GET.get('hub.mode')
+        token = request.GET.get('hub.verify_token')
+        challenge = request.GET.get('hub.challenge')
+        if mode == 'subscribe' and token == client.messenger_verify_token:
+            return HttpResponse(challenge, content_type='text/plain')
+        return HttpResponse('Forbidden', status=403)
+
+    # ── Incoming message (POST) ───────────────────────────────────────────
+    data = request.data
+    try:
+        entry = data['entry'][0]
+        messaging = entry['messaging'][0]
+        sender_psid = messaging['sender']['id']
+        msg = messaging.get('message', {})
+        text = msg.get('text')
+        if not text:
+            return HttpResponse('OK')  # sticker / attachment — ignore
+    except (KeyError, IndexError):
+        return HttpResponse('OK')
+
+    if not client.messenger_page_access_token:
+        return HttpResponse('Channel not configured', status=400)
+
+    # Route through AI
+    session = _get_or_create_channel_session(client, sender_psid, 'messenger')
+    try:
+        result = generate_ai_response(session, text, {})
+        reply_text = result.get('reply_text', 'Sorry, I could not process your request.')
+    except Exception as e:
+        logger.error(f'[messenger_webhook] AI error: {e}')
+        reply_text = 'Sorry, something went wrong on my end.'
+
+    _send_messenger_reply(client.messenger_page_access_token, sender_psid, reply_text)
+    return HttpResponse('OK')

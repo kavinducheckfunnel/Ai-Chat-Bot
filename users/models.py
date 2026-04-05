@@ -69,6 +69,31 @@ class Client(models.Model):
     ingestion_status = models.CharField(max_length=20, choices=INGESTION_CHOICES, default='PENDING')
     total_pages_ingested = models.IntegerField(default=0)
 
+    # ── BYOK — Bring Your Own Key ─────────────────────────────────────────────
+    PROVIDER_CHOICES = [
+        ('openrouter', 'OpenRouter'),
+        ('openai', 'OpenAI'),
+        ('anthropic', 'Anthropic'),
+    ]
+    ai_api_key = models.CharField(max_length=500, blank=True, null=True)
+    ai_model = models.CharField(max_length=200, blank=True, null=True)
+    ai_provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='openrouter')
+
+    # ── WhatsApp Business ─────────────────────────────────────────────────────
+    whatsapp_phone_number_id = models.CharField(max_length=100, blank=True, null=True)
+    whatsapp_access_token = models.CharField(max_length=500, blank=True, null=True)
+    whatsapp_verify_token = models.CharField(max_length=100, blank=True, null=True)
+    whatsapp_enabled = models.BooleanField(default=False)
+
+    # ── Facebook Messenger ────────────────────────────────────────────────────
+    messenger_page_id = models.CharField(max_length=100, blank=True, null=True)
+    messenger_page_access_token = models.CharField(max_length=500, blank=True, null=True)
+    messenger_verify_token = models.CharField(max_length=100, blank=True, null=True)
+    messenger_enabled = models.BooleanField(default=False)
+
+    # ── HubSpot CRM ───────────────────────────────────────────────────────────
+    hubspot_api_key = models.CharField(max_length=500, blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

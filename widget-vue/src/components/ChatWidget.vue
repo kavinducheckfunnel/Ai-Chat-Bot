@@ -316,7 +316,8 @@ function sendMessage() {
     chatMessages.value.push({ type: 'image', src: pendingImage.value, sender: 'user' })
   }
 
-  const messageText = text || (pendingImage.value ? '[User sent an image]' : '')
+  const capturedImage = pendingImage.value  // capture before clearing
+  const messageText = text || (capturedImage ? '[User sent an image]' : '')
   if (messageText) {
     chatMessages.value.push({ type: 'text', text: messageText, sender: 'user' })
   }
@@ -327,7 +328,13 @@ function sendMessage() {
   userMessageCount.value++
   showTypingIndicator()
 
-  const payload = { message: messageText, behavior_matrix: behaviorMatrix, page_visits: pageVisits.value }
+  const payload = {
+    message: messageText,
+    behavior_matrix: behaviorMatrix,
+    page_visits: pageVisits.value,
+    // Include base64 image so the server can pass it to the vision model
+    ...(capturedImage ? { image_data: capturedImage } : {}),
+  }
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify(payload))
   } else {

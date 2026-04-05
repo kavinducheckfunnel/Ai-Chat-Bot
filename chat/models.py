@@ -27,6 +27,12 @@ class ChatSession(models.Model):
         ('LOST', 'Lost'),
     ]
 
+    CHANNEL_CHOICES = [
+        ('website', 'Website'),
+        ('whatsapp', 'WhatsApp'),
+        ('messenger', 'Messenger'),
+    ]
+
     session_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_index=True)
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='sessions', null=True, blank=True)
     visitor_id = models.CharField(max_length=255, db_index=True)
@@ -68,6 +74,9 @@ class ChatSession(models.Model):
     visitor_referrer = models.URLField(max_length=2000, null=True, blank=True)
     visitor_timezone = models.CharField(max_length=100, null=True, blank=True)
     page_visits = models.JSONField(default=list)  # [{url, title, duration_seconds, visited_at}]
+
+    # Channel source
+    channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES, default='website')
 
     # God View — admin takeover
     takeover_active = models.BooleanField(default=False)

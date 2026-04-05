@@ -57,6 +57,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         message = data.get('message')
         behavior_matrix = data.get('behavior_matrix', {})
         page_visits = data.get('page_visits', [])
+        image_data = data.get('image_data')  # optional base64 image
 
         session = await self.get_session(self.client_id, self.session_id)
 
@@ -82,9 +83,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if page_visits:
             await self.save_page_visits(session.session_id, page_visits)
 
-        # Generate AI response
+        # Generate AI response (pass image_data for vision if present)
         ai_response = await database_sync_to_async(generate_ai_response)(
-            session, message, behavior_matrix
+            session, message, behavior_matrix, image_data=image_data
         )
 
         # Send reply to visitor

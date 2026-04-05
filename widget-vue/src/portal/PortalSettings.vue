@@ -9,6 +9,7 @@
       <button class="tab" :class="{ active: activeTab === 'channels' }" @click="activeTab = 'channels'">Channels & embed</button>
       <button class="tab" :class="{ active: activeTab === 'chatbot' }" @click="activeTab = 'chatbot'">Chatbot</button>
       <button class="tab" :class="{ active: activeTab === 'knowledge' }" @click="activeTab = 'knowledge'">Knowledge base</button>
+      <button class="tab" :class="{ active: activeTab === 'integrations' }" @click="activeTab = 'integrations'">Integrations</button>
     </div>
 
     <!-- ── Channels & embed ────────────────────────────────────────────────── -->
@@ -201,6 +202,168 @@
       </div>
     </div>
   </div>
+
+  <!-- ── Integrations tab ─────────────────────────────────────────────────── -->
+  <div v-if="activeTab === 'integrations'" class="tab-content">
+
+    <!-- BYOK -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(168,85,247,0.12);color:#c084fc">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M21 2H3v16h5v4l4-4h9V2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">AI Model (BYOK)</h2>
+            <p class="section-sub">Use your own OpenAI, Anthropic or OpenRouter API key instead of the platform default.</p>
+          </div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Provider</label>
+          <div class="theme-row">
+            <button v-for="p in aiProviders" :key="p.val" class="theme-btn" :class="{ selected: intForm.ai_provider === p.val }" @click="intForm.ai_provider = p.val">{{ p.label }}</button>
+          </div>
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>API Key</label>
+          <input class="input" type="password" v-model="intForm.ai_api_key" placeholder="sk-… or your OpenRouter key" autocomplete="off" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Model ID</label>
+          <input class="input" type="text" v-model="intForm.ai_model" placeholder="e.g. gpt-4o  /  claude-opus-4-6  /  google/gemini-3.1-pro-preview" />
+          <span class="field-hint">Leave blank to use the platform default (Gemini 3.1 Pro).</span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save AI settings' }}</button>
+      </div>
+    </div>
+
+    <!-- WhatsApp -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(37,211,102,0.1);color:#25d366">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">WhatsApp Business</h2>
+            <p class="section-sub">Connect your Meta WhatsApp Business number to route chats through the AI.</p>
+          </div>
+          <div class="status-badge" :class="intForm.whatsapp_enabled ? 'active' : 'inactive'">{{ intForm.whatsapp_enabled ? 'Active' : 'Inactive' }}</div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Webhook URL (paste this in Meta → Webhooks)</label>
+          <div class="code-block" style="padding:10px 14px">
+            <code style="font-family:monospace;font-size:12px;color:#a5b4fc">{{ whatsappWebhookUrl }}</code>
+          </div>
+        </div>
+        <div class="field">
+          <label>Phone Number ID</label>
+          <input class="input" type="text" v-model="intForm.whatsapp_phone_number_id" placeholder="123456789012345" />
+        </div>
+        <div class="field">
+          <label>Verify Token (you choose)</label>
+          <input class="input" type="text" v-model="intForm.whatsapp_verify_token" placeholder="my_secure_verify_token" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Access Token</label>
+          <input class="input" type="password" v-model="intForm.whatsapp_access_token" placeholder="EAAxxxxxxxxxxxxxxxx" autocomplete="off" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Enable WhatsApp</label>
+          <div class="toggle-row">
+            <button class="toggle-btn" :class="{ on: intForm.whatsapp_enabled }" @click="intForm.whatsapp_enabled = !intForm.whatsapp_enabled">
+              <span class="toggle-knob"></span>
+            </button>
+            <span class="toggle-lbl">{{ intForm.whatsapp_enabled ? 'Enabled — AI will reply to WhatsApp messages' : 'Disabled' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save WhatsApp settings' }}</button>
+      </div>
+    </div>
+
+    <!-- Messenger -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon messenger-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z" fill="#0084FF"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">Facebook Messenger</h2>
+            <p class="section-sub">Connect your Facebook Page to receive and reply to Messenger conversations via AI.</p>
+          </div>
+          <div class="status-badge" :class="intForm.messenger_enabled ? 'active' : 'inactive'">{{ intForm.messenger_enabled ? 'Active' : 'Inactive' }}</div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Webhook URL (paste this in Meta → Webhooks)</label>
+          <div class="code-block" style="padding:10px 14px">
+            <code style="font-family:monospace;font-size:12px;color:#a5b4fc">{{ messengerWebhookUrl }}</code>
+          </div>
+        </div>
+        <div class="field">
+          <label>Page ID</label>
+          <input class="input" type="text" v-model="intForm.messenger_page_id" placeholder="123456789" />
+        </div>
+        <div class="field">
+          <label>Verify Token (you choose)</label>
+          <input class="input" type="text" v-model="intForm.messenger_verify_token" placeholder="my_secure_verify_token" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Page Access Token</label>
+          <input class="input" type="password" v-model="intForm.messenger_page_access_token" placeholder="EAAxxxxxxxxxxxxxxxx" autocomplete="off" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Enable Messenger</label>
+          <div class="toggle-row">
+            <button class="toggle-btn" :class="{ on: intForm.messenger_enabled }" @click="intForm.messenger_enabled = !intForm.messenger_enabled">
+              <span class="toggle-knob"></span>
+            </button>
+            <span class="toggle-lbl">{{ intForm.messenger_enabled ? 'Enabled — AI will reply to Messenger messages' : 'Disabled' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Messenger settings' }}</button>
+      </div>
+    </div>
+
+    <!-- HubSpot CRM -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(255,122,0,0.1);color:#ff7a00">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">HubSpot CRM</h2>
+            <p class="section-sub">Automatically sync captured leads (email + phone) to HubSpot as Contacts and Deals.</p>
+          </div>
+          <div class="status-badge" :class="intForm.hubspot_api_key ? 'active' : 'inactive'">{{ intForm.hubspot_api_key ? 'Connected' : 'Not connected' }}</div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>HubSpot Private App Token</label>
+          <input class="input" type="password" v-model="intForm.hubspot_api_key" placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
+          <span class="field-hint">Create a Private App in HubSpot → Settings → Integrations → Private Apps. Requires CRM (contacts + deals) scopes.</span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save HubSpot settings' }}</button>
+      </div>
+    </div>
+
+  </div>
 </template>
 
 <script setup>
@@ -222,6 +385,37 @@ const scrapePages = ref(0)
 let scrapeTimer = null
 
 const backendUrl = WIDGET_URL.replace('/widget/widget.js', '')
+
+// ── Integrations form ─────────────────────────────────────────────────────────
+const intSaving = ref(false)
+const intSaved = ref(false)
+const intForm = ref({
+  ai_api_key: '',
+  ai_model: '',
+  ai_provider: 'openrouter',
+  whatsapp_phone_number_id: '',
+  whatsapp_access_token: '',
+  whatsapp_verify_token: '',
+  whatsapp_enabled: false,
+  messenger_page_id: '',
+  messenger_page_access_token: '',
+  messenger_verify_token: '',
+  messenger_enabled: false,
+  hubspot_api_key: '',
+})
+
+const aiProviders = [
+  { val: 'openrouter', label: 'OpenRouter' },
+  { val: 'openai', label: 'OpenAI' },
+  { val: 'anthropic', label: 'Anthropic' },
+]
+
+const whatsappWebhookUrl = computed(() =>
+  props.client ? `${backendUrl}/api/chat/webhooks/whatsapp/${props.client.id}/` : ''
+)
+const messengerWebhookUrl = computed(() =>
+  props.client ? `${backendUrl}/api/chat/webhooks/messenger/${props.client.id}/` : ''
+)
 
 const form = ref({
   chatbot_name: '',
@@ -266,7 +460,34 @@ watch(() => props.client, (c) => {
   form.value.voice_input_enabled = c.voice_input_enabled || false
   form.value.image_input_enabled = c.image_input_enabled || false
   scrapePages.value = c.total_pages_ingested || 0
+
+  // Integrations
+  intForm.value.ai_api_key = c.ai_api_key || ''
+  intForm.value.ai_model = c.ai_model || ''
+  intForm.value.ai_provider = c.ai_provider || 'openrouter'
+  intForm.value.whatsapp_phone_number_id = c.whatsapp_phone_number_id || ''
+  intForm.value.whatsapp_access_token = c.whatsapp_access_token || ''
+  intForm.value.whatsapp_verify_token = c.whatsapp_verify_token || ''
+  intForm.value.whatsapp_enabled = c.whatsapp_enabled || false
+  intForm.value.messenger_page_id = c.messenger_page_id || ''
+  intForm.value.messenger_page_access_token = c.messenger_page_access_token || ''
+  intForm.value.messenger_verify_token = c.messenger_verify_token || ''
+  intForm.value.messenger_enabled = c.messenger_enabled || false
+  intForm.value.hubspot_api_key = c.hubspot_api_key || ''
 }, { immediate: true })
+
+async function saveIntegrations() {
+  if (!props.client) return
+  intSaving.value = true
+  try {
+    const updated = await api.updatePortalClient(props.client.id, intForm.value)
+    emit('client-updated', updated)
+    intSaved.value = true
+    setTimeout(() => { intSaved.value = false }, 3000)
+  } catch {} finally {
+    intSaving.value = false
+  }
+}
 
 async function copyCode() {
   try {
@@ -652,4 +873,44 @@ const scrapeStatusLabel = computed(() => {
 }
 .toggle input:checked + .toggle-slider { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
 .toggle input:checked + .toggle-slider::before { transform: translateX(20px); background: #6366f1; }
+
+/* Integrations */
+.status-badge.inactive { background: rgba(71,85,105,0.2); color: #475569; border: 1px solid rgba(71,85,105,0.3); }
+.field-hint { font-size: 11px; color: #334155; line-height: 1.5; }
+.save-row { display: flex; justify-content: flex-end; }
+.btn-save {
+  padding: 9px 22px;
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a5b4fc;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-save:hover:not(:disabled) { background: rgba(99,102,241,0.25); }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.toggle-row { display: flex; align-items: center; gap: 12px; }
+.toggle-btn {
+  position: relative;
+  width: 44px; height: 24px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.toggle-btn.on { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
+.toggle-knob {
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #475569;
+  transition: all 0.2s;
+}
+.toggle-btn.on .toggle-knob { transform: translateX(20px); background: #6366f1; }
+.toggle-lbl { font-size: 13px; color: #64748b; }
 </style>

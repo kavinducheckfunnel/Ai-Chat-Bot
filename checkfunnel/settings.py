@@ -201,10 +201,15 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'users.tasks.reset_monthly_sessions',
         'schedule': crontab(day_of_month='1', hour='0', minute='0'),
     },
-    # Monthly lead report + chat digest: 1st of every month at 01:00 UTC
+    # Monthly lead report: 1st of every month at 01:00 UTC
     'monthly-lead-report': {
         'task': 'users.tasks.send_monthly_lead_reports',
         'schedule': crontab(day_of_month='1', hour='1', minute='0'),
+    },
+    # Monthly chat history transcript digest: 1st of every month at 02:00 UTC
+    'monthly-chat-history-report': {
+        'task': 'users.tasks.send_monthly_chat_history_report',
+        'schedule': crontab(day_of_month='1', hour='2', minute='0'),
     },
     # FOMO engine: check hot sessions every 10 minutes
     'trigger-fomo-periodic': {
