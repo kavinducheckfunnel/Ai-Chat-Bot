@@ -5,7 +5,7 @@ import threading
 from datetime import timedelta
 
 from django.contrib.auth.models import User
-from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, Q
+from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, FloatField, Q, Sum
 from django.db.models.functions import TruncDate
 from django.http import HttpResponse
 from django.utils import timezone
@@ -394,49 +394,87 @@ def client_analytics(request, client_id):
     except Client.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
-    sessions = ChatSession.objects.filter(client=client)
-    total = sessions.count()
+    # ── Period window ─────────────────────────────────────────────────────────
+    period = request.query_params.get('period', '30d')
+    now = timezone.now()
+    period_days_map = {'today': 1, '7d': 7, '30d': 30, '90d': 90}
+    days = period_days_map.get(period, 30)
 
-    # Conversation funnel
+    if period == 'today':
+        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        period_start = now - timedelta(days=days)
+
+    prev_end = period_start
+    prev_start = period_start - timedelta(days=days)
+
+    all_sessions = ChatSession.objects.filter(client=client)
+    sessions = all_sessions.filter(created_at__gte=period_start)
+    prev_sessions = all_sessions.filter(created_at__gte=prev_start, created_at__lt=prev_end)
+
+    # ── Reusable metric computation ───────────────────────────────────────────
+    heat_expr = ExpressionWrapper(
+        (F('current_intent_ema') * 0.45 + F('current_budget_ema') * 0.30 + F('current_urgency_ema') * 0.25) * 100,
+        output_field=FloatField()
+    )
+    dur_expr = ExpressionWrapper(F('updated_at') - F('created_at'), output_field=DurationField())
+
+    def get_metrics(qs):
+        total = qs.count()
+        unique_visitors = qs.values('visitor_id').distinct().count()
+        ai_handled = qs.filter(taken_over_by__isnull=True).count()
+        manual_handled = qs.filter(taken_over_by__isnull=False).count()
+        missed = qs.filter(message_count=0).count()
+
+        dur_qs = qs.annotate(dur=dur_expr)
+        avg_dur_td = dur_qs.aggregate(avg=Avg('dur'))['avg']
+        total_dur_td = dur_qs.aggregate(total=Sum('dur'))['total']
+        avg_dur_s = int(avg_dur_td.total_seconds()) if avg_dur_td else 0
+        total_dur_s = int(total_dur_td.total_seconds()) if total_dur_td else 0
+
+        leads = qs.filter(
+            Q(lead_email__isnull=False) | Q(lead_phone__isnull=False)
+        ).exclude(lead_email='').count()
+
+        annotated = qs.annotate(heat=heat_expr)
+        hot = annotated.filter(heat__gte=70).count()
+        warm = annotated.filter(heat__gte=40, heat__lt=70).count()
+        cold = annotated.filter(heat__lt=40).count()
+        avg_heat = annotated.aggregate(avg=Avg('heat'))['avg'] or 0
+        ai_res_rate = round((ai_handled / total * 100) if total > 0 else 0, 1)
+
+        return {
+            'total': total, 'unique_visitors': unique_visitors,
+            'ai_handled': ai_handled, 'manual_handled': manual_handled,
+            'missed': missed, 'avg_dur_s': avg_dur_s, 'total_dur_s': total_dur_s,
+            'leads': leads, 'hot': hot, 'warm': warm, 'cold': cold,
+            'avg_heat': round(avg_heat, 1), 'ai_resolution_rate': ai_res_rate,
+        }
+
+    def metric_obj(curr_val, prev_val):
+        return {'value': curr_val, 'previous': prev_val, 'delta': curr_val - prev_val}
+
+    curr = get_metrics(sessions)
+    prev = get_metrics(prev_sessions)
+
+    # ── Funnel + EMA (current period) ─────────────────────────────────────────
     state_counts = sessions.values('conversation_state').annotate(count=Count('session_id'))
     funnel = {item['conversation_state']: item['count'] for item in state_counts}
 
-    # EMA averages
     agg = sessions.aggregate(
         avg_intent=Avg('current_intent_ema'),
         avg_budget=Avg('current_budget_ema'),
         avg_urgency=Avg('current_urgency_ema'),
     )
-    avg_intent = agg['avg_intent'] or 0
-    avg_budget = agg['avg_budget'] or 0
-    avg_urgency = agg['avg_urgency'] or 0
 
-    # Heat distribution via DB expression
-    heat_expr = ExpressionWrapper(
-        (F('current_intent_ema') * 0.45 + F('current_budget_ema') * 0.30 + F('current_urgency_ema') * 0.25) * 100,
-        output_field=FloatField()
-    )
-    annotated = sessions.annotate(heat=heat_expr)
-    hot_count = annotated.filter(heat__gte=70).count()
-    warm_count = annotated.filter(heat__gte=40, heat__lt=70).count()
-    cold_count = annotated.filter(heat__lt=40).count()
-    avg_heat = annotated.aggregate(avg=Avg('heat'))['avg'] or 0
-
-    # Leads captured
-    leads_captured = sessions.filter(
-        Q(lead_email__isnull=False) | Q(lead_phone__isnull=False)
-    ).exclude(lead_email='', lead_phone='').count()
-
-    # Kanban breakdown
     kanban_raw = sessions.values('kanban_state').annotate(count=Count('session_id'))
     kanban_breakdown = {item['kanban_state']: item['count'] for item in kanban_raw}
 
-    # 14-day daily trend
-    today = timezone.now().date()
-    cutoff = timezone.now() - timedelta(days=14)
+    # ── Daily trend ───────────────────────────────────────────────────────────
+    today = now.date()
+    trend_days = min(days, 30)
     daily_raw = (
         sessions
-        .filter(created_at__gte=cutoff)
         .annotate(day=TruncDate('created_at'))
         .values('day')
         .annotate(count=Count('session_id'))
@@ -445,10 +483,10 @@ def client_analytics(request, client_id):
     daily_map = {item['day']: item['count'] for item in daily_raw}
     daily_trend = [
         {'date': (today - timedelta(days=i)).strftime('%b %d'), 'count': daily_map.get(today - timedelta(days=i), 0)}
-        for i in range(13, -1, -1)
+        for i in range(trend_days - 1, -1, -1)
     ]
 
-    # Analytics events — aggregate from behavioral_context (populated by beacon)
+    # ── Analytics events ──────────────────────────────────────────────────────
     total_page_views = 0
     total_exit_intent = 0
     total_pricing_visits = 0
@@ -460,23 +498,39 @@ def client_analytics(request, client_id):
             total_exit_intent += 1
 
     return Response({
-        'total_sessions': total,
-        'hot_sessions': hot_count,
-        'avg_heat_score': round(avg_heat, 1),
-        'heat_distribution': {'hot': hot_count, 'warm': warm_count, 'cold': cold_count},
-        'avg_intent': round(avg_intent * 100, 1),
-        'avg_budget': round(avg_budget * 100, 1),
-        'avg_urgency': round(avg_urgency * 100, 1),
-        'leads_captured': leads_captured,
+        'period': period,
+
+        # ── Metrics with period deltas ────────────────────────────────────────
+        'total_sessions':        metric_obj(curr['total'], prev['total']),
+        'unique_visitors':       metric_obj(curr['unique_visitors'], prev['unique_visitors']),
+        'ai_handled':            metric_obj(curr['ai_handled'], prev['ai_handled']),
+        'manual_handled':        metric_obj(curr['manual_handled'], prev['manual_handled']),
+        'missed_chats':          metric_obj(curr['missed'], prev['missed']),
+        'ai_resolution_rate':    metric_obj(curr['ai_resolution_rate'], prev['ai_resolution_rate']),
+        'avg_duration_seconds':  metric_obj(curr['avg_dur_s'], prev['avg_dur_s']),
+        'total_duration_seconds': metric_obj(curr['total_dur_s'], prev['total_dur_s']),
+        'leads_captured':        metric_obj(curr['leads'], prev['leads']),
+        'hot_sessions':          metric_obj(curr['hot'], prev['hot']),
+        'avg_heat_score':        curr['avg_heat'],
+        'heat_distribution':     {'hot': curr['hot'], 'warm': curr['warm'], 'cold': curr['cold']},
+
+        # ── EMA signal averages ───────────────────────────────────────────────
+        'avg_intent':  round((agg['avg_intent'] or 0) * 100, 1),
+        'avg_budget':  round((agg['avg_budget'] or 0) * 100, 1),
+        'avg_urgency': round((agg['avg_urgency'] or 0) * 100, 1),
+
+        # ── Funnel / Kanban ───────────────────────────────────────────────────
         'funnel': {
-            'RESEARCH': funnel.get('RESEARCH', 0),
-            'EVALUATION': funnel.get('EVALUATION', 0),
-            'OBJECTION': funnel.get('OBJECTION', 0),
-            'RECOVERY': funnel.get('RECOVERY', 0),
+            'RESEARCH':    funnel.get('RESEARCH', 0),
+            'EVALUATION':  funnel.get('EVALUATION', 0),
+            'OBJECTION':   funnel.get('OBJECTION', 0),
+            'RECOVERY':    funnel.get('RECOVERY', 0),
             'READY_TO_BUY': funnel.get('READY_TO_BUY', 0),
         },
         'kanban_breakdown': kanban_breakdown,
         'daily_trend': daily_trend,
+
+        # ── Analytics events ──────────────────────────────────────────────────
         'analytics_events': {
             'page_views': total_page_views,
             'exit_intent_count': total_exit_intent,

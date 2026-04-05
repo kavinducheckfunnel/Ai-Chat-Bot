@@ -225,7 +225,7 @@ export function useAdminApi() {
       return apiFetch(`/api/admin/clients/${clientId}/sessions/${qs ? '?' + qs : ''}`)
     },
 
-    getPortalAnalytics: (clientId) => apiFetch(`/api/admin/clients/${clientId}/analytics/`),
+    getPortalAnalytics: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/analytics/?period=${period}`),
 
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {
