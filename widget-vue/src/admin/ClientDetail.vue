@@ -543,7 +543,13 @@ async function loadClient() {
       api.getClientAnalytics(route.params.id),
     ])
     client.value = clientData
-    analytics.value = analyticsData
+    // Flatten period-delta envelope {value, previous, delta} → plain numbers
+    // so all existing template bindings continue to work unchanged
+    const flat = {}
+    for (const [k, v] of Object.entries(analyticsData || {})) {
+      flat[k] = (v && typeof v === 'object' && 'value' in v) ? v.value : v
+    }
+    analytics.value = flat
     settingsForm.value = {
       chatbot_name: clientData.chatbot_name || 'AI Assistant',
       chatbot_color: clientData.chatbot_color || '#3B82F6',
