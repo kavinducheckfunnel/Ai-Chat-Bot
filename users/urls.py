@@ -1,5 +1,5 @@
 from django.urls import path
-from . import admin_views
+from . import admin_views, billing_views
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
@@ -8,9 +8,13 @@ urlpatterns = [
     path('auth/login/', admin_views.login_view, name='admin-login'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='admin-token-refresh'),
     path('auth/me/', admin_views.me_view, name='admin-me'),
+    path('auth/forgot-password/', admin_views.forgot_password, name='admin-forgot-password'),
+    path('auth/reset-password/', admin_views.reset_password, name='admin-reset-password'),
+    path('auth/change-password/', admin_views.change_password, name='admin-change-password'),
 
     # Plans
     path('plans/', admin_views.plan_list, name='admin-plans'),
+    path('plans/<int:plan_id>/', admin_views.plan_detail, name='admin-plan-detail'),
 
     # Clients
     path('clients/', admin_views.client_list, name='admin-clients'),
@@ -33,6 +37,13 @@ urlpatterns = [
     path('kanban/', admin_views.kanban_view, name='admin-kanban'),
     path('leads/', admin_views.leads_list, name='admin-leads'),
     path('leads/export/', admin_views.leads_export, name='admin-leads-export'),
+
+    # Billing
+    path('billing/subscription/', billing_views.get_subscription, name='billing-subscription'),
+    path('billing/checkout/', billing_views.create_checkout_session, name='billing-checkout'),
+    path('billing/portal/', billing_views.create_portal_session, name='billing-portal'),
+    path('billing/webhook/', billing_views.stripe_webhook, name='billing-webhook'),
+    path('billing/plans/', billing_views.public_plans, name='billing-plans'),
 
     # Tenant Management (superadmin only)
     path('tenants/', admin_views.tenant_list, name='admin-tenants'),

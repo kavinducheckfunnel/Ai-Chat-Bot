@@ -59,6 +59,13 @@
         Pipeline
       </router-link>
 
+      <!-- BILLING -->
+      <p class="nav-section">Account</p>
+      <router-link to="/portal/billing" class="nav-item" :class="{ active: $route.path === '/portal/billing' }">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="1" y1="10" x2="23" y2="10" stroke="currentColor" stroke-width="2"/></svg>
+        Billing
+      </router-link>
+
       <!-- SETTINGS -->
       <p class="nav-section">Settings</p>
       <router-link to="/portal/settings" class="nav-item" :class="{ active: $route.path.startsWith('/portal/settings') }">

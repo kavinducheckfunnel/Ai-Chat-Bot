@@ -85,11 +85,32 @@ export function useAdminApi() {
 
     getMe: () => apiFetch('/api/admin/auth/me/'),
 
+    forgotPassword: (email) => fetch(`${API_BASE}/api/admin/auth/forgot-password/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }).then(r => r.json()),
+
+    resetPassword: (uid, token, new_password) => fetch(`${API_BASE}/api/admin/auth/reset-password/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uid, token, new_password }),
+    }).then(r => r.json()),
+
+    changePassword: (current_password, new_password) => apiFetch('/api/admin/auth/change-password/', {
+      method: 'POST',
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
     // ── Platform ─────────────────────────────────────────────────────────
     getStats: () => apiFetch('/api/admin/stats/'),
 
     // ── Plans ────────────────────────────────────────────────────────────
     getPlans: () => apiFetch('/api/admin/plans/'),
+
+    updatePlan: (id, data) => apiFetch(`/api/admin/plans/${id}/`, {
+      method: 'PATCH', body: JSON.stringify(data),
+    }),
 
     // ── Clients ──────────────────────────────────────────────────────────
     getClients: () => apiFetch('/api/admin/clients/'),
@@ -226,6 +247,21 @@ export function useAdminApi() {
     },
 
     getPortalAnalytics: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/analytics/?period=${period}`),
+
+    // ── Billing ──────────────────────────────────────────────────────────────
+    getSubscription: () => apiFetch('/api/admin/billing/subscription/'),
+
+    getPublicPlans: () => apiFetch('/api/admin/billing/plans/'),
+
+    createCheckoutSession: (planId) => apiFetch('/api/admin/billing/checkout/', {
+      method: 'POST',
+      body: JSON.stringify({ plan_id: planId }),
+    }),
+
+    createPortalSession: () => apiFetch('/api/admin/billing/portal/', {
+      method: 'POST',
+      body: '{}',
+    }),
 
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {

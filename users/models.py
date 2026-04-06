@@ -8,6 +8,7 @@ class Plan(models.Model):
     max_clients = models.IntegerField(default=1)
     max_sessions_per_month = models.IntegerField(default=500)
     price_monthly = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    stripe_price_id = models.CharField(max_length=100, blank=True, null=True)  # e.g. price_xxx
 
     def __str__(self):
         return self.name
@@ -134,6 +135,12 @@ class TenantProfile(models.Model):
     company_name = models.CharField(max_length=255, blank=True)
     sessions_this_month = models.IntegerField(default=0)
     onboarding_complete = models.BooleanField(default=False)
+
+    # ── Stripe billing ────────────────────────────────────────────────────────
+    stripe_customer_id = models.CharField(max_length=100, blank=True, null=True)
+    stripe_subscription_id = models.CharField(max_length=100, blank=True, null=True)
+    stripe_subscription_status = models.CharField(max_length=50, blank=True, null=True)
+    trial_ends_at = models.DateTimeField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.company_name or self.user.username}"

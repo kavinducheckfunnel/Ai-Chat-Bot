@@ -363,6 +363,30 @@
       </div>
     </div>
 
+    <!-- ── Security: Change password ─────────────────────────────────────────── -->
+    <div class="section-card" style="margin-top:16px">
+      <h2 class="section-title">Change password</h2>
+      <p class="section-sub">Update the password for your Checkfunnel account.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label>Current password</label>
+          <input class="input" type="password" v-model="pwForm.current" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div class="field">
+          <label>New password</label>
+          <input class="input" type="password" v-model="pwForm.next" placeholder="Min. 8 characters" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label>Confirm new password</label>
+          <input class="input" type="password" v-model="pwForm.confirm" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+      </div>
+      <div v-if="pwError" class="pw-error">{{ pwError }}</div>
+      <div class="save-row">
+        <button class="btn-save" @click="changePassword" :disabled="pwSaving">{{ pwSaving ? 'Saving…' : pwSaved ? '✓ Password updated' : 'Change password' }}</button>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -475,6 +499,30 @@ watch(() => props.client, (c) => {
   intForm.value.messenger_enabled = c.messenger_enabled || false
   intForm.value.hubspot_api_key = c.hubspot_api_key || ''
 }, { immediate: true })
+
+// ── Change password ───────────────────────────────────────────────────────────
+const pwForm = ref({ current: '', next: '', confirm: '' })
+const pwSaving = ref(false)
+const pwSaved = ref(false)
+const pwError = ref('')
+
+async function changePassword() {
+  pwError.value = ''
+  if (!pwForm.value.current) { pwError.value = 'Enter your current password.'; return }
+  if (pwForm.value.next.length < 8) { pwError.value = 'New password must be at least 8 characters.'; return }
+  if (pwForm.value.next !== pwForm.value.confirm) { pwError.value = 'Passwords do not match.'; return }
+  pwSaving.value = true
+  try {
+    await api.changePassword(pwForm.value.current, pwForm.value.next)
+    pwSaved.value = true
+    pwForm.value = { current: '', next: '', confirm: '' }
+    setTimeout(() => { pwSaved.value = false }, 4000)
+  } catch (e) {
+    pwError.value = e.message || 'Failed to update password.'
+  } finally {
+    pwSaving.value = false
+  }
+}
 
 async function saveIntegrations() {
   if (!props.client) return
@@ -878,6 +926,7 @@ const scrapeStatusLabel = computed(() => {
 .status-badge.inactive { background: rgba(71,85,105,0.2); color: #475569; border: 1px solid rgba(71,85,105,0.3); }
 .field-hint { font-size: 11px; color: #334155; line-height: 1.5; }
 .save-row { display: flex; justify-content: flex-end; }
+.pw-error { font-size: 13px; color: #fca5a5; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
 .btn-save {
   padding: 9px 22px;
   background: rgba(99,102,241,0.15);

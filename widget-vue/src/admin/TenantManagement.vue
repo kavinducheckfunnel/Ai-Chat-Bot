@@ -5,10 +5,16 @@
         <h1 class="page-title">Tenant Management</h1>
         <p class="page-sub">Create and manage tenant accounts and plan assignments</p>
       </div>
-      <button class="add-btn" @click="showCreate = true">
-        <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        New Tenant
-      </button>
+      <div style="display:flex;gap:10px">
+        <button class="add-btn" style="background:#1e293b;border:1px solid rgba(255,255,255,0.08);color:#94a3b8;" @click="openPlanManager">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Manage Plans
+        </button>
+        <button class="add-btn" @click="showCreate = true">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          New Tenant
+        </button>
+      </div>
     </div>
 
     <!-- Tenants Table -->
@@ -343,6 +349,41 @@
       </div>
     </div>
 
+    <!-- Plan Manager Modal -->
+    <div v-if="showPlanManager" class="modal-overlay" @click.self="showPlanManager = false">
+      <div class="modal modal-md">
+        <div class="modal-header">
+          <h3>Plan Manager</h3>
+          <button class="modal-close" @click="showPlanManager = false">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="pm-hint">Set the Stripe Price ID for each plan to enable self-service billing. Find Price IDs in your Stripe dashboard → Products.</p>
+          <div class="pm-plan-list">
+            <div v-for="p in plans" :key="p.id" class="pm-plan-row">
+              <div class="pm-plan-info">
+                <span class="pm-plan-name">{{ p.name }}</span>
+                <span class="pm-plan-price">${{ p.price_monthly }}/mo · {{ p.max_sessions_per_month }} sessions</span>
+              </div>
+              <div class="pm-price-field">
+                <input
+                  class="form-input pm-input"
+                  :value="planPriceIds[p.id] ?? p.stripe_price_id ?? ''"
+                  @input="planPriceIds[p.id] = $event.target.value"
+                  placeholder="price_xxx (leave blank for free)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="showPlanManager = false">Cancel</button>
+          <button class="submit-btn" @click="savePlanPriceIds" :disabled="savingPriceIds">{{ savingPriceIds ? 'Saving…' : 'Save Price IDs' }}</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Impersonate toast -->
     <div v-if="impersonateToast" class="toast" :class="impersonateToast.type">
       {{ impersonateToast.msg }}
@@ -399,6 +440,32 @@ const deleting = ref(false)
 
 const impersonating = ref(null)
 const impersonateToast = ref(null)
+
+const showPlanManager = ref(false)
+const planPriceIds = ref({})
+const savingPriceIds = ref(false)
+
+function openPlanManager() {
+  planPriceIds.value = {}
+  showPlanManager.value = true
+}
+
+async function savePlanPriceIds() {
+  savingPriceIds.value = true
+  try {
+    await Promise.all(
+      Object.entries(planPriceIds.value).map(([id, stripe_price_id]) =>
+        api.updatePlan(id, { stripe_price_id: stripe_price_id || null })
+      )
+    )
+    plans.value = await api.getPlans() || []
+    showPlanManager.value = false
+  } catch (e) {
+    alert(e.message || 'Failed to save price IDs.')
+  } finally {
+    savingPriceIds.value = false
+  }
+}
 
 function usagePct(used, max) {
   if (!max) return 0
@@ -710,6 +777,16 @@ onMounted(load)
 .timeline-remark { display: block; font-style: italic; color: #64748B; margin-top: 3px; }
 .history-loading { font-size: 12px; color: #94A3B8; padding: 12px 0; text-align: center; }
 .no-history { font-size: 12px; color: #CBD5E1; padding: 12px 0; text-align: center; font-style: italic; }
+
+/* Plan Manager */
+.pm-hint { font-size: 13px; color: #64748b; margin: 0 0 16px; line-height: 1.6; }
+.pm-plan-list { display: flex; flex-direction: column; gap: 12px; }
+.pm-plan-row { display: flex; align-items: center; gap: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; }
+.pm-plan-info { flex: 1; }
+.pm-plan-name { font-size: 14px; font-weight: 600; color: #1e293b; display: block; }
+.pm-plan-price { font-size: 12px; color: #64748b; }
+.pm-price-field { flex: 1; }
+.pm-input { width: 100%; font-size: 12px; padding: 8px 10px; border-radius: 8px; }
 
 /* Client badges in table */
 .client-badges { display: flex; flex-wrap: wrap; gap: 5px; }

@@ -3,6 +3,8 @@ import { createRouter, createWebHistory, RouterView } from 'vue-router'
 
 import LoginView from './admin/LoginView.vue'
 import SignupView from './admin/SignupView.vue'
+import ForgotPasswordView from './admin/ForgotPasswordView.vue'
+import ResetPasswordView from './admin/ResetPasswordView.vue'
 import AdminLayout from './admin/AdminLayout.vue'
 import LiveDashboard from './admin/LiveDashboard.vue'
 import ClientList from './admin/ClientList.vue'
@@ -20,6 +22,7 @@ import PortalReports from './portal/PortalReports.vue'
 import PortalSettings from './portal/PortalSettings.vue'
 import PortalLiveView from './portal/PortalLiveView.vue'
 import PortalKanban from './portal/PortalKanban.vue'
+import PortalBilling from './portal/PortalBilling.vue'
 
 function getUser() {
   try { return JSON.parse(localStorage.getItem('cf_user') || 'null') } catch { return null }
@@ -34,6 +37,8 @@ const routes = [
   { path: '/admin/login', component: LoginView, meta: { public: true } },
   { path: '/portal/login', redirect: '/admin/login' },
   { path: '/signup', component: SignupView, meta: { public: true } },
+  { path: '/forgot-password', component: ForgotPasswordView, meta: { public: true } },
+  { path: '/reset-password', component: ResetPasswordView, meta: { public: true } },
 
   // ── Superadmin / staff admin SPA ─────────────────────────────────────────
   {
@@ -65,6 +70,7 @@ const routes = [
       { path: 'settings', component: PortalSettings },
       { path: 'live', component: PortalLiveView },
       { path: 'pipeline', component: PortalKanban },
+      { path: 'billing', component: PortalBilling },
     ],
   },
 

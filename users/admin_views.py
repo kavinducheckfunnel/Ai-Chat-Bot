@@ -99,6 +99,96 @@ def login_view(request):
     })
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def forgot_password(request):
+    """Send a password-reset link to the given email address."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_encode
+    from django.utils.encoding import force_bytes
+    from django.core.mail import EmailMessage as DjangoEmail
+    from django.conf import settings as django_settings
+
+    email = request.data.get('email', '').strip().lower()
+    # Always return 200 — never reveal whether an account exists
+    response_msg = 'If an account with that email exists, a reset link has been sent.'
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'detail': response_msg})
+
+    uid = urlsafe_base64_encode(force_bytes(user.pk))
+    token = default_token_generator.make_token(user)
+    reset_url = f'https://ai.checkfunnels.com/reset-password?uid={uid}&token={token}'
+
+    body = (
+        f'Hi {user.get_full_name() or user.username},\n\n'
+        f'Click the link below to reset your Checkfunnel password:\n\n'
+        f'{reset_url}\n\n'
+        f'This link expires in 1 hour. If you did not request a password reset, '
+        f'you can safely ignore this email.\n\n'
+        f'— The Checkfunnel Team'
+    )
+    try:
+        DjangoEmail(
+            subject='Reset your Checkfunnel password',
+            body=body,
+            from_email=django_settings.DEFAULT_FROM_EMAIL,
+            to=[user.email],
+        ).send(fail_silently=True)
+    except Exception as e:
+        logger.warning(f'[forgot_password] Email send failed: {e}')
+
+    return Response({'detail': response_msg})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def reset_password(request):
+    """Validate uid+token and set a new password."""
+    from django.contrib.auth.tokens import default_token_generator
+    from django.utils.http import urlsafe_base64_decode
+    from django.utils.encoding import force_str
+
+    uid = request.data.get('uid', '')
+    token = request.data.get('token', '')
+    new_password = request.data.get('new_password', '')
+
+    if len(new_password) < 8:
+        return Response({'detail': 'Password must be at least 8 characters.'}, status=400)
+
+    try:
+        user_id = force_str(urlsafe_base64_decode(uid))
+        user = User.objects.get(pk=user_id)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return Response({'detail': 'Invalid reset link.'}, status=400)
+
+    if not default_token_generator.check_token(user, token):
+        return Response({'detail': 'Reset link is invalid or has expired.'}, status=400)
+
+    user.set_password(new_password)
+    user.save()
+    return Response({'detail': 'Password has been reset. You can now sign in.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    """Authenticated user changes their own password."""
+    current = request.data.get('current_password', '')
+    new_pw = request.data.get('new_password', '')
+
+    if not request.user.check_password(current):
+        return Response({'detail': 'Current password is incorrect.'}, status=400)
+    if len(new_pw) < 8:
+        return Response({'detail': 'New password must be at least 8 characters.'}, status=400)
+
+    request.user.set_password(new_pw)
+    request.user.save()
+    return Response({'detail': 'Password updated successfully.'})
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def me_view(request):
@@ -901,8 +991,33 @@ def plan_list(request):
         'max_clients': p.max_clients,
         'max_sessions_per_month': p.max_sessions_per_month,
         'price_monthly': str(p.price_monthly),
+        'stripe_price_id': p.stripe_price_id or '',
     } for p in plans]
     return Response(data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsSuperAdmin])
+def plan_detail(request, plan_id):
+    """Update a plan (superadmin only — currently used to set stripe_price_id)."""
+    try:
+        plan = Plan.objects.get(pk=plan_id)
+    except Plan.DoesNotExist:
+        return Response({'detail': 'Plan not found.'}, status=404)
+
+    allowed = ['stripe_price_id', 'name', 'max_clients', 'max_sessions_per_month', 'price_monthly']
+    for field in allowed:
+        if field in request.data:
+            setattr(plan, field, request.data[field])
+    plan.save()
+    return Response({
+        'id': plan.id,
+        'name': plan.name,
+        'max_clients': plan.max_clients,
+        'max_sessions_per_month': plan.max_sessions_per_month,
+        'price_monthly': str(plan.price_monthly),
+        'stripe_price_id': plan.stripe_price_id or '',
+    })
 
 
 @api_view(['POST'])

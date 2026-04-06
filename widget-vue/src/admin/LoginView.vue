@@ -58,6 +58,10 @@
           {{ error }}
         </div>
 
+        <div class="forgot-row">
+          <router-link to="/forgot-password" class="forgot-link">Forgot password?</router-link>
+        </div>
+
         <button type="submit" class="login-btn" :disabled="loading">
           <span v-if="loading" class="spinner"></span>
           <span v-else>Sign in</span>
@@ -281,6 +285,17 @@ async function handleLogin() {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+.forgot-row {
+  display: flex;
+  justify-content: flex-end;
+}
+.forgot-link {
+  font-size: 13px;
+  color: #818cf8;
+  text-decoration: none;
+}
+.forgot-link:hover { text-decoration: underline; }
 
 .signup-prompt {
   margin-top: 20px;
