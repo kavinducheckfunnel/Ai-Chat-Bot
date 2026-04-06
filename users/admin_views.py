@@ -1220,3 +1220,108 @@ def rotate_webhook_secret(request, client_id):
     client.save(update_fields=['webhook_secret'])
     logger.info(f'[rotate_webhook_secret] Rotated secret for client {client_id}')
     return Response({'webhook_secret': new_secret, 'detail': 'Webhook secret rotated.'})
+
+
+# ─── Analytics export ─────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def analytics_export(request, client_id):
+    """
+    Download analytics for a client as a CSV file.
+    Query param: period = today | 7d | 30d | 90d (default 30d)
+    """
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    period = request.query_params.get('period', '30d')
+    now = timezone.now()
+    period_days_map = {'today': 1, '7d': 7, '30d': 30, '90d': 90}
+    days = period_days_map.get(period, 30)
+
+    if period == 'today':
+        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        period_start = now - timedelta(days=days)
+
+    heat_expr = ExpressionWrapper(
+        (F('current_intent_ema') * 0.45 + F('current_budget_ema') * 0.30 + F('current_urgency_ema') * 0.25) * 100,
+        output_field=FloatField()
+    )
+
+    sessions = (
+        ChatSession.objects
+        .filter(client=client, created_at__gte=period_start)
+        .annotate(heat=heat_expr)
+        .values(
+            'session_id', 'visitor_id', 'channel', 'kanban_state',
+            'conversation_state', 'heat', 'lead_email', 'lead_phone',
+            'message_count', 'visitor_country', 'visitor_device',
+            'created_at', 'updated_at',
+        )
+        .order_by('-created_at')
+    )
+
+    filename = f'{client.name}_analytics_{period}_{now.strftime("%Y%m%d")}.csv'
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow([
+        'Session ID', 'Visitor ID', 'Channel', 'Kanban State', 'Conv State',
+        'Heat Score', 'Lead Email', 'Lead Phone', 'Messages',
+        'Country', 'Device', 'Created At', 'Last Updated',
+    ])
+    for s in sessions:
+        writer.writerow([
+            str(s['session_id']),
+            s['visitor_id'],
+            s['channel'],
+            s['kanban_state'],
+            s['conversation_state'],
+            round(min(s['heat'] or 0, 100), 1),
+            s['lead_email'] or '',
+            s['lead_phone'] or '',
+            s['message_count'],
+            s['visitor_country'] or '',
+            s['visitor_device'] or '',
+            s['created_at'].strftime('%Y-%m-%d %H:%M') if s['created_at'] else '',
+            s['updated_at'].strftime('%Y-%m-%d %H:%M') if s['updated_at'] else '',
+        ])
+
+    return response
+
+
+# ─── Session tags ─────────────────────────────────────────────────────────────
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def session_set_tags(request, session_id):
+    """
+    Set (replace) the tags list on a session.
+    Body: { "tags": ["Support", "VIP"] }
+    """
+    from .permissions import get_accessible_clients
+    tags = request.data.get('tags')
+    if not isinstance(tags, list):
+        return Response({'detail': 'tags must be a list.'}, status=400)
+
+    # Validate each tag is a non-empty string, max 50 chars
+    cleaned = []
+    for t in tags:
+        if isinstance(t, str) and t.strip():
+            cleaned.append(t.strip()[:50])
+
+    accessible_client_ids = get_accessible_clients(request.user).values_list('id', flat=True)
+    updated = ChatSession.objects.filter(
+        session_id=session_id,
+        client_id__in=accessible_client_ids,
+    ).update(tags=cleaned)
+
+    if not updated:
+        return Response({'detail': 'Session not found or access denied.'}, status=404)
+
+    return Response({'tags': cleaned})

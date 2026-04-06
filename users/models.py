@@ -95,6 +95,21 @@ class Client(models.Model):
     # ── HubSpot CRM ───────────────────────────────────────────────────────────
     hubspot_api_key = models.CharField(max_length=500, blank=True, null=True)
 
+    # ── Telegram Bot ──────────────────────────────────────────────────────────
+    telegram_bot_token = models.CharField(max_length=200, blank=True, null=True)
+    telegram_enabled = models.BooleanField(default=False)
+
+    # ── Slack & outbound webhooks ─────────────────────────────────────────────
+    slack_webhook_url = models.CharField(max_length=500, blank=True, null=True)
+    outbound_webhook_url = models.CharField(max_length=500, blank=True, null=True)
+    outbound_webhook_events = models.CharField(
+        max_length=200, default='hot_lead,lead_captured,new_session'
+    )
+
+    # ── Canned responses ──────────────────────────────────────────────────────
+    # [{"id": "uuid-str", "title": "Greeting", "body": "Hi there! How can I help?"}]
+    canned_responses = models.JSONField(default=list, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

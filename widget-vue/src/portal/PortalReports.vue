@@ -13,6 +13,11 @@
             {{ p.label }}
           </button>
         </div>
+        <button class="export-btn" @click="exportCSV" :disabled="exporting" title="Download CSV">
+          <svg v-if="!exporting" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span v-if="exporting" class="mini-spinner-sm"></span>
+          {{ exporting ? 'Exporting…' : 'Export CSV' }}
+        </button>
       </div>
     </div>
 
@@ -346,6 +351,7 @@ const props = defineProps({ client: Object })
 const api = useAdminApi()
 
 const loading = ref(true)
+const exporting = ref(false)
 const period = ref('30d')
 const activeTab = ref('overview')
 const analytics = ref({})
@@ -576,6 +582,18 @@ async function load() {
   }
 }
 
+async function exportCSV() {
+  if (!props.client) return
+  exporting.value = true
+  try {
+    await api.exportAnalyticsCSV(props.client.id, period.value)
+  } catch (e) {
+    alert('Export failed: ' + (e.message || 'Unknown error'))
+  } finally {
+    exporting.value = false
+  }
+}
+
 onMounted(load)
 watch(() => props.client, load)
 watch(period, load)
@@ -602,6 +620,10 @@ watch(period, load)
 .period-btn { padding: 6px 14px; background: none; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; color: #475569; cursor: pointer; transition: all 0.12s; }
 .period-btn:hover { color: #94a3b8; }
 .period-btn.active { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+.export-btn { display: flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); border-radius: 9px; font-size: 12px; font-weight: 500; color: #a5b4fc; cursor: pointer; transition: all 0.12s; }
+.export-btn:hover:not(:disabled) { background: rgba(99,102,241,0.2); }
+.export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mini-spinner-sm { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(165,180,252,0.3); border-top-color: #a5b4fc; border-radius: 50%; animation: spin 0.6s linear infinite; }
 
 /* Tab nav */
 .tab-nav { display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,0.07); }

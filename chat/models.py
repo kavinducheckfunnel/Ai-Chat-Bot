@@ -31,6 +31,7 @@ class ChatSession(models.Model):
         ('website', 'Website'),
         ('whatsapp', 'WhatsApp'),
         ('messenger', 'Messenger'),
+        ('telegram', 'Telegram'),
     ]
 
     session_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_index=True)
@@ -91,6 +92,9 @@ class ChatSession(models.Model):
     nudge_count = models.IntegerField(default=0)
     last_nudge_at = models.DateTimeField(null=True, blank=True)
     last_visitor_message_at = models.DateTimeField(null=True, blank=True)
+
+    # Conversation tags — tenant-applied labels e.g. ["Support", "VIP"]
+    tags = models.JSONField(default=list, blank=True)
 
     # Email notification flags
     hot_lead_email_sent = models.BooleanField(default=False)

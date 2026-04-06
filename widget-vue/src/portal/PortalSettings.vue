@@ -162,6 +162,25 @@
           </label>
         </div>
       </div>
+
+      <!-- Canned responses -->
+      <div class="section-card">
+        <h2 class="section-title">Canned responses</h2>
+        <p class="section-sub">Quick-reply shortcuts available during live takeover. Click to insert into the message box.</p>
+        <div class="canned-list">
+          <div v-for="(cr, idx) in cannedResponses" :key="cr.id" class="canned-row">
+            <div class="canned-fields">
+              <input class="input" type="text" v-model="cr.title" placeholder="Title (e.g. Greeting)" maxlength="60" />
+              <textarea class="input canned-body" v-model="cr.body" placeholder="Response text…" rows="2" maxlength="500" />
+            </div>
+            <button class="canned-del" @click="removeCanned(idx)" title="Remove">✕</button>
+          </div>
+          <button class="btn-add-canned" @click="addCanned">+ Add response</button>
+        </div>
+        <div class="save-row">
+          <button class="btn-save" @click="saveCanned" :disabled="cannedSaving">{{ cannedSaving ? 'Saving…' : cannedSaved ? '✓ Saved' : 'Save canned responses' }}</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── Knowledge base ──────────────────────────────────────────────────── -->
@@ -363,6 +382,89 @@
       </div>
     </div>
 
+    <!-- Telegram Bot -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-icon" style="background:#0088cc20">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0088cc" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+        </div>
+        <div>
+          <h2 class="section-title">Telegram Bot</h2>
+          <p class="section-sub">Connect a Telegram bot so visitors can chat via Telegram.</p>
+        </div>
+        <div class="status-badge" :class="intForm.telegram_enabled ? 'active' : 'inactive'">{{ intForm.telegram_enabled ? 'Enabled' : 'Disabled' }}</div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Bot Token</label>
+          <input class="input" type="password" v-model="intForm.telegram_bot_token" placeholder="123456:ABCdef..." autocomplete="off" />
+          <span class="field-hint">Obtain from @BotFather on Telegram. Set the webhook URL to: <code>{{ telegramWebhookUrl }}</code></span>
+        </div>
+        <div class="field toggle-field" style="grid-column:1/-1">
+          <label class="toggle-label">
+            <input type="checkbox" v-model="intForm.telegram_enabled" class="toggle-input" />
+            <span class="toggle-slider"></span>
+            Enable Telegram channel
+          </label>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Telegram settings' }}</button>
+      </div>
+    </div>
+
+    <!-- Slack notifications -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-icon" style="background:#4a154b20">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a154b" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="2"/><rect x="14" y="2" width="8" height="8" rx="2"/><rect x="2" y="14" width="8" height="8" rx="2"/><rect x="14" y="14" width="8" height="8" rx="2"/></svg>
+        </div>
+        <div>
+          <h2 class="section-title">Slack Notifications</h2>
+          <p class="section-sub">Get notified in Slack when a hot lead or new lead is captured.</p>
+        </div>
+        <div class="status-badge" :class="intForm.slack_webhook_url ? 'active' : 'inactive'">{{ intForm.slack_webhook_url ? 'Connected' : 'Not connected' }}</div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Incoming Webhook URL</label>
+          <input class="input" type="password" v-model="intForm.slack_webhook_url" placeholder="https://hooks.slack.com/services/..." autocomplete="off" />
+          <span class="field-hint">Create an Incoming Webhook in your Slack workspace → Apps → Incoming Webhooks.</span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Slack settings' }}</button>
+      </div>
+    </div>
+
+    <!-- Outbound Webhooks (Zapier / n8n) -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-icon" style="background:#ff620020">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6200" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div>
+          <h2 class="section-title">Outbound Webhook (Zapier / n8n)</h2>
+          <p class="section-sub">POST event data to an external URL when key events occur.</p>
+        </div>
+        <div class="status-badge" :class="intForm.outbound_webhook_url ? 'active' : 'inactive'">{{ intForm.outbound_webhook_url ? 'Active' : 'Not set' }}</div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Webhook URL</label>
+          <input class="input" type="text" v-model="intForm.outbound_webhook_url" placeholder="https://hooks.zapier.com/hooks/catch/..." />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Events to send (comma-separated)</label>
+          <input class="input" type="text" v-model="intForm.outbound_webhook_events" placeholder="hot_lead,lead_captured,new_session" />
+          <span class="field-hint">Available events: <code>hot_lead</code>, <code>lead_captured</code>, <code>new_session</code></span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save webhook settings' }}</button>
+      </div>
+    </div>
+
     <!-- ── Security: Change password ─────────────────────────────────────────── -->
     <div class="section-card" style="margin-top:16px">
       <h2 class="section-title">Change password</h2>
@@ -426,6 +528,11 @@ const intForm = ref({
   messenger_verify_token: '',
   messenger_enabled: false,
   hubspot_api_key: '',
+  telegram_bot_token: '',
+  telegram_enabled: false,
+  slack_webhook_url: '',
+  outbound_webhook_url: '',
+  outbound_webhook_events: 'hot_lead,lead_captured,new_session',
 })
 
 const aiProviders = [
@@ -439,6 +546,9 @@ const whatsappWebhookUrl = computed(() =>
 )
 const messengerWebhookUrl = computed(() =>
   props.client ? `${backendUrl}/api/chat/webhooks/messenger/${props.client.id}/` : ''
+)
+const telegramWebhookUrl = computed(() =>
+  props.client ? `${backendUrl}/api/chat/webhooks/telegram/${props.client.id}/` : ''
 )
 
 const form = ref({
@@ -498,7 +608,37 @@ watch(() => props.client, (c) => {
   intForm.value.messenger_verify_token = c.messenger_verify_token || ''
   intForm.value.messenger_enabled = c.messenger_enabled || false
   intForm.value.hubspot_api_key = c.hubspot_api_key || ''
+  intForm.value.telegram_bot_token = c.telegram_bot_token || ''
+  intForm.value.telegram_enabled = c.telegram_enabled || false
+  intForm.value.slack_webhook_url = c.slack_webhook_url || ''
+  intForm.value.outbound_webhook_url = c.outbound_webhook_url || ''
+  intForm.value.outbound_webhook_events = c.outbound_webhook_events || 'hot_lead,lead_captured,new_session'
+  cannedResponses.value = (c.canned_responses || []).map(cr => ({ ...cr }))
 }, { immediate: true })
+
+// ── Canned responses ─────────────────────────────────────────────────────────
+const cannedResponses = ref([])
+const cannedSaving = ref(false)
+const cannedSaved = ref(false)
+
+function addCanned() {
+  cannedResponses.value.push({ id: crypto.randomUUID(), title: '', body: '' })
+}
+function removeCanned(idx) {
+  cannedResponses.value.splice(idx, 1)
+}
+async function saveCanned() {
+  if (!props.client) return
+  cannedSaving.value = true
+  try {
+    const updated = await api.updatePortalClient(props.client.id, { canned_responses: cannedResponses.value })
+    emit('client-updated', updated)
+    cannedSaved.value = true
+    setTimeout(() => { cannedSaved.value = false }, 3000)
+  } catch {} finally {
+    cannedSaving.value = false
+  }
+}
 
 // ── Change password ───────────────────────────────────────────────────────────
 const pwForm = ref({ current: '', next: '', confirm: '' })
@@ -962,4 +1102,17 @@ const scrapeStatusLabel = computed(() => {
 }
 .toggle-btn.on .toggle-knob { transform: translateX(20px); background: #6366f1; }
 .toggle-lbl { font-size: 13px; color: #64748b; }
+/* Canned responses */
+.canned-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.canned-row { display: flex; gap: 10px; align-items: flex-start; }
+.canned-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.canned-body { resize: vertical; min-height: 56px; font-family: inherit; }
+.canned-del { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); color: #fca5a5; border-radius: 7px; width: 32px; height: 32px; cursor: pointer; flex-shrink: 0; font-size: 13px; margin-top: 4px; }
+.canned-del:hover { background: rgba(239,68,68,0.2); }
+.btn-add-canned { background: rgba(99,102,241,0.08); border: 1px dashed rgba(99,102,241,0.3); color: #818cf8; border-radius: 9px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+.btn-add-canned:hover { background: rgba(99,102,241,0.15); }
+/* Toggle label in form */
+.toggle-field { display: flex; align-items: center; }
+.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: #94a3b8; }
+.toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
 </style>

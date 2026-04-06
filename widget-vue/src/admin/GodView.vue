@@ -97,6 +97,16 @@
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
             You are controlling this conversation — AI is paused
           </div>
+          <!-- Canned responses quick-replies -->
+          <div v-if="cannedResponses.length" class="canned-pills">
+            <button
+              v-for="cr in cannedResponses"
+              :key="cr.id"
+              class="canned-pill"
+              @click="adminMessage = cr.body"
+              :title="cr.body"
+            >{{ cr.title }}</button>
+          </div>
           <div class="input-row">
             <textarea
               v-model="adminMessage"
@@ -110,7 +120,7 @@
               <div v-else class="btn-loader"></div>
             </button>
           </div>
-          <p class="input-hint">Ctrl+Enter to send</p>
+          <p class="input-hint">Ctrl+Enter to send · Click a quick reply above to insert</p>
         </div>
         <div v-else class="ai-active-notice">
           AI is handling this conversation. Click "Take Over" to send messages manually.
@@ -136,6 +146,7 @@ const actionLoading = ref(false)
 const adminMessage = ref('')
 const sending = ref(false)
 const chatContainer = ref(null)
+const cannedResponses = ref([])
 
 async function loadSession() {
   loading.value = true
@@ -143,6 +154,13 @@ async function loadSession() {
     const data = await api.getSession(sessionId)
     session.value = data
     chatHistory.value = data.chat_history || []
+    // Load client's canned responses if available
+    if (data.client_id) {
+      try {
+        const client = await api.getClient(data.client_id)
+        cannedResponses.value = client.canned_responses || []
+      } catch {}
+    }
   } catch (e) {
     console.error(e)
   } finally {
@@ -371,6 +389,9 @@ onUnmounted(() => clearInterval(pollInterval))
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .input-hint { font-size: 10px; color: #CBD5E1; margin-top: 6px; }
+.canned-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.canned-pill { padding: 5px 12px; background: rgba(99,102,241,0.08); border: 1px solid rgba(99,102,241,0.2); border-radius: 20px; font-size: 12px; color: #6366f1; cursor: pointer; transition: all 0.12s; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+.canned-pill:hover { background: rgba(99,102,241,0.18); }
 
 .ai-active-notice {
   border-top: 1px solid #F1F5F9; padding: 14px 20px;

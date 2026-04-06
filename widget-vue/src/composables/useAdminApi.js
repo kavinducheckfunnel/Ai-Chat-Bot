@@ -134,7 +134,24 @@ export function useAdminApi() {
       return apiFetch(`/api/admin/clients/${id}/sessions/${qs ? '?' + qs : ''}`)
     },
 
-    getClientAnalytics: (id) => apiFetch(`/api/admin/clients/${id}/analytics/`),
+    getClientAnalytics: (id, period = '30d') => apiFetch(`/api/admin/clients/${id}/analytics/?period=${period}`),
+
+    async exportAnalyticsCSV(clientId, period = '30d') {
+      const token = localStorage.getItem('cf_access_token')
+      const res = await fetch(`${API_BASE}/api/admin/clients/${clientId}/analytics/export/?period=${period}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) throw new Error('Export failed')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `analytics_${period}_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    },
 
     triggerScrape: (id) => apiFetch(`/api/admin/clients/${id}/scrape/`, { method: 'POST' }),
 
@@ -177,6 +194,10 @@ export function useAdminApi() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     },
+
+    updateSessionTags: (sessionId, tags) => apiFetch(`/api/admin/sessions/${sessionId}/tags/`, {
+      method: 'PATCH', body: JSON.stringify({ tags }),
+    }),
 
     // ── God View ─────────────────────────────────────────────────────────
     takeoverSession: (id) => apiFetch(`/api/admin/sessions/${id}/takeover/`, { method: 'POST', body: '{}' }),

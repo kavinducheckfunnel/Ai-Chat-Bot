@@ -191,12 +191,29 @@
         </div>
 
         <!-- Chat tags -->
-        <div class="vp-section" v-if="selected.kanban_state">
-          <div class="vp-section-title">Chat tags</div>
+        <div class="vp-section">
+          <div class="vp-section-title">Labels</div>
           <div class="vp-tags-row">
             <span class="vp-tag" :class="kanbanClass(selected.kanban_state)">{{ selected.kanban_state.replace('_', ' ').toLowerCase() }}</span>
             <span class="vp-tag vp-tag-state">{{ selected.conversation_state.replace('_', ' ').toLowerCase() }}</span>
+            <span
+              v-for="t in (selected.tags || [])"
+              :key="t"
+              class="vp-tag vp-tag-custom"
+            >{{ t }}<button class="tag-del" @click.stop="removeTag(t)">✕</button></span>
           </div>
+          <div class="tag-input-row">
+            <input
+              class="tag-input"
+              v-model="tagInput"
+              placeholder="Add label…"
+              maxlength="50"
+              @keydown.enter.prevent="addTag"
+              @keydown.comma.prevent="addTag"
+            />
+            <button class="tag-add-btn" @click="addTag" :disabled="!tagInput.trim()">Add</button>
+          </div>
+          <p v-if="tagError" class="tag-error">{{ tagError }}</p>
         </div>
 
         <!-- Visited pages -->
@@ -450,13 +467,62 @@ function formatDuration(seconds) {
   return `${m}m ${s}s`
 }
 
+// ── Tags ─────────────────────────────────────────────────────────────────────
+const tagInput = ref('')
+const tagError = ref('')
+
+async function addTag() {
+  const tag = tagInput.value.trim()
+  if (!tag || !selected.value) return
+  const existing = selected.value.tags || []
+  if (existing.includes(tag)) { tagError.value = 'Tag already exists.'; return }
+  tagError.value = ''
+  const newTags = [...existing, tag]
+  try {
+    await api.updateSessionTags(selected.value.session_id, newTags)
+    const idx = sessions.value.findIndex(s => s.session_id === selected.value.session_id)
+    if (idx !== -1) sessions.value[idx] = { ...sessions.value[idx], tags: newTags }
+    tagInput.value = ''
+  } catch (e) {
+    tagError.value = 'Failed to save tag.'
+  }
+}
+
+async function removeTag(tag) {
+  if (!selected.value) return
+  const newTags = (selected.value.tags || []).filter(t => t !== tag)
+  try {
+    await api.updateSessionTags(selected.value.session_id, newTags)
+    const idx = sessions.value.findIndex(s => s.session_id === selected.value.session_id)
+    if (idx !== -1) sessions.value[idx] = { ...sessions.value[idx], tags: newTags }
+  } catch {}
+}
+
+// ── Desktop notifications ────────────────────────────────────────────────────
+function requestNotificationPermission() {
+  if ('Notification' in window && Notification.permission === 'default') {
+    Notification.requestPermission()
+  }
+}
+
+function showDesktopNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted' || muted.value) return
+  try {
+    new Notification(title, { body, icon: '/favicon.ico', tag: 'cf-new-session' })
+  } catch {}
+}
+
 onMounted(async () => {
+  requestNotificationPermission()
   await loadSessions()
   ws = api.connectAdminDashboard((msg) => {
     if (msg.type === 'session_update') {
       const prevCount = sessions.value.length
       loadSessions().then(() => {
-        if (sessions.value.length > prevCount) playNotificationSound()
+        if (sessions.value.length > prevCount) {
+          playNotificationSound()
+          showDesktopNotification('New visitor', 'A new visitor started a chat on your site.')
+        }
       })
     }
   })
@@ -818,4 +884,24 @@ watch(selected, (s) => {
 .vp-no-data p { font-size: 12px; color: #334155; line-height: 1.6; }
 
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .inbox-page { padding: 16px 12px 0; }
+  .inbox-layout { flex-direction: column; height: auto; }
+  .session-list { width: 100%; max-height: 40vh; min-width: 0; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .chat-panel { height: 50vh; min-width: 0; }
+  .visitor-panel { width: 100%; min-width: 0; border-left: none; border-top: 1px solid rgba(255,255,255,0.06); }
+}
+
+/* Tags */
+.vp-tag-custom { background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); display: inline-flex; align-items: center; gap: 4px; }
+.tag-del { background: none; border: none; color: #818cf8; cursor: pointer; font-size: 10px; padding: 0 2px; line-height: 1; }
+.tag-input-row { display: flex; gap: 6px; margin-top: 8px; }
+.tag-input { flex: 1; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 7px; padding: 5px 10px; font-size: 12px; color: #e2e8f0; outline: none; }
+.tag-input:focus { border-color: rgba(99,102,241,0.4); }
+.tag-add-btn { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); color: #a5b4fc; border-radius: 7px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+.tag-add-btn:hover:not(:disabled) { background: rgba(99,102,241,0.2); }
+.tag-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.tag-error { font-size: 11px; color: #fca5a5; margin-top: 4px; }
 </style>

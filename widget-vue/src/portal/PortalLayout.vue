@@ -83,4 +83,16 @@ onMounted(loadClient)
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* Mobile: stack sidebar above main content */
+@media (max-width: 768px) {
+  .portal-shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100vh;
+  }
+  .portal-main {
+    overflow-y: visible;
+  }
+}
 </style>

@@ -252,6 +252,26 @@ def send_hot_lead_alert(self, session_id):
         logger.warning(f'[send_hot_lead_alert] Failed: {exc}')
         raise self.retry(exc=exc, countdown=60)
 
+    # ── Slack notification ────────────────────────────────────────────────────
+    if session.client:
+        from chat.utils import fire_slack_notification, fire_outbound_webhook
+        slack_text = (
+            f':fire: *Hot Lead on {client_name}* — Heat {session.heat_score:.0f}/100\n'
+            f'Visitor: {session.visitor_id}'
+            + (f' · {session.lead_email}' if session.lead_email else '')
+            + f'\n<{god_view_url}|View live session>'
+        )
+        fire_slack_notification(session.client, slack_text)
+        fire_outbound_webhook(session.client, 'hot_lead', {
+            'session_id': str(session.session_id),
+            'visitor_id': session.visitor_id,
+            'lead_email': session.lead_email or '',
+            'lead_phone': session.lead_phone or '',
+            'heat_score': session.heat_score,
+            'kanban_state': session.kanban_state,
+            'god_view_url': god_view_url,
+        })
+
 
 # ── C3: Takeover Request Alert ────────────────────────────────────────────────
 

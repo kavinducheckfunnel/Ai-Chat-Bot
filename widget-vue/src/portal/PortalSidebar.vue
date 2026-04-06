@@ -294,4 +294,22 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
   transition: all 0.12s; flex-shrink: 0;
 }
 .logout-btn:hover { background: rgba(239,68,68,0.1); color: #fca5a5; }
+
+/* Mobile responsive sidebar */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    height: auto;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .brand { margin-bottom: 0; }
+  .client-badge { display: none; }
+  .nav { flex-direction: row; flex-wrap: wrap; gap: 0; width: 100%; margin-top: 6px; }
+  .nav-section { display: none; }
+  .nav-item { padding: 8px 10px; font-size: 12px; }
+  .sidebar-bottom { width: 100%; }
+}
 </style>

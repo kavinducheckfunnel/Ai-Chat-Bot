@@ -172,6 +172,26 @@ def capture_lead(request):
     if not updated:
         return Response({'error': 'session not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # Reload session for webhook payload
+    try:
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
+        client = session.client
+        if client:
+            from chat.utils import fire_slack_notification, fire_outbound_webhook
+            slack_text = (
+                f':mega: *Lead Captured on {client.name}*\n'
+                f'Email: {email}' + (f' · Phone: {phone}' if phone else '')
+            )
+            fire_slack_notification(client, slack_text)
+            fire_outbound_webhook(client, 'lead_captured', {
+                'session_id': str(session_id),
+                'visitor_id': session.visitor_id,
+                'lead_email': email,
+                'lead_phone': phone or '',
+            })
+    except Exception:
+        pass
+
     # Fire HubSpot sync asynchronously if client has integration configured
     try:
         from users.tasks import sync_lead_to_hubspot
@@ -380,4 +400,51 @@ def messenger_webhook(request, client_id):
         reply_text = 'Sorry, something went wrong on my end.'
 
     _send_messenger_reply(client.messenger_page_access_token, sender_psid, reply_text)
+    return HttpResponse('OK')
+
+
+# ─── Telegram webhook ─────────────────────────────────────────────────────────
+
+def _send_telegram_reply(bot_token, chat_id, text):
+    try:
+        http_requests.post(
+            f'https://api.telegram.org/bot{bot_token}/sendMessage',
+            json={'chat_id': chat_id, 'text': text},
+            timeout=10,
+        )
+    except Exception as e:
+        logger.error(f'[telegram_reply] Failed: {e}')
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def telegram_webhook(request, client_id):
+    """Telegram Bot webhook — set via setWebhook to this URL."""
+    try:
+        client = Client.objects.get(pk=client_id)
+    except (Client.DoesNotExist, Exception):
+        return HttpResponse('Not found', status=404)
+
+    if not client.telegram_enabled or not client.telegram_bot_token:
+        return HttpResponse('Channel not configured', status=400)
+
+    data = request.data
+    try:
+        message = data.get('message') or data.get('edited_message', {})
+        chat_id = str(message['chat']['id'])
+        text = message.get('text')
+        if not text:
+            return HttpResponse('OK')  # sticker / photo — ignore
+    except (KeyError, TypeError):
+        return HttpResponse('OK')
+
+    session = _get_or_create_channel_session(client, chat_id, 'telegram')
+    try:
+        result = generate_ai_response(session, text, {})
+        reply_text = result.get('reply_text', 'Sorry, I could not process your request.')
+    except Exception as e:
+        logger.error(f'[telegram_webhook] AI error: {e}')
+        reply_text = 'Sorry, something went wrong on my end.'
+
+    _send_telegram_reply(client.telegram_bot_token, chat_id, reply_text)
     return HttpResponse('OK')

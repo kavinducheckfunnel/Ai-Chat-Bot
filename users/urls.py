@@ -25,12 +25,14 @@ urlpatterns = [
     path('clients/<uuid:client_id>/scrape-progress/', admin_views.scrape_progress, name='admin-client-scrape-progress'),
     path('clients/<uuid:client_id>/rotate-secret/', admin_views.rotate_webhook_secret, name='admin-client-rotate-secret'),
     path('clients/<uuid:client_id>/assign-tenant/', admin_views.assign_client_to_tenant, name='admin-client-assign-tenant'),
+    path('clients/<uuid:client_id>/analytics/export/', admin_views.analytics_export, name='admin-client-analytics-export'),
 
     # Sessions (CRUD + God View)
     path('sessions/<uuid:session_id>/', admin_views.session_detail, name='admin-session-detail'),
     path('sessions/<uuid:session_id>/takeover/', admin_views.session_takeover, name='admin-session-takeover'),
     path('sessions/<uuid:session_id>/release/', admin_views.session_release, name='admin-session-release'),
     path('sessions/<uuid:session_id>/send/', admin_views.session_send_message, name='admin-session-send'),
+    path('sessions/<uuid:session_id>/tags/', admin_views.session_set_tags, name='admin-session-tags'),
 
     # Platform
     path('stats/', admin_views.platform_stats, name='admin-platform-stats'),

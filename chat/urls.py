@@ -9,7 +9,8 @@ urlpatterns = [
     path('lead/', views.capture_lead, name='capture_lead'),
     path('product/<str:product_id>/', views.product_detail, name='product_detail'),
 
-    # Omnichannel webhooks (called by Meta's servers)
+    # Omnichannel webhooks (called by Meta's servers / Telegram)
     path('webhooks/whatsapp/<uuid:client_id>/', views.whatsapp_webhook, name='whatsapp_webhook'),
     path('webhooks/messenger/<uuid:client_id>/', views.messenger_webhook, name='messenger_webhook'),
+    path('webhooks/telegram/<uuid:client_id>/', views.telegram_webhook, name='telegram_webhook'),
 ]
