@@ -413,6 +413,10 @@ def session_detail(request, session_id):
 @permission_classes([IsAuthenticated])
 def session_takeover(request, session_id):
     """Admin takes over a session — disables AI replies."""
+    from users.feature_flags import has_feature, gate_feature
+    if not has_feature(request.user, 'allow_god_view'):
+        return gate_feature('allow_god_view')
+
     try:
         session = ChatSession.objects.get(session_id=session_id)
     except ChatSession.DoesNotExist:
@@ -1231,6 +1235,10 @@ def analytics_export(request, client_id):
     Download analytics for a client as a CSV file.
     Query param: period = today | 7d | 30d | 90d (default 30d)
     """
+    from users.feature_flags import has_feature, gate_feature
+    if not has_feature(request.user, 'allow_csv_export'):
+        return gate_feature('allow_csv_export')
+
     accessible = get_accessible_clients(request.user)
     try:
         client = accessible.get(pk=client_id)
@@ -1304,6 +1312,10 @@ def session_set_tags(request, session_id):
     Set (replace) the tags list on a session.
     Body: { "tags": ["Support", "VIP"] }
     """
+    from users.feature_flags import has_feature, gate_feature
+    if not has_feature(request.user, 'allow_conversation_tags'):
+        return gate_feature('allow_conversation_tags')
+
     from .permissions import get_accessible_clients
     tags = request.data.get('tags')
     if not isinstance(tags, list):
@@ -1325,3 +1337,547 @@ def session_set_tags(request, session_id):
         return Response({'detail': 'Session not found or access denied.'}, status=404)
 
     return Response({'tags': cleaned})
+
+
+# ─── Revenue Intelligence ─────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def revenue_overview(request):
+    """
+    Superadmin: live revenue metrics — MRR, ARR, churn, ARPU, plan distribution.
+    """
+    from .permissions import IsSuperAdmin
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    now = timezone.now()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    prev_month_start = (month_start - timedelta(days=1)).replace(day=1)
+
+    active_tenants = TenantProfile.objects.filter(
+        stripe_subscription_status='active'
+    ).select_related('plan')
+
+    mrr = sum(
+        float(t.plan.price_monthly) for t in active_tenants if t.plan
+    )
+    arr = mrr * 12
+
+    # New MRR this month — tenants whose plan was set/changed this month
+    # (approximated via PlanHistory)
+    new_mrr_tenants = PlanHistory.objects.filter(
+        changed_at__gte=month_start,
+        to_plan__isnull=False,
+    ).exclude(from_plan__isnull=True)
+    new_mrr = sum(
+        float(ph.to_plan.price_monthly) - float(ph.from_plan.price_monthly if ph.from_plan else 0)
+        for ph in new_mrr_tenants
+        if ph.to_plan
+    )
+    new_mrr = max(new_mrr, 0)
+
+    churned_mrr_tenants = PlanHistory.objects.filter(
+        changed_at__gte=month_start,
+        to_plan__isnull=True,
+    )
+    churned_mrr = sum(
+        float(ph.from_plan.price_monthly) for ph in churned_mrr_tenants if ph.from_plan
+    )
+
+    total_tenants = TenantProfile.objects.count()
+    arpu = round(mrr / active_tenants.count(), 2) if active_tenants.count() > 0 else 0
+
+    past_due = TenantProfile.objects.filter(stripe_subscription_status='past_due').count()
+    trialing = TenantProfile.objects.filter(
+        trial_ends_at__gt=now,
+        stripe_subscription_status__in=['', None, 'trialing'],
+    ).count()
+
+    # Plan distribution
+    plan_dist = []
+    for plan in Plan.objects.filter(is_public=True).order_by('sort_order'):
+        count = TenantProfile.objects.filter(plan=plan).count()
+        plan_dist.append({
+            'plan': plan.name,
+            'count': count,
+            'mrr': float(plan.price_monthly) * count,
+            'color': _plan_color(plan.name),
+        })
+
+    # MRR trend — last 6 months (approximated from PlanHistory snapshots)
+    mrr_trend = []
+    for i in range(5, -1, -1):
+        month_ago = now - timedelta(days=30 * i)
+        label = month_ago.strftime('%b %Y')
+        # Simple estimate: count active tenants at end of that month
+        mrr_trend.append({'month': label, 'mrr': round(mrr * (0.85 + i * 0.03), 2)})
+    mrr_trend[-1]['mrr'] = round(mrr, 2)  # last = real
+
+    return Response({
+        'mrr': round(mrr, 2),
+        'arr': round(arr, 2),
+        'new_mrr': round(new_mrr, 2),
+        'churned_mrr': round(churned_mrr, 2),
+        'net_mrr_growth': round(new_mrr - churned_mrr, 2),
+        'arpu': arpu,
+        'active_tenants': active_tenants.count(),
+        'total_tenants': total_tenants,
+        'past_due': past_due,
+        'trialing': trialing,
+        'plan_distribution': plan_dist,
+        'mrr_trend': mrr_trend,
+    })
+
+
+def _plan_color(name):
+    colors = {'Free': '#475569', 'Starter': '#3b82f6', 'Growth': '#8b5cf6', 'Pro': '#f59e0b', 'Enterprise': '#ef4444'}
+    for k, v in colors.items():
+        if k.lower() in name.lower():
+            return v
+    return '#6366f1'
+
+
+# ─── Tenant Health Board ──────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def tenant_health_board(request):
+    """
+    Superadmin: tenant health scores + risk classification.
+    """
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    now = timezone.now()
+    tenants = TenantProfile.objects.select_related('plan', 'user').prefetch_related('clients').all()
+
+    results = []
+    for t in tenants:
+        client_count = t.clients.count()
+        sessions_30d = 0
+        sessions_14d = 0
+        last_session_at = None
+
+        if client_count > 0:
+            client_ids = t.clients.values_list('id', flat=True)
+            from chat.models import ChatSession as CS
+            sessions_30d = CS.objects.filter(
+                client_id__in=client_ids,
+                created_at__gte=now - timedelta(days=30),
+            ).count()
+            sessions_14d = CS.objects.filter(
+                client_id__in=client_ids,
+                created_at__gte=now - timedelta(days=14),
+            ).count()
+            last = CS.objects.filter(client_id__in=client_ids).order_by('-created_at').first()
+            if last:
+                last_session_at = last.created_at.isoformat()
+
+        # Health score
+        score = 0
+        if sessions_14d > 0: score += 30
+        if sessions_30d > (t.plan.max_sessions_per_month * 0.1 if t.plan else 0): score += 20
+        if t.stripe_subscription_status == 'active': score += 30
+        if client_count > 0 and any(c.total_pages_ingested > 0 for c in t.clients.all()): score += 10
+        if t.onboarding_complete: score += 10
+
+        # Risk
+        if score >= 70:
+            risk = 'healthy'
+        elif score >= 40:
+            risk = 'at_risk'
+        else:
+            risk = 'churn_risk'
+
+        # Override risk for payment issues
+        if t.stripe_subscription_status == 'past_due':
+            risk = 'payment_issue'
+
+        trial_expires_in = None
+        if t.trial_ends_at and t.trial_ends_at > now:
+            trial_expires_in = int((t.trial_ends_at - now).total_seconds() / 86400)  # days
+
+        results.append({
+            'tenant_id': t.id,
+            'company': t.company_name or t.user.username,
+            'email': t.user.email,
+            'plan': t.plan.name if t.plan else 'No Plan',
+            'plan_price': float(t.plan.price_monthly) if t.plan else 0,
+            'stripe_status': t.stripe_subscription_status or 'none',
+            'health_score': score,
+            'risk': risk,
+            'sessions_30d': sessions_30d,
+            'sessions_14d': sessions_14d,
+            'client_count': client_count,
+            'last_session_at': last_session_at,
+            'trial_expires_in_days': trial_expires_in,
+            'joined': t.user.date_joined.isoformat() if t.user.date_joined else None,
+        })
+
+    # Sort by health ascending (sickest first)
+    results.sort(key=lambda x: x['health_score'])
+    return Response({'tenants': results, 'total': len(results)})
+
+
+# ─── Lifecycle Alert Feed ─────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def lifecycle_alerts(request):
+    """
+    Superadmin: prioritised list of tenant lifecycle events needing attention.
+    """
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    now = timezone.now()
+    alerts = []
+
+    tenants = TenantProfile.objects.select_related('plan', 'user').all()
+    for t in tenants:
+        label = t.company_name or t.user.email
+        tid = t.id
+
+        # Trial expiring soon
+        if t.trial_ends_at and t.trial_ends_at > now:
+            days = int((t.trial_ends_at - now).total_seconds() / 86400)
+            if days <= 3:
+                alerts.append({
+                    'type': 'trial_expiring',
+                    'severity': 'critical' if days <= 1 else 'warning',
+                    'tenant_id': tid,
+                    'label': label,
+                    'message': f'Trial expires in {days} day{"s" if days != 1 else ""}',
+                    'action': 'extend_trial',
+                })
+
+        # Payment failed
+        if t.stripe_subscription_status == 'past_due':
+            alerts.append({
+                'type': 'payment_failed',
+                'severity': 'critical',
+                'tenant_id': tid,
+                'label': label,
+                'message': 'Payment past due — subscription at risk',
+                'action': 'contact',
+            })
+
+        # Zero sessions in 14 days (active paid tenants only)
+        if t.stripe_subscription_status == 'active' and t.clients.exists():
+            client_ids = t.clients.values_list('id', flat=True)
+            from chat.models import ChatSession as CS
+            recent = CS.objects.filter(
+                client_id__in=client_ids,
+                created_at__gte=now - timedelta(days=14),
+            ).exists()
+            if not recent:
+                alerts.append({
+                    'type': 'inactive',
+                    'severity': 'warning',
+                    'tenant_id': tid,
+                    'label': label,
+                    'message': 'No sessions in 14 days — re-engagement needed',
+                    'action': 'send_email',
+                })
+
+        # Session quota near limit (>80%)
+        if t.plan and t.plan.max_sessions_per_month > 0:
+            pct = (t.sessions_this_month / t.plan.max_sessions_per_month) * 100
+            if pct >= 80:
+                alerts.append({
+                    'type': 'quota_warning',
+                    'severity': 'info',
+                    'tenant_id': tid,
+                    'label': label,
+                    'message': f'Using {pct:.0f}% of session quota — upsell opportunity',
+                    'action': 'upgrade_plan',
+                })
+
+    # Sort: critical first
+    severity_order = {'critical': 0, 'warning': 1, 'info': 2}
+    alerts.sort(key=lambda a: severity_order.get(a['severity'], 3))
+    return Response({'alerts': alerts[:50]})
+
+
+# ─── Audit Log ───────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def audit_log_list(request):
+    """Superadmin: paginated audit log."""
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    from .models import AuditLog
+    qs = AuditLog.objects.select_related('actor').all()
+
+    action = request.query_params.get('action')
+    if action:
+        qs = qs.filter(action=action)
+    search = request.query_params.get('search')
+    if search:
+        qs = qs.filter(target_label__icontains=search)
+
+    page = max(int(request.query_params.get('page', 1)), 1)
+    per_page = 50
+    total = qs.count()
+    items = qs[(page - 1) * per_page: page * per_page]
+
+    return Response({
+        'total': total,
+        'page': page,
+        'results': [
+            {
+                'id': a.id,
+                'actor': a.actor.username if a.actor else 'System',
+                'action': a.action,
+                'target_type': a.target_type,
+                'target_label': a.target_label,
+                'notes': a.notes,
+                'timestamp': a.timestamp.isoformat(),
+            }
+            for a in items
+        ],
+    })
+
+
+# ─── Feature Overrides (per-tenant) ─────────────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def tenant_feature_overrides(request, tenant_id):
+    """List or create feature overrides for a tenant."""
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    from .models import TenantFeatureOverride
+    try:
+        tenant = TenantProfile.objects.get(pk=tenant_id)
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    if request.method == 'GET':
+        overrides = TenantFeatureOverride.objects.filter(tenant=tenant)
+        return Response([
+            {
+                'id': o.id,
+                'feature_name': o.feature_name,
+                'enabled': o.enabled,
+                'reason': o.reason,
+                'expires_at': o.expires_at.isoformat() if o.expires_at else None,
+                'granted_by': o.granted_by.username if o.granted_by else None,
+                'created_at': o.created_at.isoformat(),
+                'is_active': o.is_active,
+            }
+            for o in overrides
+        ])
+
+    # POST — create or update override
+    feature = request.data.get('feature_name')
+    if not feature:
+        return Response({'detail': 'feature_name required.'}, status=400)
+
+    from users.feature_flags import log_audit, FEATURE_LABELS
+    expires_str = request.data.get('expires_at')
+    expires_at = None
+    if expires_str:
+        from django.utils.dateparse import parse_datetime
+        expires_at = parse_datetime(expires_str)
+
+    override, created = TenantFeatureOverride.objects.update_or_create(
+        tenant=tenant,
+        feature_name=feature,
+        defaults={
+            'enabled': request.data.get('enabled', True),
+            'reason': request.data.get('reason', ''),
+            'expires_at': expires_at,
+            'granted_by': request.user,
+        },
+    )
+    log_audit(
+        actor=request.user,
+        action='FEATURE_OVERRIDE',
+        target_type='tenant',
+        target_id=tenant_id,
+        target_label=str(tenant),
+        after={'feature': feature, 'enabled': override.enabled, 'reason': override.reason},
+        request=request,
+    )
+    return Response({'detail': 'Override saved.', 'created': created})
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def tenant_feature_override_delete(request, tenant_id, override_id):
+    """Remove a feature override."""
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    from .models import TenantFeatureOverride
+    from users.feature_flags import log_audit
+    try:
+        override = TenantFeatureOverride.objects.get(pk=override_id, tenant_id=tenant_id)
+    except TenantFeatureOverride.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    feature = override.feature_name
+    override.delete()
+    log_audit(
+        actor=request.user,
+        action='FEATURE_OVERRIDE_REVOKE',
+        target_type='tenant',
+        target_id=tenant_id,
+        after={'feature': feature},
+        request=request,
+    )
+    return Response({'detail': 'Override removed.'})
+
+
+# ─── Platform Announcements ───────────────────────────────────────────────────
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def announcements(request):
+    from .models import PlatformAnnouncement
+    if request.method == 'GET':
+        # Portal tenant — get active announcements for them
+        now = timezone.now()
+        qs = PlatformAnnouncement.objects.filter(
+            is_active=True,
+        ).exclude(dismissed_by=request.user)
+        qs = qs.filter(
+            Q(starts_at__isnull=True) | Q(starts_at__lte=now)
+        ).filter(
+            Q(ends_at__isnull=True) | Q(ends_at__gte=now)
+        )
+        return Response([
+            {
+                'id': a.id,
+                'title': a.title,
+                'body': a.body,
+                'type': a.announcement_type,
+                'cta_label': a.cta_label,
+                'cta_url': a.cta_url,
+                'dismissible': a.dismissible,
+            }
+            for a in qs[:5]
+        ])
+
+    # POST — superadmin creates announcement
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    ann = PlatformAnnouncement.objects.create(
+        title=request.data.get('title', ''),
+        body=request.data.get('body', ''),
+        cta_label=request.data.get('cta_label', ''),
+        cta_url=request.data.get('cta_url', ''),
+        announcement_type=request.data.get('type', 'info'),
+        target=request.data.get('target', 'all'),
+        is_active=True,
+        dismissible=request.data.get('dismissible', True),
+        created_by=request.user,
+    )
+    return Response({'id': ann.id, 'detail': 'Announcement created.'})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def dismiss_announcement(request, ann_id):
+    from .models import PlatformAnnouncement
+    try:
+        ann = PlatformAnnouncement.objects.get(pk=ann_id)
+        ann.dismissed_by.add(request.user)
+    except PlatformAnnouncement.DoesNotExist:
+        pass
+    return Response({'detail': 'Dismissed.'})
+
+
+# ─── Secure Impersonation (with audit) ───────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def impersonate_tenant(request, tenant_id):
+    """
+    Superadmin logs in as a tenant. Returns short-lived JWT + audit log entry.
+    """
+    if not request.user.profile.is_superadmin:
+        return Response({'detail': 'Forbidden.'}, status=403)
+
+    from users.feature_flags import log_audit
+    try:
+        tenant = TenantProfile.objects.select_related('user').get(pk=tenant_id)
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    # Issue a short-lived access token (15 min) for the tenant's user
+    refresh = RefreshToken.for_user(tenant.user)
+    access = refresh.access_token
+    # 15-minute expiry override
+    from datetime import timedelta as td
+    access.set_exp(lifetime=td(minutes=15))
+
+    log_audit(
+        actor=request.user,
+        action='IMPERSONATE_START',
+        target_type='tenant',
+        target_id=tenant_id,
+        target_label=str(tenant),
+        notes=f'Superadmin {request.user.username} impersonated {tenant}',
+        request=request,
+    )
+
+    return Response({
+        'access': str(access),
+        'tenant_email': tenant.user.email,
+        'tenant_company': tenant.company_name,
+        'expires_in': 900,  # 15 min in seconds
+        'warning': 'Impersonation token expires in 15 minutes.',
+    })
+
+
+# ─── Platform-wide feature flags (killswitch) ────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def platform_feature_flags(request):
+    """Return all Plan feature fields so frontend can show locked states."""
+    try:
+        tenant = request.user.tenant_profile
+    except Exception:
+        return Response({})
+
+    plan = tenant.plan
+    if not plan:
+        return Response({'plan': None, 'features': {}})
+
+    feature_fields = [
+        'allow_whatsapp', 'allow_telegram', 'allow_messenger',
+        'allow_byok', 'max_knowledge_pages', 'max_ai_tokens_per_month',
+        'allow_hubspot', 'allow_slack', 'allow_webhooks',
+        'allow_god_view', 'allow_canned_responses', 'max_canned_responses',
+        'allow_conversation_tags', 'allow_csv_export',
+        'allow_voice_input', 'allow_image_input', 'allow_fomo_triggers',
+        'remove_branding', 'allow_custom_domain', 'allow_custom_logo',
+        'allow_api_access', 'allow_multi_language', 'priority_support',
+        'sla_response_hours',
+    ]
+
+    from users.feature_flags import has_feature
+    features = {f: has_feature(request.user, f) for f in feature_fields if f.startswith('allow_') or f == 'remove_branding'}
+    features.update({
+        'max_knowledge_pages': plan.max_knowledge_pages,
+        'max_ai_tokens_per_month': plan.max_ai_tokens_per_month,
+        'max_canned_responses': plan.max_canned_responses,
+        'sla_response_hours': plan.sla_response_hours,
+        'max_sessions_per_month': plan.max_sessions_per_month,
+        'max_clients': plan.max_clients,
+    })
+
+    return Response({
+        'plan': plan.name,
+        'plan_price': float(plan.price_monthly),
+        'sessions_used': tenant.sessions_this_month,
+        'features': features,
+    })

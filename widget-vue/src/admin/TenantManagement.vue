@@ -87,6 +87,7 @@
                 <button class="action-btn history-btn" @click="openHistory(t)" title="Plan history">
                   <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg>
                 </button>
+                <button class="action-btn overrides-btn" @click="openOverrides(t)" title="Feature overrides">🎁</button>
                 <button class="action-btn impersonate-btn" @click="loginAsTenant(t)" :disabled="impersonating === t.id" title="Login as this tenant">
                   {{ impersonating === t.id ? '...' : 'Login As' }}
                 </button>
@@ -384,6 +385,74 @@
       </div>
     </div>
 
+    <!-- Feature Overrides Modal -->
+    <div v-if="overrideTenant" class="modal-overlay" @click.self="overrideTenant = null">
+      <div class="modal modal-md">
+        <div class="modal-header">
+          <h3>Feature Overrides — {{ overrideTenant.username }}</h3>
+          <button class="modal-close" @click="overrideTenant = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="or-hint">Grant or revoke specific features for this tenant, overriding their plan. Great for trials, deals, and betas.</p>
+
+          <!-- Existing overrides -->
+          <div v-if="overridesLoading" class="history-loading">Loading…</div>
+          <div v-else-if="!tenantOverrides.length" class="no-history">No active overrides. Their plan features apply.</div>
+          <div v-else class="or-list">
+            <div v-for="ov in tenantOverrides" :key="ov.id" class="or-row">
+              <div class="or-info">
+                <span class="or-feature">{{ ov.feature_name }}</span>
+                <span class="or-state" :class="ov.enabled ? 'state-on' : 'state-off'">{{ ov.enabled ? 'GRANTED' : 'REVOKED' }}</span>
+                <span v-if="ov.expires_at" class="or-exp">exp {{ fmtDate(ov.expires_at) }}</span>
+              </div>
+              <div class="or-meta">
+                <span v-if="ov.reason" class="or-reason">"{{ ov.reason }}"</span>
+              </div>
+              <button class="or-del-btn" @click="deleteOverride(ov.id)" :disabled="deletingOverride === ov.id">
+                {{ deletingOverride === ov.id ? '…' : '✕' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Add new override -->
+          <div class="section-label" style="margin-top:18px">Add Override</div>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group">
+              <label>Feature</label>
+              <select v-model="newOverride.feature_name" class="form-input">
+                <option value="">Select feature…</option>
+                <option v-for="f in allFeatures" :key="f.key" :value="f.key">{{ f.label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Action</label>
+              <select v-model="newOverride.enabled" class="form-input">
+                <option :value="true">Grant (enable)</option>
+                <option :value="false">Revoke (disable)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Expires (optional)</label>
+              <input type="datetime-local" v-model="newOverride.expires_at" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label>Reason (optional)</label>
+              <input type="text" v-model="newOverride.reason" class="form-input" placeholder="e.g. 30-day trial" />
+            </div>
+          </div>
+          <p v-if="overrideError" class="form-error">{{ overrideError }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="overrideTenant = null">Close</button>
+          <button class="submit-btn" @click="addOverride" :disabled="addingOverride || !newOverride.feature_name">
+            {{ addingOverride ? 'Saving…' : 'Add Override' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Impersonate toast -->
     <div v-if="impersonateToast" class="toast" :class="impersonateToast.type">
       {{ impersonateToast.msg }}
@@ -444,6 +513,35 @@ const impersonateToast = ref(null)
 const showPlanManager = ref(false)
 const planPriceIds = ref({})
 const savingPriceIds = ref(false)
+
+const overrideTenant = ref(null)
+const tenantOverrides = ref([])
+const overridesLoading = ref(false)
+const addingOverride = ref(false)
+const deletingOverride = ref(null)
+const overrideError = ref('')
+const newOverride = ref({ feature_name: '', enabled: true, expires_at: '', reason: '' })
+
+const allFeatures = [
+  { key: 'allow_whatsapp',          label: 'WhatsApp Business' },
+  { key: 'allow_telegram',          label: 'Telegram Bot' },
+  { key: 'allow_messenger',         label: 'Facebook Messenger' },
+  { key: 'allow_byok',              label: 'Custom AI (BYOK)' },
+  { key: 'allow_hubspot',           label: 'HubSpot CRM' },
+  { key: 'allow_slack',             label: 'Slack Notifications' },
+  { key: 'allow_webhooks',          label: 'Outbound Webhooks' },
+  { key: 'allow_god_view',          label: 'Live Takeover (God View)' },
+  { key: 'allow_canned_responses',  label: 'Canned Responses' },
+  { key: 'allow_conversation_tags', label: 'Conversation Tags' },
+  { key: 'allow_csv_export',        label: 'Analytics CSV Export' },
+  { key: 'allow_voice_input',       label: 'Voice Input' },
+  { key: 'allow_image_input',       label: 'Image Input' },
+  { key: 'allow_fomo_triggers',     label: 'FOMO Triggers' },
+  { key: 'remove_branding',         label: 'Remove Branding' },
+  { key: 'allow_custom_domain',     label: 'Custom Domain' },
+  { key: 'allow_api_access',        label: 'API Access' },
+  { key: 'allow_multi_language',    label: 'Multi-Language' },
+]
 
 function openPlanManager() {
   planPriceIds.value = {}
@@ -632,6 +730,54 @@ async function doDelete() {
   }
 }
 
+async function openOverrides(t) {
+  overrideTenant.value = t
+  tenantOverrides.value = []
+  overrideError.value = ''
+  newOverride.value = { feature_name: '', enabled: true, expires_at: '', reason: '' }
+  overridesLoading.value = true
+  try {
+    tenantOverrides.value = await api.getTenantFeatureOverrides(t.id) || []
+  } catch (e) {
+    overrideError.value = e.message
+  } finally {
+    overridesLoading.value = false
+  }
+}
+
+async function addOverride() {
+  if (!newOverride.value.feature_name) return
+  overrideError.value = ''
+  addingOverride.value = true
+  try {
+    const payload = {
+      feature_name: newOverride.value.feature_name,
+      enabled: newOverride.value.enabled,
+      reason: newOverride.value.reason || '',
+      expires_at: newOverride.value.expires_at || null,
+    }
+    const created = await api.createFeatureOverride(overrideTenant.value.id, payload)
+    tenantOverrides.value.unshift(created)
+    newOverride.value = { feature_name: '', enabled: true, expires_at: '', reason: '' }
+  } catch (e) {
+    overrideError.value = e.message || 'Failed to add override.'
+  } finally {
+    addingOverride.value = false
+  }
+}
+
+async function deleteOverride(overrideId) {
+  deletingOverride.value = overrideId
+  try {
+    await api.deleteFeatureOverride(overrideTenant.value.id, overrideId)
+    tenantOverrides.value = tenantOverrides.value.filter(o => o.id !== overrideId)
+  } catch (e) {
+    alert(e.message || 'Failed to delete override.')
+  } finally {
+    deletingOverride.value = null
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -797,6 +943,26 @@ onMounted(load)
 .client-checkboxes { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; padding: 2px; }
 .no-clients-hint { font-size: 12px; color: #94A3B8; padding: 8px 0; }
 .client-check-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #E2E8F0; border-radius: 9px; cursor: pointer; transition: all 0.15s; user-select: none; }
+
+/* Overrides button */
+.overrides-btn { background: #FFF7ED; border-color: #FED7AA; color: #C2410C; font-size: 13px; }
+.overrides-btn:hover { background: #FFEDD5; }
+
+/* Overrides modal */
+.or-hint { font-size: 12px; color: #64748b; margin: 0 0 14px; line-height: 1.6; }
+.or-list { display: flex; flex-direction: column; gap: 6px; }
+.or-row { display: flex; align-items: flex-start; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; padding: 10px 12px; }
+.or-info { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+.or-feature { font-size: 12px; font-weight: 700; color: #1e293b; font-family: monospace; }
+.or-state { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.state-on { background: #dcfce7; color: #15803d; }
+.state-off { background: #fee2e2; color: #b91c1c; }
+.or-exp { font-size: 10px; color: #94a3b8; }
+.or-meta { flex: 1; }
+.or-reason { font-size: 11px; color: #64748b; font-style: italic; }
+.or-del-btn { background: #fee2e2; border: 1px solid #fecaca; color: #dc2626; border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+.or-del-btn:hover:not(:disabled) { background: #fecaca; }
+.or-del-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .client-check-row:hover { border-color: #A5B4FC; background: #FAFBFF; }
 .client-check-row.checked { border-color: #6366F1; background: rgba(99,102,241,0.05); }
 .client-check-row input[type="checkbox"] { display: none; }

@@ -53,4 +53,21 @@ urlpatterns = [
     path('tenants/<int:tenant_id>/assign-plan/', admin_views.assign_plan, name='admin-assign-plan'),
     path('tenants/<int:tenant_id>/plan-history/', admin_views.plan_history, name='admin-plan-history'),
     path('tenants/<int:tenant_id>/impersonate/', admin_views.impersonate_tenant, name='admin-tenant-impersonate'),
+    path('tenants/<int:tenant_id>/feature-overrides/', admin_views.tenant_feature_overrides, name='admin-tenant-overrides'),
+    path('tenants/<int:tenant_id>/feature-overrides/<int:override_id>/', admin_views.tenant_feature_override_delete, name='admin-tenant-override-delete'),
+
+    # Revenue & Health (superadmin)
+    path('revenue/', admin_views.revenue_overview, name='admin-revenue'),
+    path('health/', admin_views.tenant_health_board, name='admin-health'),
+    path('alerts/', admin_views.lifecycle_alerts, name='admin-alerts'),
+
+    # Audit log
+    path('audit/', admin_views.audit_log_list, name='admin-audit'),
+
+    # Announcements
+    path('announcements/', admin_views.announcements, name='admin-announcements'),
+    path('announcements/<int:ann_id>/dismiss/', admin_views.dismiss_announcement, name='admin-announcement-dismiss'),
+
+    # Feature flags (tenant portal)
+    path('feature-flags/', admin_views.platform_feature_flags, name='admin-feature-flags'),
 ]

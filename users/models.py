@@ -8,7 +8,48 @@ class Plan(models.Model):
     max_clients = models.IntegerField(default=1)
     max_sessions_per_month = models.IntegerField(default=500)
     price_monthly = models.DecimalField(max_digits=8, decimal_places=2, default=0)
-    stripe_price_id = models.CharField(max_length=100, blank=True, null=True)  # e.g. price_xxx
+    stripe_price_id = models.CharField(max_length=100, blank=True, null=True)
+
+    # ── Channels ──────────────────────────────────────────────────────────────
+    allow_whatsapp = models.BooleanField(default=False)
+    allow_telegram = models.BooleanField(default=False)
+    allow_messenger = models.BooleanField(default=False)
+
+    # ── AI & Knowledge ────────────────────────────────────────────────────────
+    allow_byok = models.BooleanField(default=False)
+    max_knowledge_pages = models.IntegerField(default=20)
+    max_ai_tokens_per_month = models.IntegerField(default=50000)
+
+    # ── Integrations ──────────────────────────────────────────────────────────
+    allow_hubspot = models.BooleanField(default=False)
+    allow_slack = models.BooleanField(default=False)
+    allow_webhooks = models.BooleanField(default=False)
+
+    # ── Inbox & Ops ───────────────────────────────────────────────────────────
+    allow_god_view = models.BooleanField(default=True)
+    allow_canned_responses = models.BooleanField(default=False)
+    max_canned_responses = models.IntegerField(default=0)
+    allow_conversation_tags = models.BooleanField(default=False)
+    allow_csv_export = models.BooleanField(default=False)
+
+    # ── Widget features ───────────────────────────────────────────────────────
+    allow_voice_input = models.BooleanField(default=False)
+    allow_image_input = models.BooleanField(default=False)
+    allow_fomo_triggers = models.BooleanField(default=True)
+
+    # ── Branding & White-label ────────────────────────────────────────────────
+    remove_branding = models.BooleanField(default=False)
+    allow_custom_domain = models.BooleanField(default=False)
+    allow_custom_logo = models.BooleanField(default=True)
+
+    # ── Advanced ──────────────────────────────────────────────────────────────
+    allow_api_access = models.BooleanField(default=False)
+    allow_multi_language = models.BooleanField(default=False)
+    priority_support = models.BooleanField(default=False)
+    sla_response_hours = models.IntegerField(default=48)
+
+    is_public = models.BooleanField(default=True)  # show on pricing page
+    sort_order = models.IntegerField(default=0)
 
     def __str__(self):
         return self.name
@@ -174,3 +215,105 @@ class PlanHistory(models.Model):
 
     def __str__(self):
         return f"{self.tenant} | {self.from_plan} → {self.to_plan}"
+
+
+class TenantFeatureOverride(models.Model):
+    """
+    Per-tenant feature override — grants/revokes a single Plan feature flag,
+    independent of the tenant's actual plan. Used for deals, betas, support.
+    """
+    tenant = models.ForeignKey(TenantProfile, on_delete=models.CASCADE, related_name='feature_overrides')
+    feature_name = models.CharField(max_length=100)   # e.g. 'allow_whatsapp'
+    enabled = models.BooleanField(default=True)
+    reason = models.CharField(max_length=255, blank=True)  # "VIP deal", "Beta test"
+    granted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='+')
+    expires_at = models.DateTimeField(null=True, blank=True)  # null = never expires
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('tenant', 'feature_name')]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.tenant} — {self.feature_name} ({'ON' if self.enabled else 'OFF'})"
+
+    @property
+    def is_active(self):
+        from django.utils import timezone
+        if self.expires_at and self.expires_at < timezone.now():
+            return False
+        return self.enabled
+
+
+class AuditLog(models.Model):
+    """Immutable record of every superadmin action. Never update or delete rows."""
+    ACTION_CHOICES = [
+        ('PLAN_CHANGE', 'Plan Changed'),
+        ('IMPERSONATE_START', 'Impersonation Started'),
+        ('IMPERSONATE_END', 'Impersonation Ended'),
+        ('CLIENT_CREATE', 'Client Created'),
+        ('CLIENT_DELETE', 'Client Deleted'),
+        ('FEATURE_OVERRIDE', 'Feature Override Granted'),
+        ('FEATURE_OVERRIDE_REVOKE', 'Feature Override Revoked'),
+        ('TRIAL_EXTEND', 'Trial Extended'),
+        ('ACCOUNT_SUSPEND', 'Account Suspended'),
+        ('ACCOUNT_REACTIVATE', 'Account Reactivated'),
+        ('SCRAPE_TRIGGER', 'Scrape Triggered'),
+        ('PASSWORD_RESET', 'Password Reset'),
+        ('BILLING_CHANGE', 'Billing Changed'),
+        ('BROADCAST_SEND', 'Broadcast Email Sent'),
+    ]
+
+    actor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='audit_actions')
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    target_type = models.CharField(max_length=50, blank=True)   # 'tenant' | 'client' | 'session'
+    target_id = models.CharField(max_length=100, blank=True)
+    target_label = models.CharField(max_length=255, blank=True)  # human-readable name
+    before_value = models.JSONField(null=True, blank=True)
+    after_value = models.JSONField(null=True, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"[{self.timestamp:%Y-%m-%d %H:%M}] {self.actor} — {self.action} on {self.target_label}"
+
+
+class PlatformAnnouncement(models.Model):
+    """In-app banners shown to portal tenants. Superadmin-created."""
+    TYPE_CHOICES = [
+        ('info', 'Info'),
+        ('warning', 'Warning'),
+        ('feature', 'New Feature'),
+        ('maintenance', 'Maintenance'),
+    ]
+    TARGET_CHOICES = [
+        ('all', 'All Tenants'),
+        ('free', 'Free Plan'),
+        ('paid', 'Paid Plans'),
+        ('specific', 'Specific Tenant'),
+    ]
+
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    cta_label = models.CharField(max_length=100, blank=True)
+    cta_url = models.CharField(max_length=500, blank=True)
+    announcement_type = models.CharField(max_length=20, choices=TYPE_CHOICES, default='info')
+    target = models.CharField(max_length=20, choices=TARGET_CHOICES, default='all')
+    target_tenant = models.ForeignKey(TenantProfile, on_delete=models.CASCADE, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    dismissible = models.BooleanField(default=True)
+    dismissed_by = models.ManyToManyField(User, blank=True, related_name='dismissed_announcements')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='+')
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.announcement_type.upper()}] {self.title}"

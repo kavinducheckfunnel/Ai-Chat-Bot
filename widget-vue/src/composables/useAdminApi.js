@@ -284,6 +284,34 @@ export function useAdminApi() {
       body: '{}',
     }),
 
+    // ── Revenue & Health (superadmin) ─────────────────────────────────
+    getRevenue: () => apiFetch('/api/admin/revenue/'),
+    getTenantHealthBoard: () => apiFetch('/api/admin/health/'),
+    getLifecycleAlerts: () => apiFetch('/api/admin/alerts/'),
+    getAuditLog: (params = {}) => {
+      const qs = new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v))).toString()
+      return apiFetch(`/api/admin/audit/${qs ? '?' + qs : ''}`)
+    },
+
+    // ── Feature Overrides ─────────────────────────────────────────────
+    getTenantFeatureOverrides: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/feature-overrides/`),
+    createFeatureOverride: (tenantId, data) => apiFetch(`/api/admin/tenants/${tenantId}/feature-overrides/`, {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+    deleteFeatureOverride: (tenantId, overrideId) => apiFetch(`/api/admin/tenants/${tenantId}/feature-overrides/${overrideId}/`, {
+      method: 'DELETE',
+    }),
+
+    // ── Announcements ─────────────────────────────────────────────────
+    getAnnouncements: () => apiFetch('/api/admin/announcements/'),
+    createAnnouncement: (data) => apiFetch('/api/admin/announcements/', {
+      method: 'POST', body: JSON.stringify(data),
+    }),
+    dismissAnnouncement: (id) => apiFetch(`/api/admin/announcements/${id}/dismiss/`, { method: 'POST', body: '{}' }),
+
+    // ── Feature flags (portal) ────────────────────────────────────────
+    getFeatureFlags: () => apiFetch('/api/admin/feature-flags/'),
+
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {
       const token = localStorage.getItem('cf_access_token')

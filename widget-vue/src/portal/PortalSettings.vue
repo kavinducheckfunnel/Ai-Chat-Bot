@@ -164,6 +164,12 @@
       </div>
 
       <!-- Canned responses -->
+      <div class="gate-wrap">
+        <div v-if="features.allow_canned_responses === false" class="gate-overlay">
+          <div class="gate-lock">🔒</div>
+          <div class="gate-msg">Canned Responses require the <strong>Starter</strong> plan or higher.</div>
+          <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Starter →</a>
+        </div>
       <div class="section-card">
         <h2 class="section-title">Canned responses</h2>
         <p class="section-sub">Quick-reply shortcuts available during live takeover. Click to insert into the message box.</p>
@@ -181,6 +187,7 @@
           <button class="btn-save" @click="saveCanned" :disabled="cannedSaving">{{ cannedSaving ? 'Saving…' : cannedSaved ? '✓ Saved' : 'Save canned responses' }}</button>
         </div>
       </div>
+      </div><!-- end gate-wrap -->
     </div>
 
     <!-- ── Knowledge base ──────────────────────────────────────────────────── -->
@@ -226,6 +233,12 @@
   <div v-if="activeTab === 'integrations'" class="tab-content">
 
     <!-- BYOK -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_byok === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Custom AI (BYOK) requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
     <div class="section-card">
       <div class="section-header">
         <div class="section-title-row">
@@ -259,8 +272,15 @@
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save AI settings' }}</button>
       </div>
     </div>
+    </div><!-- end gate-wrap -->
 
     <!-- WhatsApp -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_whatsapp === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">WhatsApp Business requires the <strong>Starter</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Starter →</a>
+      </div>
     <div class="section-card">
       <div class="section-header">
         <div class="section-title-row">
@@ -307,8 +327,15 @@
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save WhatsApp settings' }}</button>
       </div>
     </div>
+    </div><!-- end gate-wrap -->
 
     <!-- Messenger -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_messenger === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Facebook Messenger requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
     <div class="section-card">
       <div class="section-header">
         <div class="section-title-row">
@@ -355,8 +382,15 @@
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Messenger settings' }}</button>
       </div>
     </div>
+    </div><!-- end gate-wrap -->
 
     <!-- HubSpot CRM -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_hubspot === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">HubSpot CRM integration requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
     <div class="section-card">
       <div class="section-header">
         <div class="section-title-row">
@@ -381,8 +415,15 @@
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save HubSpot settings' }}</button>
       </div>
     </div>
+    </div><!-- end gate-wrap -->
 
     <!-- Telegram Bot -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_telegram === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Telegram Bot requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
     <div class="section-card">
       <div class="section-header">
         <div class="section-icon" style="background:#0088cc20">
@@ -412,8 +453,15 @@
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Telegram settings' }}</button>
       </div>
     </div>
+    </div><!-- end gate-wrap -->
 
     <!-- Slack notifications -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_slack === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Slack Notifications require the <strong>Starter</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Starter →</a>
+      </div>
     <div class="section-card">
       <div class="section-header">
         <div class="section-icon" style="background:#4a154b20">
@@ -436,8 +484,15 @@
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Slack settings' }}</button>
       </div>
     </div>
+    </div><!-- end gate-wrap -->
 
     <!-- Outbound Webhooks (Zapier / n8n) -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_webhooks === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Outbound Webhooks require the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
     <div class="section-card">
       <div class="section-header">
         <div class="section-icon" style="background:#ff620020">
@@ -464,6 +519,7 @@
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save webhook settings' }}</button>
       </div>
     </div>
+    </div><!-- end gate-wrap -->
 
     <!-- ── Security: Change password ─────────────────────────────────────────── -->
     <div class="section-card" style="margin-top:16px">
@@ -493,7 +549,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 import { generateEmbedCode } from './embedCodeGenerator'
 
@@ -509,6 +565,15 @@ const saved = ref(false)
 const scraping = ref(false)
 const scrapePages = ref(0)
 let scrapeTimer = null
+
+// Feature flags (gating)
+const features = ref({})
+onMounted(async () => {
+  try {
+    const data = await api.getFeatureFlags()
+    features.value = data || {}
+  } catch {}
+})
 
 const backendUrl = WIDGET_URL.replace('/widget/widget.js', '')
 
@@ -1115,4 +1180,24 @@ const scrapeStatusLabel = computed(() => {
 .toggle-field { display: flex; align-items: center; }
 .toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: #94a3b8; }
 .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+/* Feature gate overlay */
+.gate-wrap { position: relative; }
+.gate-overlay {
+  position: absolute; inset: 0; z-index: 10;
+  background: rgba(10,10,10,0.82);
+  backdrop-filter: blur(3px);
+  border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; text-align: center;
+}
+.gate-lock { font-size: 28px; line-height: 1; }
+.gate-msg { font-size: 13px; color: #cbd5e1; line-height: 1.6; max-width: 280px; }
+.gate-msg strong { color: #a5b4fc; }
+.gate-upgrade-btn {
+  display: inline-block; background: #6366f1; color: white;
+  padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  text-decoration: none; transition: background 0.15s; margin-top: 4px;
+}
+.gate-upgrade-btn:hover { background: #4f46e5; }
 </style>
