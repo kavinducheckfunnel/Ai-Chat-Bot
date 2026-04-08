@@ -180,22 +180,24 @@ var $=function(id){return document.getElementById(id)};
 // ── Markdown renderer ──────────────────────────────────────────────────
 // Converts AI reply_text (markdown) into safe HTML.
 // Handles: numbered lists, [text](url) links, **bold**, plain paragraphs.
+// NOTE: all regex backslashes are double-escaped (\\) because this code
+// lives inside a JS template literal — \\[ produces \[ in the output.
 function renderMd(text){
   // 1. Extract [text](url) links before HTML-escaping
   var links=[];
-  var s=text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,function(m,t,u){
-    var i=links.length;links.push({t:t,u:u});return'\x00L'+i+'\x00'
+  var s=text.replace(/\\[([^\\]]+)\\]\\((https?:\\/\\/[^\\s)]+)\\)/g,function(m,t,u){
+    var i=links.length;links.push({t:t,u:u});return'__CFL_'+i+'__'
   });
   // 2. Escape remaining HTML
   s=s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   // 3. Restore links as safe anchors
-  s=s.replace(/\x00L(\d+)\x00/g,function(m,i){
+  s=s.replace(/__CFL_(\\d+)__/g,function(m,i){
     var l=links[+i];
     var st=l.t.replace(/</g,'&lt;').replace(/>/g,'&gt;');
     return'<a href="'+l.u+'" target="_blank" rel="noopener noreferrer">'+st+'</a>'
   });
   // 4. Bold
-  s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  s=s.replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>');
   // 5. Process lines: numbered list items → <ol><li>, others → <p>
   var lines=s.split('\\n'),out=[],inList=false;
   for(var i=0;i<lines.length;i++){
