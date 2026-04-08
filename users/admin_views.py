@@ -1075,22 +1075,32 @@ def impersonate_tenant(request, tenant_id):
     if not tenant_user:
         return Response({'detail': 'Tenant has no linked user account.'}, status=400)
 
-    # Issue a fresh access token for the tenant user
+    # Issue a fresh access token for the tenant user (15 min expiry)
     refresh = RefreshToken.for_user(tenant_user)
-    # Shorten access token lifetime to 1 hour for impersonation safety
-    from datetime import timedelta
-    from django.utils import timezone
     access = refresh.access_token
-    access.set_exp(lifetime=timedelta(hours=1))
-    # Embed audit claim
+    access.set_exp(lifetime=timedelta(minutes=15))
     access['impersonated_by'] = request.user.username
 
     profile = getattr(tenant_user, 'profile', None)
     role = profile.role if profile else 'tenant_admin'
 
+    try:
+        from users.feature_flags import log_audit
+        log_audit(
+            actor=request.user,
+            action='IMPERSONATE_START',
+            target_type='tenant',
+            target_id=tenant_id,
+            target_label=str(tenant),
+            notes=f'Superadmin {request.user.username} impersonated {tenant}',
+            request=request,
+        )
+    except Exception:
+        pass
+
     return Response({
         'access': str(access),
-        'expires_in': 3600,
+        'expires_in': 900,
         'tenant': {
             'id': tenant.pk,
             'company_name': tenant.company_name,
@@ -1342,14 +1352,8 @@ def session_set_tags(request, session_id):
 # ─── Revenue Intelligence ─────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSuperAdmin])
 def revenue_overview(request):
-    """
-    Superadmin: live revenue metrics — MRR, ARR, churn, ARPU, plan distribution.
-    """
-    from .permissions import IsSuperAdmin
-    if not request.user.profile.is_superadmin:
-        return Response({'detail': 'Forbidden.'}, status=403)
 
     now = timezone.now()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -1441,13 +1445,8 @@ def _plan_color(name):
 # ─── Tenant Health Board ──────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSuperAdmin])
 def tenant_health_board(request):
-    """
-    Superadmin: tenant health scores + risk classification.
-    """
-    if not request.user.profile.is_superadmin:
-        return Response({'detail': 'Forbidden.'}, status=403)
 
     now = timezone.now()
     tenants = TenantProfile.objects.select_related('plan', 'user').prefetch_related('clients').all()
@@ -1523,13 +1522,8 @@ def tenant_health_board(request):
 # ─── Lifecycle Alert Feed ─────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSuperAdmin])
 def lifecycle_alerts(request):
-    """
-    Superadmin: prioritised list of tenant lifecycle events needing attention.
-    """
-    if not request.user.profile.is_superadmin:
-        return Response({'detail': 'Forbidden.'}, status=403)
 
     now = timezone.now()
     alerts = []
@@ -1603,11 +1597,8 @@ def lifecycle_alerts(request):
 # ─── Audit Log ───────────────────────────────────────────────────────────────
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSuperAdmin])
 def audit_log_list(request):
-    """Superadmin: paginated audit log."""
-    if not request.user.profile.is_superadmin:
-        return Response({'detail': 'Forbidden.'}, status=403)
 
     from .models import AuditLog
     qs = AuditLog.objects.select_related('actor').all()
@@ -1645,11 +1636,8 @@ def audit_log_list(request):
 # ─── Feature Overrides (per-tenant) ─────────────────────────────────────────
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSuperAdmin])
 def tenant_feature_overrides(request, tenant_id):
-    """List or create feature overrides for a tenant."""
-    if not request.user.profile.is_superadmin:
-        return Response({'detail': 'Forbidden.'}, status=403)
 
     from .models import TenantFeatureOverride
     try:
@@ -1708,11 +1696,8 @@ def tenant_feature_overrides(request, tenant_id):
 
 
 @api_view(['DELETE'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSuperAdmin])
 def tenant_feature_override_delete(request, tenant_id, override_id):
-    """Remove a feature override."""
-    if not request.user.profile.is_superadmin:
-        return Response({'detail': 'Forbidden.'}, status=403)
 
     from .models import TenantFeatureOverride
     from users.feature_flags import log_audit
@@ -1765,7 +1750,7 @@ def announcements(request):
         ])
 
     # POST — superadmin creates announcement
-    if not request.user.profile.is_superadmin:
+    if not request.user.is_superuser:
         return Response({'detail': 'Forbidden.'}, status=403)
 
     ann = PlatformAnnouncement.objects.create(
@@ -1792,49 +1777,6 @@ def dismiss_announcement(request, ann_id):
     except PlatformAnnouncement.DoesNotExist:
         pass
     return Response({'detail': 'Dismissed.'})
-
-
-# ─── Secure Impersonation (with audit) ───────────────────────────────────────
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def impersonate_tenant(request, tenant_id):
-    """
-    Superadmin logs in as a tenant. Returns short-lived JWT + audit log entry.
-    """
-    if not request.user.profile.is_superadmin:
-        return Response({'detail': 'Forbidden.'}, status=403)
-
-    from users.feature_flags import log_audit
-    try:
-        tenant = TenantProfile.objects.select_related('user').get(pk=tenant_id)
-    except TenantProfile.DoesNotExist:
-        return Response({'detail': 'Not found.'}, status=404)
-
-    # Issue a short-lived access token (15 min) for the tenant's user
-    refresh = RefreshToken.for_user(tenant.user)
-    access = refresh.access_token
-    # 15-minute expiry override
-    from datetime import timedelta as td
-    access.set_exp(lifetime=td(minutes=15))
-
-    log_audit(
-        actor=request.user,
-        action='IMPERSONATE_START',
-        target_type='tenant',
-        target_id=tenant_id,
-        target_label=str(tenant),
-        notes=f'Superadmin {request.user.username} impersonated {tenant}',
-        request=request,
-    )
-
-    return Response({
-        'access': str(access),
-        'tenant_email': tenant.user.email,
-        'tenant_company': tenant.company_name,
-        'expires_in': 900,  # 15 min in seconds
-        'warning': 'Impersonation token expires in 15 minutes.',
-    })
 
 
 # ─── Platform-wide feature flags (killswitch) ────────────────────────────────
