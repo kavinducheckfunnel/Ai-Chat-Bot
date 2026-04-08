@@ -205,7 +205,9 @@ const showLeadForm   = ref(false)
 const leadEmail      = ref('')
 const leadPhone      = ref('')
 const leadSubmitting = ref(false)
-const leadCaptured   = ref(false)
+// Persist lead-captured state in localStorage so it survives page reloads
+const LEAD_KEY = `cf_lead_captured_${clientId || 'default'}`
+const leadCaptured   = ref(!!localStorage.getItem(LEAD_KEY))
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let socket = null
@@ -246,7 +248,7 @@ function connectWebSocket() {
       if (data.type === 'ai_message' && data.message) {
         chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai', reaction: null })
         playChime()
-        if (!leadCaptured.value && userMessageCount.value >= 3) {
+        if (!leadCaptured.value && userMessageCount.value >= 2) {
           setTimeout(() => { showLeadForm.value = true }, 1500)
         }
       }
@@ -392,6 +394,7 @@ function react(index, emoji) {
 function dismissLeadForm() {
   showLeadForm.value = false
   leadCaptured.value = true
+  localStorage.setItem(LEAD_KEY, '1')
 }
 
 async function submitLead() {
@@ -407,6 +410,7 @@ async function submitLead() {
   } catch {}
   leadSubmitting.value = false
   leadCaptured.value = true
+  localStorage.setItem(LEAD_KEY, '1')
   showLeadForm.value = false
   chatMessages.value.push({ type: 'text', text: "✅ Thanks! We'll be in touch soon.", sender: 'ai', reaction: null })
 }

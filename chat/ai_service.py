@@ -28,14 +28,14 @@ def _build_llm(client):
             model=client.ai_model,
             openai_api_key=client.ai_api_key,
             openai_api_base=api_base,
-            temperature=0.7,
+            temperature=0.4,
         )
-    # Platform default
+    # Platform default — gemini-2.0-flash is 5-10x faster than pro-preview
     return ChatOpenAI(
-        model='google/gemini-3.1-pro-preview',
+        model='google/gemini-2.0-flash-001',
         openai_api_key=os.environ.get('OPENROUTER_API_KEY'),
         openai_api_base='https://openrouter.ai/api/v1',
-        temperature=0.7,
+        temperature=0.4,
     )
 
 
