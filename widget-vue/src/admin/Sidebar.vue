@@ -40,10 +40,18 @@
 
       <!-- Superadmin only -->
       <template v-if="isSuperAdmin">
-        <p class="nav-section">Admin</p>
+        <p class="nav-section">Super Admin</p>
+        <router-link to="/admin/superadmin" class="nav-item" :class="{ active: $route.path === '/admin/superadmin' }">
+          <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Intelligence
+        </router-link>
         <router-link to="/admin/tenants" class="nav-item" :class="{ active: $route.path === '/admin/tenants' }">
           <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           Tenants
+        </router-link>
+        <router-link to="/admin/permissions" class="nav-item" :class="{ active: $route.path === '/admin/permissions' }">
+          <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Permissions
         </router-link>
       </template>
     </nav>

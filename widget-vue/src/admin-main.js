@@ -13,6 +13,8 @@ import KanbanView from './admin/KanbanView.vue'
 import GodView from './admin/GodView.vue'
 import TenantManagement from './admin/TenantManagement.vue'
 import LeadManagement from './admin/LeadManagement.vue'
+import SuperAdminDashboard from './admin/Dashboard.vue'
+import PermissionsManager from './admin/PermissionsManager.vue'
 
 import PortalLayout from './portal/PortalLayout.vue'
 import OnboardingWizard from './portal/OnboardingWizard.vue'
@@ -39,6 +41,10 @@ const routes = [
   { path: '/signup', component: SignupView, meta: { public: true } },
   { path: '/forgot-password', component: ForgotPasswordView, meta: { public: true } },
   { path: '/reset-password', component: ResetPasswordView, meta: { public: true } },
+
+  // ── Superadmin standalone pages (have own Sidebar, dark theme) ──────────────
+  { path: '/admin/superadmin', component: SuperAdminDashboard, meta: { superadminOnly: true } },
+  { path: '/admin/permissions', component: PermissionsManager, meta: { superadminOnly: true } },
 
   // ── Superadmin / staff admin SPA ─────────────────────────────────────────
   {
