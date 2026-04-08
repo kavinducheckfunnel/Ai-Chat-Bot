@@ -12,6 +12,8 @@
  *  - Image attach + thumbnail preview (if enabled)
  *  - 👍 👎 emoji reactions on AI messages
  *  - Gentle 3-note chime when AI replies (only when chat is open)
+ *  - Markdown renderer: numbered lists render as <ol> with clickable links
+ *  - Lead capture popup after 2nd AI reply, persisted via localStorage
  */
 
 export function generateEmbedCode(id, url, color, botName, format) {
@@ -54,6 +56,15 @@ export function generateEmbedCode(id, url, color, botName, format) {
 .cf-me{background:${color};color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
 .cf-img-msg{align-self:flex-end;max-width:180px;border-radius:12px;object-fit:cover;display:block;border:1px solid rgba(255,255,255,0.08)}
 
+/* ── AI message markdown content ── */
+.cf-ai ol{margin:5px 0 6px 0;padding-left:18px;list-style-type:decimal!important}
+.cf-ai li{margin-bottom:5px;color:#e2e8f0;line-height:1.5;display:list-item!important}
+.cf-ai p{margin:0 0 5px 0;color:#e2e8f0}
+.cf-ai p:last-child{margin-bottom:0}
+.cf-ai a{color:#a5b4fc;text-decoration:underline;font-weight:500;word-break:break-word}
+.cf-ai a:hover{color:#c4b5fd}
+.cf-ai strong{color:#f1f5f9;font-weight:700}
+
 /* ── Reactions ── */
 .cf-rxn{display:flex;gap:4px;margin-top:5px}
 .cf-rb{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.08);border-radius:20px;padding:2px 8px;font-size:11px;cursor:pointer;transition:all .15s;color:rgba(255,255,255,0.45)}
@@ -89,9 +100,37 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-sb:disabled{opacity:.3!important;cursor:not-allowed}
 #cf-pby{text-align:center;font-size:10px;color:rgba(255,255,255,0.2);padding:5px 0 7px;background:#161616}
 #cf-pby a{color:rgba(255,255,255,0.3);text-decoration:none}
+
+/* ── Lead capture modal ── */
+#cf-lead-ov{position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:2147483648;display:none;align-items:center;justify-content:center}
+#cf-lead-ov.show{display:flex;animation:cf-fdin .2s ease}
+@keyframes cf-fdin{from{opacity:0}to{opacity:1}}
+#cf-lead-box{background:#1a1f2e;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:28px 24px;width:300px;max-width:88vw;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.55);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+#cf-lead-cls{position:absolute;top:10px;right:12px;background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;line-height:1;padding:4px}
+.cf-lead-ico{font-size:32px;text-align:center;margin-bottom:10px}
+.cf-lead-ttl{margin:0 0 5px;font-size:17px;font-weight:700;color:#f1f5f9;text-align:center}
+.cf-lead-sub{margin:0 0 16px;font-size:13px;color:#64748b;text-align:center;line-height:1.5}
+.cf-lead-inp{width:100%;padding:10px 13px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-size:13px;color:#e2e8f0;outline:none;box-sizing:border-box;font-family:inherit;display:block;margin-bottom:8px}
+.cf-lead-inp:focus{border-color:rgba(99,102,241,0.5)}
+.cf-lead-inp::placeholder{color:rgba(255,255,255,0.25)}
+.cf-lead-btn{width:100%;padding:11px;background:${color};border:none;border-radius:10px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;transition:opacity .15s;margin-top:2px;display:block}
+.cf-lead-btn:hover{opacity:.85}
+.cf-lead-btn:disabled{opacity:.5;cursor:not-allowed}
 </style>`
 
-  const html = `<div id="cf-w">
+  const html = `<!-- Lead capture modal -->
+<div id="cf-lead-ov">
+  <div id="cf-lead-box">
+    <button id="cf-lead-cls">&#10005;</button>
+    <div class="cf-lead-ico">&#128236;</div>
+    <p class="cf-lead-ttl">Stay in touch</p>
+    <p class="cf-lead-sub">Leave your contact and we'll follow up with a personalised answer.</p>
+    <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="Your email address"/>
+    <input class="cf-lead-inp" id="cf-lead-ph" type="tel" placeholder="Phone number (optional)"/>
+    <button class="cf-lead-btn" id="cf-lead-sb">Send my details</button>
+  </div>
+</div>
+<div id="cf-w">
 <div id="cf-win" role="dialog" aria-label="Chat with ${name}">
 <div id="cf-head">
 <div class="cf-av">&#9889;</div>
@@ -126,36 +165,93 @@ export function generateEmbedCode(id, url, color, botName, format) {
 (function(){
 var C='${id}',B='${url}';
 
-// ── Session persistence (no "new visitor" on refresh) ──────────────────
+// ── Session persistence ────────────────────────────────────────────────
 var SK='__cf_sid__';
 var sid=sessionStorage.getItem(SK);
 if(!sid){sid='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c=='x'?r:(r&3|8)).toString(16)});sessionStorage.setItem(SK,sid)}
 
 var ws=null,busy=false,recording=false,pendingImg=null,recognition=null;
 var voiceEnabled=false,imageEnabled=false;
+var msgCount=0;
+var LEAD_KEY='cf_lead_'+C;
+var leadDone=!!localStorage.getItem(LEAD_KEY);
 var $=function(id){return document.getElementById(id)};
+
+// ── Markdown renderer ──────────────────────────────────────────────────
+// Converts AI reply_text (markdown) into safe HTML.
+// Handles: numbered lists, [text](url) links, **bold**, plain paragraphs.
+function renderMd(text){
+  // 1. Extract [text](url) links before HTML-escaping
+  var links=[];
+  var s=text.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,function(m,t,u){
+    var i=links.length;links.push({t:t,u:u});return'\x00L'+i+'\x00'
+  });
+  // 2. Escape remaining HTML
+  s=s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // 3. Restore links as safe anchors
+  s=s.replace(/\x00L(\d+)\x00/g,function(m,i){
+    var l=links[+i];
+    var st=l.t.replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return'<a href="'+l.u+'" target="_blank" rel="noopener noreferrer">'+st+'</a>'
+  });
+  // 4. Bold
+  s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  // 5. Process lines: numbered list items → <ol><li>, others → <p>
+  var lines=s.split('\\n'),out=[],inList=false;
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i].trim();
+    var m=line.match(/^(\\d+)\\. +(.+)$/);
+    if(m){
+      if(!inList){out.push('<ol>');inList=true}
+      out.push('<li>'+m[2]+'</li>')
+    }else{
+      if(inList){out.push('</ol>');inList=false}
+      if(line)out.push('<p>'+line+'</p>')
+    }
+  }
+  if(inList)out.push('</ol>');
+  return out.join('')
+}
+
+// ── Lead capture ───────────────────────────────────────────────────────
+function showLead(){if(leadDone)return;$('cf-lead-ov').classList.add('show')}
+function dismissLead(){$('cf-lead-ov').classList.remove('show');leadDone=true;localStorage.setItem(LEAD_KEY,'1')}
+function submitLead(){
+  var em=$('cf-lead-em').value.trim();
+  if(!em)return;
+  $('cf-lead-sb').disabled=true;$('cf-lead-sb').textContent='Saving\u2026';
+  fetch(B+'/api/chat/lead/',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({session_id:sid,email:em,phone:$('cf-lead-ph').value.trim()||null})
+  }).catch(function(){}).finally(function(){
+    dismissLead();
+    bubble('<p>\u2705 Thanks! We\\'ll be in touch soon.</p>','ai')
+  })}
 
 // ── Chime on AI reply ──────────────────────────────────────────────────
 function chime(){if(!open)return;try{var a=new(window.AudioContext||window.webkitAudioContext)();[[880,0],[1100,.14],[1320,.26]].forEach(function(t){var o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.type='sine';o.frequency.value=t[0];var st=a.currentTime+t[1];g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(.09,st+.04);g.gain.exponentialRampToValueAtTime(.001,st+.38);o.start(st);o.stop(st+.38)});setTimeout(function(){a.close()},1400)}catch(e){}}
 
 // ── DOM helpers ────────────────────────────────────────────────────────
-function bubble(html,who,extra){
+function bubble(html,who){
   var d=document.createElement('div');
   if(who==='img'){d.innerHTML='<img class="cf-img-msg" src="'+html+'" alt="image"/>';$('cf-msgs').appendChild(d.firstChild)}
   else{d.className=who==='ai'?'cf-ai':'cf-me';d.innerHTML=html;
-  if(who==='ai'){var rx=document.createElement('div');rx.className='cf-rxn';['\\uD83D\\uDC4D','\\uD83D\\uDC4E'].forEach(function(e){var b=document.createElement('button');b.className='cf-rb';b.textContent=e;b.onclick=function(){var on=b.classList.toggle('on');Array.from(rx.children).forEach(function(x){if(x!==b)x.classList.remove('on')})};rx.appendChild(b)});d.appendChild(rx)}
+  if(who==='ai'){var rx=document.createElement('div');rx.className='cf-rxn';['\\uD83D\\uDC4D','\\uD83D\\uDC4E'].forEach(function(e){var b=document.createElement('button');b.className='cf-rb';b.textContent=e;b.onclick=function(){b.classList.toggle('on');Array.from(rx.children).forEach(function(x){if(x!==b)x.classList.remove('on')})};rx.appendChild(b)});d.appendChild(rx)}
   $('cf-msgs').appendChild(d)}
   $('cf-msgs').scrollTop=9999}
 function dots(){var d=document.createElement('div');d.className='cf-typ';d.id='cf-tdots';d.innerHTML='<span></span><span></span><span></span>';$('cf-msgs').appendChild(d);$('cf-msgs').scrollTop=9999}
 function rmDots(){var t=$('cf-tdots');if(t)t.remove()}
 function setPlaceholder(txt){$('cf-inp').placeholder=txt}
+function escHtml(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML}
 
 // ── WebSocket ──────────────────────────────────────────────────────────
 var open=false;
 function connect(){
   ws=new WebSocket(B.replace(/^https/,'wss').replace(/^http/,'ws')+'/ws/chat/'+C+'/'+sid+'/');
   ws.onmessage=function(e){rmDots();busy=false;$('cf-sb').disabled=!$('cf-inp').value.trim()&&!pendingImg;
-    try{var d=JSON.parse(e.data);if(d.type==='ai_message'&&d.message){bubble(escHtml(d.message),'ai');chime()}}catch(x){}};
+    try{var d=JSON.parse(e.data);if(d.type==='ai_message'&&d.message){
+      bubble(renderMd(d.message),'ai');chime();
+      msgCount++;if(msgCount>=2)setTimeout(showLead,1500)
+    }}catch(x){}};
   ws.onerror=function(){rmDots();busy=false};
   ws.onclose=function(){ws=null}}
 
@@ -184,11 +280,8 @@ function toggleVoice(){
   recognition.onerror=recognition.onend=function(){recording=false;$('cf-vb').classList.remove('rec');setPlaceholder('Type a message\u2026')};
   recognition.start();recording=true;$('cf-vb').classList.add('rec');setPlaceholder('\\uD83C\\uDFA4 Listening...')}
 
-function escHtml(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML}
-
 // ── Load config (voice/image flags) ───────────────────────────────────
-var configUrl=B+'/api/chat/widget-config/'+C+'/';
-fetch(configUrl).then(function(r){return r.json()}).then(function(cfg){
+fetch(B+'/api/chat/widget-config/'+C+'/').then(function(r){return r.json()}).then(function(cfg){
   if(cfg.voice_input_enabled){voiceEnabled=true;$('cf-vb').style.display='flex'}
   if(cfg.image_input_enabled){imageEnabled=true;$('cf-ib').style.display='flex'}
 }).catch(function(){});
@@ -210,6 +303,10 @@ $('cf-ib').onclick=function(){$('cf-fi').click()};
 $('cf-fi').onchange=function(){handleFile(this.files[0]);this.value=''};
 $('cf-prm').onclick=clearImg;
 $('cf-vb').onclick=toggleVoice;
+$('cf-lead-cls').onclick=dismissLead;
+$('cf-lead-ov').onclick=function(e){if(e.target===$('cf-lead-ov'))dismissLead()};
+$('cf-lead-sb').onclick=submitLead;
+$('cf-lead-em').addEventListener('keydown',function(e){if(e.key==='Enter')submitLead()});
 })();
 ` + '</' + 'script>'
 
