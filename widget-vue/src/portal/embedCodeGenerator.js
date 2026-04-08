@@ -110,9 +110,9 @@ export function generateEmbedCode(id, url, color, botName, format) {
 .cf-lead-ico{font-size:32px;text-align:center;margin-bottom:10px}
 .cf-lead-ttl{margin:0 0 5px;font-size:17px;font-weight:700;color:#f1f5f9;text-align:center}
 .cf-lead-sub{margin:0 0 16px;font-size:13px;color:#64748b;text-align:center;line-height:1.5}
-.cf-lead-inp{width:100%;padding:10px 13px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:10px;font-size:13px;color:#e2e8f0;outline:none;box-sizing:border-box;font-family:inherit;display:block;margin-bottom:8px}
-.cf-lead-inp:focus{border-color:rgba(99,102,241,0.5)}
-.cf-lead-inp::placeholder{color:rgba(255,255,255,0.25)}
+.cf-lead-inp{width:100%!important;padding:10px 13px!important;background:#23293a!important;border:1px solid rgba(255,255,255,0.12)!important;border-radius:10px!important;font-size:13px!important;color:#e2e8f0!important;outline:none!important;box-sizing:border-box!important;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif!important;display:block!important;margin:0 0 8px 0!important;line-height:1.4!important;box-shadow:none!important;appearance:none!important;-webkit-appearance:none!important}
+.cf-lead-inp:focus{border-color:rgba(99,102,241,0.6)!important;background:#2a3045!important}
+.cf-lead-inp::placeholder{color:rgba(255,255,255,0.3)!important;opacity:1!important}
 .cf-lead-btn{width:100%;padding:11px;background:${color};border:none;border-radius:10px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;font-family:inherit;transition:opacity .15s;margin-top:2px;display:block}
 .cf-lead-btn:hover{opacity:.85}
 .cf-lead-btn:disabled{opacity:.5;cursor:not-allowed}
