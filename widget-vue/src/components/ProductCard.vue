@@ -11,15 +11,35 @@
         <p v-if="product.description" class="cf-product-desc">{{ product.description }}</p>
         <div class="cf-product-footer">
           <span v-if="product.price" class="cf-product-price">{{ product.price }}</span>
-          <a
-            v-if="product.url"
-            :href="product.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="cf-product-btn"
-          >
-            View Product →
-          </a>
+          <div class="cf-product-actions">
+            <a
+              v-if="product.url"
+              :href="product.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="cf-product-btn cf-product-btn--outline"
+            >
+              Details
+            </a>
+            <a
+              v-if="product.cart_url"
+              :href="product.cart_url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="cf-product-btn cf-product-btn--primary"
+            >
+              Add to Cart →
+            </a>
+            <a
+              v-else-if="product.url && !product.cart_url"
+              :href="product.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="cf-product-btn cf-product-btn--primary"
+            >
+              View Product →
+            </a>
+          </div>
         </div>
       </div>
     </template>
@@ -117,17 +137,21 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-wrap: wrap;
 }
 .cf-product-price {
   font-size: 15px;
   font-weight: 700;
   color: #16a34a;
 }
+.cf-product-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
 .cf-product-btn {
-  background: #3B82F6;
-  color: white;
   border: none;
-  padding: 7px 14px;
+  padding: 7px 12px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 12px;
@@ -136,6 +160,15 @@ onMounted(async () => {
   transition: opacity 0.2s;
   white-space: nowrap;
 }
-.cf-product-btn:hover { opacity: 0.88; }
+.cf-product-btn--outline {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+.cf-product-btn--primary {
+  background: #3B82F6;
+  color: white;
+}
+.cf-product-btn:hover { opacity: 0.82; }
 .cf-product-error { padding: 16px; font-size: 13px; color: #94a3b8; text-align: center; }
 </style>

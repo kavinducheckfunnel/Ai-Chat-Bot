@@ -512,6 +512,32 @@ function showDesktopNotification(title, body) {
   } catch {}
 }
 
+// ── Channel polling (WhatsApp / Messenger / Telegram) ────────────────────────
+let channelPollTimer = null
+
+function startChannelPolling(sessionId) {
+  stopChannelPolling()
+  channelPollTimer = setInterval(async () => {
+    try {
+      const data = await api.getSessionHistory(sessionId)
+      const idx = sessions.value.findIndex(s => s.session_id === sessionId)
+      if (idx !== -1 && data.chat_history) {
+        const current = sessions.value[idx].chat_history || []
+        if (data.chat_history.length !== current.length) {
+          sessions.value[idx] = { ...sessions.value[idx], chat_history: data.chat_history }
+          nextTick(() => {
+            if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
+          })
+        }
+      }
+    } catch {}
+  }, 3000)
+}
+
+function stopChannelPolling() {
+  if (channelPollTimer) { clearInterval(channelPollTimer); channelPollTimer = null }
+}
+
 onMounted(async () => {
   requestNotificationPermission()
   await loadSessions()
@@ -532,12 +558,23 @@ onMounted(async () => {
 onUnmounted(() => {
   if (ws) ws.close()
   clearInterval(durationTimer)
+  stopChannelPolling()
 })
 
 watch(() => props.client, loadSessions)
 
 watch(selected, (s) => {
-  if (s) startTimers()
+  if (s) {
+    startTimers()
+    // For non-website channels, poll for new messages since there's no WebSocket
+    if (s.channel && s.channel !== 'website') {
+      startChannelPolling(s.session_id)
+    } else {
+      stopChannelPolling()
+    }
+  } else {
+    stopChannelPolling()
+  }
   nextTick(() => {
     if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
   })

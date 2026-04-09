@@ -32,6 +32,7 @@ urlpatterns = [
     path('sessions/<uuid:session_id>/takeover/', admin_views.session_takeover, name='admin-session-takeover'),
     path('sessions/<uuid:session_id>/release/', admin_views.session_release, name='admin-session-release'),
     path('sessions/<uuid:session_id>/send/', admin_views.session_send_message, name='admin-session-send'),
+    path('sessions/<uuid:session_id>/history/', admin_views.session_history, name='admin-session-history'),
     path('sessions/<uuid:session_id>/tags/', admin_views.session_set_tags, name='admin-session-tags'),
 
     # Platform

@@ -229,12 +229,33 @@ def product_detail(request, product_id):
     lines = [l.strip() for l in chunk.content.split('\n') if l.strip()]
     description = lines[1] if len(lines) > 1 else (lines[0][:160] if lines else '')
 
+    # Build cart URL based on platform
+    cart_url = None
+    source_url = chunk.source_url or ''
+    platform = meta.get('platform', '').lower()
+
+    if platform == 'shopify' or '/products/' in source_url:
+        # Shopify: /cart/<variant_id>:1 — use product_id as variant_id
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(source_url)
+            base = f'{parsed.scheme}://{parsed.netloc}'
+            cart_url = f'{base}/cart/{product_id}:1'
+        except Exception:
+            pass
+    elif platform == 'woocommerce' or 'woocommerce' in meta.get('type', '').lower():
+        cart_url = f'{source_url}?add-to-cart={product_id}'
+    elif source_url:
+        # WordPress/generic: best effort — link directly to the product page
+        cart_url = source_url
+
     return Response({
         'product_id': product_id,
         'title': title,
         'price': price,
         'description': description[:200],
         'url': chunk.source_url,
+        'cart_url': cart_url,
         'image_url': meta.get('image_url') or meta.get('image'),
     })
 

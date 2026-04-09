@@ -208,6 +208,8 @@ export function useAdminApi() {
       method: 'POST', body: JSON.stringify({ message }),
     }),
 
+    getSessionHistory: (id) => apiFetch(`/api/admin/sessions/${id}/history/`),
+
     // ── Tenant Management ────────────────────────────────────────────────
     getTenants: () => apiFetch('/api/admin/tenants/'),
 

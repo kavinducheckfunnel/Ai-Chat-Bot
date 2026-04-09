@@ -446,21 +446,17 @@ def session_release(request, session_id):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def session_send_message(request, session_id):
-    """Admin sends a message directly to visitor during God View takeover."""
+    """Admin sends a message directly to visitor during God View takeover.
+    Routes the reply to the correct channel (WebSocket, WhatsApp, Messenger, Telegram).
+    """
     try:
-        session = ChatSession.objects.get(session_id=session_id)
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
     except ChatSession.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
     message = request.data.get('message', '').strip()
     if not message:
         return Response({'detail': 'Message is required.'}, status=400)
-
-    # Push message to the visitor's WebSocket group
-    from channels.layers import get_channel_layer
-    from asgiref.sync import async_to_sync
-    channel_layer = get_channel_layer()
-    group_name = f'chat_{session_id}'
 
     # Save to chat history
     history = session.chat_history or []
@@ -470,13 +466,53 @@ def session_send_message(request, session_id):
     update_fields = truncate_chat_history(session)
     session.save(update_fields=update_fields)
 
-    async_to_sync(channel_layer.group_send)(group_name, {
-        'type': 'chat_message',
-        'message': message,
-        'source': 'admin',
-    })
+    channel = session.channel or 'website'
+    client = session.client
 
-    return Response({'detail': 'Message sent.'})
+    # Always push to WebSocket group (website sessions are live this way;
+    # other channels will just have no subscriber, which is harmless)
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    channel_layer = get_channel_layer()
+    try:
+        async_to_sync(channel_layer.group_send)(f'chat_{session_id}', {
+            'type': 'chat_message',
+            'message': message,
+            'source': 'admin',
+        })
+    except Exception:
+        pass
+
+    # Route to the visitor's actual messaging channel
+    if client and channel == 'whatsapp':
+        if client.whatsapp_phone_number_id and client.whatsapp_access_token:
+            from chat.views import _send_whatsapp_reply
+            _send_whatsapp_reply(
+                client.whatsapp_phone_number_id,
+                client.whatsapp_access_token,
+                session.visitor_id,
+                message,
+            )
+
+    elif client and channel == 'messenger':
+        if client.messenger_page_access_token:
+            from chat.views import _send_messenger_reply
+            _send_messenger_reply(
+                client.messenger_page_access_token,
+                session.visitor_id,
+                message,
+            )
+
+    elif client and channel == 'telegram':
+        if client.telegram_bot_token:
+            from chat.views import _send_telegram_reply
+            _send_telegram_reply(
+                client.telegram_bot_token,
+                session.visitor_id,
+                message,
+            )
+
+    return Response({'detail': 'Message sent.', 'channel': channel})
 
 
 # ─── Analytics ───────────────────────────────────────────────────────────────
@@ -1347,6 +1383,32 @@ def session_set_tags(request, session_id):
         return Response({'detail': 'Session not found or access denied.'}, status=404)
 
     return Response({'tags': cleaned})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def session_history(request, session_id):
+    """
+    Returns the latest chat_history for a session.
+    Used by the admin portal to poll new messages for non-WebSocket channels
+    (WhatsApp, Messenger, Telegram) where real-time WS is not available.
+    """
+    from .permissions import get_accessible_clients
+    accessible_client_ids = get_accessible_clients(request.user).values_list('id', flat=True)
+    try:
+        session = ChatSession.objects.get(
+            session_id=session_id,
+            client_id__in=accessible_client_ids,
+        )
+    except ChatSession.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    return Response({
+        'session_id': str(session.session_id),
+        'channel': session.channel,
+        'chat_history': session.chat_history or [],
+        'updated_at': session.updated_at.isoformat(),
+    })
 
 
 # ─── Revenue Intelligence ─────────────────────────────────────────────────────

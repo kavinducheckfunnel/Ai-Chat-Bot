@@ -13,6 +13,9 @@
         </div>
       </div>
       <div class="header-right">
+        <div v-if="session?.channel && session.channel !== 'website'" class="channel-pill" :class="'ch-' + session.channel">
+          {{ { whatsapp: '💬 WhatsApp', messenger: '💙 Messenger', telegram: '✈️ Telegram' }[session.channel] || session.channel }}
+        </div>
         <div class="status-pill" :class="session?.takeover_active ? 'status-takeover' : 'status-ai'">
           <div class="status-dot"></div>
           {{ session?.takeover_active ? 'You are in control' : 'AI is handling' }}
@@ -270,6 +273,10 @@ onUnmounted(() => clearInterval(pollInterval))
 }
 .status-ai { background: #F0FDF4; color: #15803D; }
 .status-takeover { background: rgba(239,68,68,0.1); color: #DC2626; }
+.channel-pill { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 20px; border: 1px solid; }
+.ch-whatsapp { background: rgba(37,211,102,0.1); color: #25d366; border-color: rgba(37,211,102,0.3); }
+.ch-messenger { background: rgba(0,132,255,0.1); color: #0084ff; border-color: rgba(0,132,255,0.3); }
+.ch-telegram  { background: rgba(41,182,246,0.1); color: #29b6f6; border-color: rgba(41,182,246,0.3); }
 .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: pulse 2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 

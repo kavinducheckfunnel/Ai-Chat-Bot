@@ -107,6 +107,25 @@
             <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
+        <!-- TTS speaker toggle — only when voice_input_enabled -->
+        <button
+          v-if="branding.voice_input_enabled"
+          class="media-btn"
+          :class="{ 'tts-active': ttsEnabled }"
+          @click="ttsEnabled = !ttsEnabled"
+          :title="ttsEnabled ? 'Mute AI voice' : 'Enable AI voice'"
+          aria-label="Toggle AI voice"
+        >
+          <svg v-if="ttsEnabled" width="17" height="17" fill="none" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg v-else width="17" height="17" fill="none" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
         <input
           type="text"
           id="cf-chat-input"
@@ -199,6 +218,7 @@ const fileInput          = ref(null)
 const userMessageCount   = ref(0)
 const pendingImage       = ref(null)   // base64 data URI of image to send
 const isRecording        = ref(false)
+const ttsEnabled         = ref(false)  // AI voice readback toggle
 
 // ── Lead capture ──────────────────────────────────────────────────────────────
 const showLeadForm   = ref(false)
@@ -247,6 +267,7 @@ function connectWebSocket() {
       isTyping.value = false
       if (data.type === 'ai_message' && data.message) {
         chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai', reaction: null })
+        speakText(data.message)
         playChime()
         if (!leadCaptured.value && userMessageCount.value >= 2) {
           setTimeout(() => { showLeadForm.value = true }, 1500)
@@ -359,7 +380,7 @@ function clearPendingImage() {
   pendingImage.value = null
 }
 
-// ── Voice input ───────────────────────────────────────────────────────────────
+// ── Voice input (STT) ─────────────────────────────────────────────────────────
 let recognition = null
 function toggleVoice() {
   if (isRecording.value) {
@@ -381,6 +402,34 @@ function toggleVoice() {
   recognition.onend = () => { isRecording.value = false }
   recognition.start()
   isRecording.value = true
+}
+
+// ── Voice output (TTS) ────────────────────────────────────────────────────────
+function stripMarkdownForTts(text) {
+  return (text || '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')  // [label](url) → label
+    .replace(/\*\*([^*]+)\*\*/g, '$1')         // **bold** → bold
+    .replace(/\*([^*]+)\*/g, '$1')             // *italic* → italic
+    .replace(/^[\d]+\.\s+/gm, '')             // numbered list prefixes
+    .replace(/^[-*]\s+/gm, '')                // bullet prefixes
+    .replace(/#{1,6}\s+/g, '')                // headings
+    .replace(/`{1,3}[^`]*`{1,3}/g, '')       // code
+    .trim()
+}
+
+function speakText(text) {
+  if (!ttsEnabled.value || !window.speechSynthesis) return
+  window.speechSynthesis.cancel()
+  const clean = stripMarkdownForTts(text)
+  if (!clean) return
+  const utt = new SpeechSynthesisUtterance(clean)
+  utt.rate = 1.05
+  utt.pitch = 1.0
+  window.speechSynthesis.speak(utt)
+}
+
+function stopSpeech() {
+  if (window.speechSynthesis) window.speechSynthesis.cancel()
 }
 
 // ── Emoji reactions ───────────────────────────────────────────────────────────
@@ -424,6 +473,7 @@ watch(chatMessages, async () => {
 // ── Toggle ────────────────────────────────────────────────────────────────────
 function toggleWindow() {
   isOpen.value = !isOpen.value
+  if (!isOpen.value) stopSpeech()
   if (isOpen.value) {
     connectWebSocket()
     nextTick(() => {
@@ -694,6 +744,7 @@ onBeforeUnmount(() => {
 }
 .media-btn:hover { background: rgba(255,255,255,0.1); color: #94a3b8; }
 .media-btn.recording { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.4); color: #f87171; animation: cf-pulse-rec 1s ease-in-out infinite; }
+.media-btn.tts-active { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #818cf8; }
 @keyframes cf-pulse-rec { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 6px transparent; } }
 
 #cf-chat-input {
