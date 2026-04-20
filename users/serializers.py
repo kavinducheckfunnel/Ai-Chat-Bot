@@ -23,6 +23,14 @@ class ClientSerializer(serializers.ModelSerializer):
             'voice_input_enabled', 'image_input_enabled',
             'ingestion_status', 'total_pages_ingested', 'session_count',
             'created_at', 'updated_at',
+            'ai_provider', 'ai_api_key', 'ai_model',
+            'whatsapp_phone_number_id', 'whatsapp_access_token', 'whatsapp_verify_token', 'whatsapp_enabled',
+            'messenger_page_id', 'messenger_page_access_token', 'messenger_verify_token', 'messenger_enabled',
+            'hubspot_api_key',
+            'telegram_bot_token', 'telegram_enabled',
+            'slack_webhook_url',
+            'outbound_webhook_url', 'outbound_webhook_events',
+            'canned_responses',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'session_count', 'ingestion_status', 'total_pages_ingested']
 
