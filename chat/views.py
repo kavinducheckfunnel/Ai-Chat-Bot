@@ -365,7 +365,7 @@ def whatsapp_webhook(request, client_id):
 
 def _send_messenger_reply(page_access_token, recipient_id, text):
     try:
-        http_requests.post(
+        resp = http_requests.post(
             'https://graph.facebook.com/v20.0/me/messages',
             params={'access_token': page_access_token},
             json={
@@ -374,6 +374,10 @@ def _send_messenger_reply(page_access_token, recipient_id, text):
             },
             timeout=10,
         )
+        if resp.status_code != 200:
+            logger.error(f'[messenger_reply] Graph API error {resp.status_code}: {resp.text}')
+        else:
+            logger.info(f'[messenger_reply] Sent OK to {recipient_id}')
     except Exception as e:
         logger.error(f'[messenger_reply] Failed: {e}')
 
