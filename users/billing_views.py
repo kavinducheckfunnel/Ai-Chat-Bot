@@ -43,9 +43,22 @@ def public_plans(request):
             'id': p.id,
             'name': p.name,
             'price_monthly': str(p.price_monthly),
-            'max_sessions_per_month': p.max_sessions_per_month,
-            'max_clients': p.max_clients,
             'stripe_price_id': p.stripe_price_id or '',
+            'stripe_price_id_annual': p.stripe_price_id_annual or '',
+            'max_clients': p.max_clients,
+            'max_sessions_per_month': p.max_sessions_per_month,
+            'max_messages_per_month': p.max_messages_per_month,
+            'max_images_per_month': p.max_images_per_month,
+            'max_voice_per_month': p.max_voice_per_month,
+            'max_dashboard_metrics': p.max_dashboard_metrics,
+            'data_retention_days': p.data_retention_days,
+            'allow_whatsapp': p.allow_whatsapp,
+            'allow_telegram': p.allow_telegram,
+            'allow_messenger': p.allow_messenger,
+            'allow_byok': p.allow_byok,
+            'allow_hubspot': p.allow_hubspot,
+            'remove_branding': p.remove_branding,
+            'allow_advanced_reports': p.allow_advanced_reports,
         })
     return Response(data)
 
@@ -61,20 +74,34 @@ def get_subscription(request):
     except TenantProfile.DoesNotExist:
         return Response({'plan': None, 'status': None})
 
+    from users.feature_flags import usage_summary
     plan = tenant.plan
+
+    def _plan_data(p):
+        if not p:
+            return None
+        return {
+            'id': p.id,
+            'name': p.name,
+            'price_monthly': str(p.price_monthly),
+            'max_sessions_per_month': p.max_sessions_per_month,
+            'max_clients': p.max_clients,
+            'max_messages_per_month': p.max_messages_per_month,
+            'max_images_per_month': p.max_images_per_month,
+            'max_voice_per_month': p.max_voice_per_month,
+            'max_dashboard_metrics': p.max_dashboard_metrics,
+            'data_retention_days': p.data_retention_days,
+        }
+
     return Response({
-        'plan': {
-            'id': plan.id,
-            'name': plan.name,
-            'price_monthly': str(plan.price_monthly),
-            'max_sessions_per_month': plan.max_sessions_per_month,
-            'max_clients': plan.max_clients,
-        } if plan else None,
+        'plan': _plan_data(plan),
         'stripe_customer_id': tenant.stripe_customer_id,
         'stripe_subscription_id': tenant.stripe_subscription_id,
         'stripe_subscription_status': tenant.stripe_subscription_status,
+        'billing_interval': tenant.billing_interval,
         'trial_ends_at': tenant.trial_ends_at.isoformat() if tenant.trial_ends_at else None,
         'sessions_this_month': tenant.sessions_this_month,
+        'usage': usage_summary(request.user),
     })
 
 

@@ -17,6 +17,26 @@ from asgiref.sync import async_to_sync
 logger = logging.getLogger(__name__)
 
 
+def _get_tenant_for_client(client):
+    """Find the TenantProfile that owns this client."""
+    from users.models import TenantProfile
+    return TenantProfile.objects.filter(clients=client).first()
+
+
+def _check_and_increment_message(tenant) -> bool:
+    """Check message quota; atomically increment if within limit. Returns False if quota exceeded."""
+    if not tenant or not tenant.plan:
+        return True
+    from users.feature_flags import _effective_limit
+    limit = _effective_limit(tenant.plan.max_messages_per_month, tenant.addon_messages)
+    if limit >= 0 and tenant.messages_this_month >= limit:
+        return False
+    from django.db.models import F
+    from users.models import TenantProfile
+    TenantProfile.objects.filter(pk=tenant.pk).update(messages_this_month=F('messages_this_month') + 1)
+    return True
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([ChatRateThrottle, SessionRateThrottle])
@@ -29,6 +49,14 @@ def chat_message(request):
         return Response({'error': 'session_id and message are required'}, status=status.HTTP_400_BAD_REQUEST)
 
     session, _ = ChatSession.objects.get_or_create(session_id=session_id)
+
+    tenant = _get_tenant_for_client(session.client) if session.client else None
+    if not _check_and_increment_message(tenant):
+        return Response({
+            'error': 'quota_exceeded',
+            'reply_text': "I'm sorry, this chatbot has reached its monthly message limit. Please try again next month.",
+        }, status=status.HTTP_200_OK)  # 200 so widget still renders the message
+
     ai_response = generate_ai_response(session, message, behavior_matrix)
     return Response(ai_response)
 
@@ -345,6 +373,9 @@ def whatsapp_webhook(request, client_id):
 
     # Route through AI
     session = _get_or_create_channel_session(client, sender_phone, 'whatsapp')
+    tenant = _get_tenant_for_client(client)
+    if not _check_and_increment_message(tenant):
+        return HttpResponse('OK')  # quota exceeded — silently skip
     try:
         result = generate_ai_response(session, text, {})
         reply_text = result.get('reply_text', 'Sorry, I could not process your request.')
@@ -417,6 +448,9 @@ def messenger_webhook(request, client_id):
 
     # Route through AI
     session = _get_or_create_channel_session(client, sender_psid, 'messenger')
+    tenant = _get_tenant_for_client(client)
+    if not _check_and_increment_message(tenant):
+        return HttpResponse('OK')  # quota exceeded — silently skip
     try:
         result = generate_ai_response(session, text, {})
         reply_text = result.get('reply_text', 'Sorry, I could not process your request.')
@@ -464,6 +498,9 @@ def telegram_webhook(request, client_id):
         return HttpResponse('OK')
 
     session = _get_or_create_channel_session(client, chat_id, 'telegram')
+    tenant = _get_tenant_for_client(client)
+    if not _check_and_increment_message(tenant):
+        return HttpResponse('OK')  # quota exceeded — silently skip
     try:
         result = generate_ai_response(session, text, {})
         reply_text = result.get('reply_text', 'Sorry, I could not process your request.')

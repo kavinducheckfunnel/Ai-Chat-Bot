@@ -230,6 +230,10 @@ class TenantProfile(models.Model):
     addon_images = models.IntegerField(default=0)
     addon_voice = models.IntegerField(default=0)
 
+    # ── V2 scaffolding (DB columns only — no business logic yet) ──────────────
+    affiliate_code = models.CharField(max_length=50, blank=True, null=True)
+    marketing_messages_enabled = models.BooleanField(default=False)
+
     def __str__(self):
         return f"{self.company_name or self.user.username}"
 

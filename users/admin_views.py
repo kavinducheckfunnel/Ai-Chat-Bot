@@ -832,6 +832,7 @@ def kanban_view(request):
             'client_name': s.client.name if s.client else 'Unknown',
             'client_id': str(s.client.id) if s.client else None,
             'lead_email': s.lead_email,
+            'lead_phone': s.lead_phone,
             'takeover_active': s.takeover_active,
             'updated_at': s.updated_at.isoformat(),
         })

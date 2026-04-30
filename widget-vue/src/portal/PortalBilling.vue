@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">Billing</h1>
-        <p class="page-sub">Manage your subscription and plan.</p>
+        <p class="page-sub">Manage your subscription and usage.</p>
       </div>
     </div>
 
@@ -20,17 +20,15 @@
           <div class="cp-badge" :class="statusClass">{{ statusLabel }}</div>
           <h2 class="cp-plan-name">{{ sub.plan?.name || 'No plan' }}</h2>
           <p class="cp-price" v-if="sub.plan">
-            ${{ sub.plan.price_monthly }}<span>/mo</span>
+            ${{ billingInterval === 'annual' ? annualMonthly(sub.plan) : sub.plan.price_monthly }}<span>/mo</span>
+            <span v-if="billingInterval === 'annual'" class="annual-tag">billed annually · save 15%</span>
           </p>
           <p class="cp-price" v-else>Free</p>
-          <div class="cp-meta">
-            <span>{{ sub.sessions_this_month || 0 }} / {{ sub.plan?.max_sessions_per_month || '—' }} sessions this month</span>
-          </div>
-          <div class="usage-bar-wrap" v-if="sub.plan">
-            <div class="usage-bar">
-              <div class="usage-fill" :style="{ width: usagePct + '%', background: usagePct > 80 ? '#ef4444' : '#6366f1' }"></div>
-            </div>
-            <span class="usage-pct">{{ usagePct }}%</span>
+
+          <!-- Trial banner -->
+          <div v-if="sub.trial_ends_at" class="trial-notice">
+            <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#a78bfa" stroke-width="2"/><path d="M12 8v4l2.5 2.5" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/></svg>
+            Trial ends {{ formatDate(sub.trial_ends_at) }}
           </div>
         </div>
         <div class="cp-right">
@@ -38,6 +36,32 @@
             <span v-if="portalLoading" class="spinner"></span>
             <span v-else>Manage billing</span>
           </button>
+        </div>
+      </div>
+
+      <!-- ── Usage bars ──────────────────────────────────────────────────── -->
+      <div class="usage-section" v-if="sub.usage && sub.plan">
+        <h3 class="section-heading">Usage this month</h3>
+        <div class="usage-grid">
+          <div class="usage-card" v-for="res in usageResources" :key="res.key">
+            <div class="usage-label">
+              <span>{{ res.label }}</span>
+              <span class="usage-nums">
+                {{ res.used.toLocaleString() }}
+                <span v-if="res.limit >= 0"> / {{ res.limit.toLocaleString() }}</span>
+                <span v-else> / ∞</span>
+              </span>
+            </div>
+            <div class="usage-bar">
+              <div
+                class="usage-fill"
+                :style="{ width: res.pct + '%', background: res.pct > 90 ? '#ef4444' : res.pct > 75 ? '#f59e0b' : '#6366f1' }"
+              ></div>
+            </div>
+            <span v-if="res.pct > 80" class="usage-warn">
+              {{ res.pct >= 100 ? 'Limit reached' : `${res.pct}% used — approaching limit` }}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -52,27 +76,38 @@
         Your subscription has been canceled. Upgrade to restore full access.
       </div>
 
-      <!-- ── Plan picker ──────────────────────────────────────────────────── -->
-      <h3 class="section-heading">Choose a plan</h3>
+      <!-- ── Billing interval toggle ─────────────────────────────────────── -->
+      <div class="interval-toggle-wrap">
+        <h3 class="section-heading" style="margin:0">Choose a plan</h3>
+        <div class="interval-toggle">
+          <button :class="{ active: billingInterval === 'monthly' }" @click="billingInterval = 'monthly'">Monthly</button>
+          <button :class="{ active: billingInterval === 'annual' }" @click="billingInterval = 'annual'">
+            Annual <span class="save-badge">Save 15%</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ── Plan cards ──────────────────────────────────────────────────── -->
       <div class="plans-grid">
         <div
           v-for="plan in plans"
           :key="plan.id"
           class="plan-card"
-          :class="{ current: sub.plan?.id === plan.id, popular: plan.name === 'Professional' }"
+          :class="{ current: isCurrentPlan(plan), popular: plan.name === 'Growth' }"
         >
-          <div class="plan-popular-badge" v-if="plan.name === 'Professional'">Most popular</div>
+          <div class="plan-popular-badge" v-if="plan.name === 'Growth'">Most popular</div>
           <div class="plan-header">
             <span class="plan-name">{{ plan.name }}</span>
             <div class="plan-price">
-              <span class="plan-amount">${{ plan.price_monthly }}</span>
+              <span class="plan-amount">${{ billingInterval === 'annual' ? annualMonthly(plan) : plan.price_monthly }}</span>
               <span class="plan-period">/mo</span>
             </div>
+            <span v-if="billingInterval === 'annual' && plan.price_monthly > 0" class="plan-annual-note">billed ${{ annualTotal(plan) }}/yr</span>
           </div>
           <ul class="plan-features">
             <li>
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              {{ plan.max_sessions_per_month.toLocaleString() }} sessions/mo
+              {{ formatLimit(plan.max_messages_per_month) }} AI messages/mo
             </li>
             <li>
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -80,31 +115,39 @@
             </li>
             <li>
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              AI chat + lead capture
+              {{ formatLimit(plan.max_sessions_per_month) }} sessions/mo
             </li>
-            <li v-if="plan.price_monthly > 0">
+            <li v-if="plan.allow_whatsapp || plan.allow_messenger || plan.allow_telegram">
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              WhatsApp + Messenger
+              Social channels (WhatsApp / Messenger / Telegram)
             </li>
-            <li v-if="plan.price_monthly >= 79">
+            <li v-if="plan.allow_hubspot">
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
               HubSpot CRM sync
             </li>
-            <li v-if="plan.price_monthly >= 149">
+            <li v-if="plan.allow_byok">
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              BYOK (your own AI key)
+              Bring your own AI key (BYOK)
+            </li>
+            <li v-if="plan.allow_advanced_reports">
+              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Advanced analytics
+            </li>
+            <li v-if="plan.remove_branding">
+              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Remove branding
             </li>
           </ul>
           <button
             class="plan-btn"
-            :class="{ 'plan-btn-current': sub.plan?.id === plan.id, 'plan-btn-upgrade': sub.plan?.id !== plan.id }"
-            :disabled="sub.plan?.id === plan.id || !plan.stripe_price_id || checkoutLoading === plan.id"
+            :class="{ 'plan-btn-current': isCurrentPlan(plan), 'plan-btn-upgrade': !isCurrentPlan(plan) }"
+            :disabled="isCurrentPlan(plan) || !activePriceId(plan) || checkoutLoading === plan.id"
             @click="checkout(plan)"
           >
             <span v-if="checkoutLoading === plan.id" class="spinner"></span>
-            <span v-else-if="sub.plan?.id === plan.id">Current plan</span>
-            <span v-else-if="!plan.stripe_price_id">Coming soon</span>
-            <span v-else-if="sub.plan && plan.price_monthly < sub.plan.price_monthly">Downgrade</span>
+            <span v-else-if="isCurrentPlan(plan)">Current plan</span>
+            <span v-else-if="!activePriceId(plan)">Coming soon</span>
+            <span v-else-if="isDowngrade(plan)">Downgrade</span>
             <span v-else>Upgrade</span>
           </button>
         </div>
@@ -143,14 +186,39 @@ const checkoutLoading = ref(null)
 const error = ref('')
 const sub = ref({})
 const plans = ref([])
+const billingInterval = ref('monthly')
 
-const usagePct = computed(() => {
-  const used = sub.value.sessions_this_month || 0
-  const max = sub.value.plan?.max_sessions_per_month || 1
-  return Math.min(Math.round((used / max) * 100), 100)
-})
+// ── helpers ──────────────────────────────────────────────────────────────────
+
+function annualMonthly(plan) {
+  return (parseFloat(plan.price_monthly) * 0.85).toFixed(0)
+}
+function annualTotal(plan) {
+  return (parseFloat(plan.price_monthly) * 0.85 * 12).toFixed(0)
+}
+function activePriceId(plan) {
+  return billingInterval.value === 'annual'
+    ? plan.stripe_price_id_annual
+    : plan.stripe_price_id
+}
+function isCurrentPlan(plan) {
+  return sub.value.plan?.id === plan.id
+}
+function isDowngrade(plan) {
+  return sub.value.plan && parseFloat(plan.price_monthly) < parseFloat(sub.value.plan.price_monthly)
+}
+function formatLimit(n) {
+  if (n < 0) return 'Unlimited'
+  return n.toLocaleString()
+}
+function formatDate(iso) {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+// ── computed ─────────────────────────────────────────────────────────────────
 
 const statusLabel = computed(() => {
+  if (sub.value.trial_ends_at && new Date(sub.value.trial_ends_at) > new Date()) return 'Trial'
   const s = sub.value.stripe_subscription_status
   if (!s || s === 'active') return 'Active'
   if (s === 'past_due') return 'Past due'
@@ -166,12 +234,32 @@ const statusClass = computed(() => {
   return 'ok'
 })
 
+const usageResources = computed(() => {
+  const u = sub.value.usage || {}
+
+  function pct(used, limit) {
+    if (limit < 0) return 0
+    if (!limit) return 0
+    return Math.min(Math.round((used / limit) * 100), 100)
+  }
+
+  return [
+    { key: 'messages', label: 'AI Messages', used: u.messages?.used || 0, limit: u.messages?.limit ?? -1, pct: pct(u.messages?.used || 0, u.messages?.limit ?? -1) },
+    { key: 'sessions', label: 'Chat Sessions', used: u.sessions?.used || 0, limit: u.sessions?.limit ?? -1, pct: pct(u.sessions?.used || 0, u.sessions?.limit ?? -1) },
+    { key: 'images',   label: 'Image Uploads', used: u.images?.used || 0,   limit: u.images?.limit ?? -1,   pct: pct(u.images?.used || 0,   u.images?.limit ?? -1) },
+    { key: 'voice',    label: 'Voice Commands', used: u.voice?.used || 0,    limit: u.voice?.limit ?? -1,    pct: pct(u.voice?.used || 0,    u.voice?.limit ?? -1) },
+  ].filter(r => r.limit !== 0) // hide resources not in plan
+})
+
 const faqs = ref([
   { q: 'Can I cancel anytime?', a: 'Yes — cancel from the Manage billing portal. Your access continues until the end of the billing period.', open: false },
-  { q: 'What happens if I exceed my session limit?', a: 'Visitors will see a polite message that the chatbot is temporarily unavailable. Upgrade your plan to restore access immediately.', open: false },
+  { q: 'What happens if I exceed my message limit?', a: 'The chatbot will display a polite notice that it has reached its limit for the month. Upgrade your plan to restore access immediately.', open: false },
+  { q: 'What is the annual plan discount?', a: 'Annual plans are billed upfront at 15% off the monthly rate. You can switch between monthly and annual at any time.', open: false },
   { q: 'Can I change plans mid-month?', a: 'Yes. Upgrades are pro-rated and take effect immediately. Downgrades apply at the start of the next billing cycle.', open: false },
   { q: 'Is my payment information secure?', a: 'All payments are handled by Stripe — we never store your card details.', open: false },
 ])
+
+// ── data loading ─────────────────────────────────────────────────────────────
 
 async function load() {
   loading.value = true
@@ -183,6 +271,7 @@ async function load() {
     ])
     sub.value = subData
     plans.value = planData
+    if (subData.billing_interval) billingInterval.value = subData.billing_interval
   } catch (e) {
     error.value = e.message || 'Failed to load billing info.'
   } finally {
@@ -193,6 +282,8 @@ async function load() {
 async function checkout(plan) {
   error.value = ''
   checkoutLoading.value = plan.id
+  const priceId = activePriceId(plan)
+  if (!priceId) { error.value = 'This plan is not available yet.'; checkoutLoading.value = null; return }
   try {
     const { url } = await api.createCheckoutSession(plan.id)
     window.location.href = url
@@ -221,7 +312,7 @@ onMounted(load)
 <style scoped>
 .billing-page {
   padding: 32px;
-  max-width: 1000px;
+  max-width: 1100px;
 }
 
 .page-header { margin-bottom: 28px; }
@@ -239,13 +330,13 @@ onMounted(load)
 /* Current plan card */
 .current-plan-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   background: #1a1a2e;
   border: 1px solid rgba(99,102,241,0.2);
   border-radius: 16px;
   padding: 24px 28px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   gap: 20px;
 }
 .current-plan-card.warn { border-color: rgba(245,158,11,0.3); }
@@ -268,14 +359,50 @@ onMounted(load)
 .cp-badge.danger { background: rgba(239,68,68,0.1); color: #ef4444; border-color: rgba(239,68,68,0.2); }
 
 .cp-plan-name { font-size: 20px; font-weight: 700; color: #f1f5f9; margin: 0 0 4px; }
-.cp-price { font-size: 28px; font-weight: 800; color: #f1f5f9; margin: 0 0 8px; }
-.cp-price span { font-size: 14px; font-weight: 400; color: #64748b; }
-.cp-meta { font-size: 13px; color: #64748b; margin-bottom: 8px; }
+.cp-price { font-size: 28px; font-weight: 800; color: #f1f5f9; margin: 0 0 6px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.cp-price span:first-child { font-size: 14px; font-weight: 400; color: #64748b; }
+.annual-tag { font-size: 11px; font-weight: 600; color: #a78bfa; background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2); border-radius: 6px; padding: 2px 8px; }
 
-.usage-bar-wrap { display: flex; align-items: center; gap: 10px; }
-.usage-bar { flex: 1; height: 6px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; max-width: 200px; }
+.trial-notice {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: #a78bfa;
+  background: rgba(167,139,250,0.08);
+  border: 1px solid rgba(167,139,250,0.2);
+  border-radius: 8px;
+  padding: 5px 10px;
+  margin-top: 8px;
+  width: fit-content;
+}
+
+/* Usage section */
+.usage-section { margin-bottom: 20px; }
+.usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.usage-card {
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.usage-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.usage-nums { color: #f1f5f9; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.usage-bar { height: 6px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; }
 .usage-fill { height: 100%; border-radius: 6px; transition: width 0.4s; }
-.usage-pct { font-size: 12px; color: #64748b; }
+.usage-warn { font-size: 11px; color: #f59e0b; }
 
 .btn-portal {
   background: rgba(99,102,241,0.1);
@@ -309,8 +436,47 @@ onMounted(load)
 .alert-banner.danger { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; }
 .btn-link { background: none; border: none; text-decoration: underline; cursor: pointer; color: inherit; font-size: 13px; margin-left: auto; }
 
+/* Billing interval toggle */
+.interval-toggle-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 24px 0 16px;
+}
+.interval-toggle {
+  display: flex;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+.interval-toggle button {
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.interval-toggle button.active { background: rgba(99,102,241,0.2); color: #a5b4fc; }
+.save-badge {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(167,139,250,0.15);
+  color: #a78bfa;
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+
 /* Plan grid */
-.section-heading { font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin: 24px 0 16px; }
+.section-heading { font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 16px; }
 
 .plans-grid {
   display: grid;
@@ -355,9 +521,11 @@ onMounted(load)
 .plan-price { display: flex; align-items: baseline; gap: 2px; }
 .plan-amount { font-size: 32px; font-weight: 800; color: #f1f5f9; }
 .plan-period { font-size: 13px; color: #475569; }
+.plan-annual-note { font-size: 11px; color: #64748b; margin-top: 2px; }
 
 .plan-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.plan-features li { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #94a3b8; }
+.plan-features li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #94a3b8; line-height: 1.4; }
+.plan-features li svg { flex-shrink: 0; margin-top: 2px; }
 
 .plan-btn {
   width: 100%;

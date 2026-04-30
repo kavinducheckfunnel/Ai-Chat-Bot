@@ -60,7 +60,13 @@ def has_feature(user, feature: str) -> bool:
     if not tenant:
         return False
 
-    # 1. Check active per-tenant overrides
+    # 1. Active free trial → grant non-Pro features
+    PRO_ONLY = {'remove_branding', 'allow_custom_domain', 'allow_api_access', 'allow_multi_language'}
+    if tenant.trial_ends_at and tenant.trial_ends_at > timezone.now():
+        if feature not in PRO_ONLY:
+            return True
+
+    # 2. Check active per-tenant overrides
     from users.models import TenantFeatureOverride
     override = TenantFeatureOverride.objects.filter(
         tenant=tenant,
@@ -72,7 +78,7 @@ def has_feature(user, feature: str) -> bool:
         else:
             return override.enabled
 
-    # 2. Fall back to plan
+    # 3. Fall back to plan
     plan = tenant.plan
     if not plan:
         return False
