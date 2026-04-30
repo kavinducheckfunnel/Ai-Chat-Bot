@@ -9,7 +9,7 @@
       </div>
       <div class="header-right">
         <div class="period-tabs">
-          <button v-for="p in periods" :key="p.val" class="period-btn" :class="{ active: period === p.val }" @click="period = p.val">
+          <button v-for="p in periods" :key="p.val" class="period-btn" :class="{ active: period === p.val }" @click="period = p.val; load()">
             {{ p.label }}
           </button>
         </div>
@@ -23,9 +23,25 @@
 
     <!-- Tab navigation -->
     <div class="tab-nav">
-      <button v-for="t in tabs" :key="t.key" class="tab-btn" :class="{ active: activeTab === t.key }" @click="activeTab = t.key">
+      <button
+        v-for="t in tabs"
+        :key="t.key"
+        class="tab-btn"
+        :class="{ active: activeTab === t.key, locked: t.locked }"
+        @click="t.locked ? showUpgrade(t.requiredPlan) : (activeTab = t.key)"
+        :title="t.locked ? `Upgrade to ${t.requiredPlan} to unlock` : ''"
+      >
         {{ t.label }}
+        <svg v-if="t.locked" width="11" height="11" fill="none" viewBox="0 0 24 24" style="margin-left:4px;opacity:.5"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
+    </div>
+
+    <!-- Upgrade banner (dismissible) -->
+    <div v-if="upgradeMsg" class="upgrade-banner">
+      <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      {{ upgradeMsg }}
+      <a href="/portal/billing" class="upgrade-link">Upgrade plan →</a>
+      <button class="banner-close" @click="upgradeMsg = ''">✕</button>
     </div>
 
     <!-- ═══════════════════════ OVERVIEW TAB ═══════════════════════ -->
@@ -54,8 +70,18 @@
         </div>
       </div>
 
-      <!-- Secondary row: duration + missed -->
-      <div class="secondary-row" v-if="!loading">
+      <!-- Secondary row: duration + missed (Growth+) -->
+      <div v-if="!canSeeCharts" class="locked-section">
+        <div class="locked-card">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" stroke="#a78bfa" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/></svg>
+          <div>
+            <div class="locked-title">Advanced metrics locked</div>
+            <div class="locked-sub">Avg duration, missed chats, daily trends and more. <a href="/portal/billing" class="upgrade-link">Upgrade to Growth →</a></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="secondary-row" v-else-if="!loading">
         <div class="secondary-card">
           <div class="sc-label">Avg chat duration</div>
           <div class="sc-value">{{ fmtDuration(val('avg_duration_seconds')) }}</div>
@@ -77,12 +103,12 @@
           <div class="sc-delta" :class="deltaCls(delta('ai_resolution_rate'))">{{ formatDeltaFloat(delta('ai_resolution_rate')) }}% vs prev</div>
         </div>
       </div>
-      <div class="secondary-row" v-else>
+      <div class="secondary-row" v-else-if="canSeeCharts">
         <div class="secondary-card skeleton" v-for="n in 4" :key="n"><div class="sk-val"></div><div class="sk-lbl"></div></div>
       </div>
 
-      <!-- Daily trend chart -->
-      <div class="card chart-card" v-if="!loading && analytics.daily_trend?.length">
+      <!-- Daily trend chart (Growth+) -->
+      <div class="card chart-card" v-if="canSeeCharts && !loading && analytics.daily_trend?.length">
         <div class="card-header-row">
           <h3 class="card-title">Daily chats</h3>
           <span class="chart-total">{{ val('total_sessions') }} total</span>
@@ -111,8 +137,8 @@
         </div>
       </div>
 
-      <!-- Funnel + states -->
-      <div class="section-row">
+      <!-- Funnel + states (Growth+) -->
+      <div class="section-row" v-if="canSeeCharts">
         <div class="card funnel-card">
           <h3 class="card-title">Lead funnel</h3>
           <div class="funnel-stages" v-if="!loading">
@@ -145,7 +171,7 @@
     </template>
 
     <!-- ═══════════════════════ CHATS TAB ═══════════════════════ -->
-    <template v-if="activeTab === 'chats'">
+    <template v-if="activeTab === 'chats' && canSeeChatsTab">
 
       <!-- Chat type breakdown -->
       <div class="breakdown-grid" v-if="!loading">
@@ -255,7 +281,7 @@
     </template>
 
     <!-- ═══════════════════════ ENGAGEMENT TAB ═══════════════════════ -->
-    <template v-if="activeTab === 'engagement'">
+    <template v-if="activeTab === 'engagement' && canSeeEngagementTab">
 
       <!-- EMA signal scores -->
       <div class="card signals-card" v-if="!loading">
@@ -356,19 +382,36 @@ const period = ref('30d')
 const activeTab = ref('overview')
 const analytics = ref({})
 const recentSessions = ref([])
+const upgradeMsg = ref('')
+const metricLimit = ref(-1) // -1 = unlimited until subscription loaded
 
-const periods = [
-  { val: 'today', label: 'Today' },
-  { val: '7d', label: '7 days' },
-  { val: '30d', label: '30 days' },
-  { val: '90d', label: '90 days' },
-]
+// ── Feature gating ────────────────────────────────────────────────────────────
 
-const tabs = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'chats', label: 'Chats' },
-  { key: 'engagement', label: 'Engagement' },
-]
+const canSeeCharts = computed(() => metricLimit.value < 0 || metricLimit.value >= 7)
+const canSeeChatsTab = computed(() => metricLimit.value < 0 || metricLimit.value >= 7)
+const canSeeEngagementTab = computed(() => metricLimit.value < 0)
+
+function showUpgrade(plan) {
+  upgradeMsg.value = `This section requires the ${plan} plan or higher.`
+}
+
+// ── Periods (limit to 30d on Starter) ─────────────────────────────────────────
+
+const periods = computed(() => {
+  const all = [
+    { val: 'today', label: 'Today' },
+    { val: '7d', label: '7 days' },
+    { val: '30d', label: '30 days' },
+    { val: '90d', label: '90 days' },
+  ]
+  return canSeeCharts.value ? all : all.slice(0, 3)
+})
+
+const tabs = computed(() => [
+  { key: 'overview',   label: 'Overview',   locked: false },
+  { key: 'chats',      label: 'Chats',      locked: !canSeeChatsTab.value,      requiredPlan: 'Growth' },
+  { key: 'engagement', label: 'Engagement', locked: !canSeeEngagementTab.value,  requiredPlan: 'Pro' },
+])
 
 // ── Metric helpers ───────────────────────────────────────────────────────────
 function val(key) {
@@ -571,12 +614,16 @@ async function load() {
   if (!props.client) return
   loading.value = true
   try {
-    const [a, sessions] = await Promise.all([
+    const [a, sessions, sub] = await Promise.all([
       api.getPortalAnalytics(props.client.id, period.value),
       api.getPortalSessions(props.client.id, { limit: 20 }),
+      api.getSubscription().catch(() => null),
     ])
     analytics.value = a || {}
     recentSessions.value = Array.isArray(sessions) ? sessions : (sessions?.results || [])
+    if (sub?.plan?.max_dashboard_metrics != null) {
+      metricLimit.value = sub.plan.max_dashboard_metrics
+    }
   } catch {} finally {
     loading.value = false
   }
@@ -596,7 +643,6 @@ async function exportCSV() {
 
 onMounted(load)
 watch(() => props.client, load)
-watch(period, load)
 </script>
 
 <style scoped>
@@ -627,9 +673,31 @@ watch(period, load)
 
 /* Tab nav */
 .tab-nav { display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
-.tab-btn { padding: 10px 20px; background: none; border: none; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; color: #475569; cursor: pointer; transition: all 0.12s; margin-bottom: -1px; }
+.tab-btn { padding: 10px 20px; background: none; border: none; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; color: #475569; cursor: pointer; transition: all 0.12s; margin-bottom: -1px; display: flex; align-items: center; }
 .tab-btn:hover { color: #94a3b8; }
 .tab-btn.active { color: #a5b4fc; border-bottom-color: #6366f1; }
+.tab-btn.locked { opacity: 0.5; cursor: not-allowed; }
+.tab-btn.locked:hover { color: #475569; }
+
+/* Upgrade banner */
+.upgrade-banner {
+  display: flex; align-items: center; gap: 10px;
+  background: rgba(167,139,250,0.08); border: 1px solid rgba(167,139,250,0.2);
+  border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #c4b5fd;
+}
+.upgrade-link { color: #a78bfa; font-weight: 600; text-decoration: none; margin-left: 4px; }
+.upgrade-link:hover { text-decoration: underline; }
+.banner-close { background: none; border: none; color: #64748b; cursor: pointer; margin-left: auto; font-size: 14px; }
+
+/* Locked section */
+.locked-section { margin: 4px 0; }
+.locked-card {
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(167,139,250,0.04); border: 1px dashed rgba(167,139,250,0.2);
+  border-radius: 14px; padding: 18px 20px;
+}
+.locked-title { font-size: 14px; font-weight: 600; color: #94a3b8; margin-bottom: 4px; }
+.locked-sub { font-size: 12px; color: #475569; line-height: 1.5; }
 
 /* Hero metric cards */
 .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
