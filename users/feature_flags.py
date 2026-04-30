@@ -24,13 +24,15 @@ FEATURE_LABELS = {
     'allow_canned_responses':  ('Canned Responses',         'Starter'),
     'allow_conversation_tags': ('Conversation Tags',        'Growth'),
     'allow_csv_export':        ('Analytics CSV Export',     'Growth'),
-    'allow_voice_input':       ('Voice Input',              'Growth'),
-    'allow_image_input':       ('Image Input',              'Growth'),
-    'allow_fomo_triggers':     ('FOMO Triggers',            'Starter'),
-    'remove_branding':         ('Remove Branding',          'Pro'),
-    'allow_custom_domain':     ('Custom Domain',            'Pro'),
-    'allow_api_access':        ('API Access',               'Pro'),
-    'allow_multi_language':    ('Multi-Language',           'Pro'),
+    'allow_voice_input':          ('Voice Input',              'Growth'),
+    'allow_image_input':          ('Image Input',              'Growth'),
+    'allow_fomo_triggers':        ('FOMO Triggers',            'Starter'),
+    'allow_real_time_inventory':  ('Real-Time Inventory',      'Growth'),
+    'allow_advanced_reports':     ('Advanced Analytics',       'Growth'),
+    'remove_branding':            ('Remove Branding',          'Pro'),
+    'allow_custom_domain':        ('Custom Domain',            'Pro'),
+    'allow_api_access':           ('API Access',               'Pro'),
+    'allow_multi_language':       ('Multi-Language',           'Pro'),
 }
 
 
@@ -97,6 +99,75 @@ def check_client_quota(user) -> bool:
     if limit <= 0:
         return True
     return tenant.clients.count() < limit
+
+
+def _effective_limit(plan_limit: int, addon: int) -> int:
+    """Combine plan limit + add-on top-up. -1 plan limit = unlimited."""
+    if plan_limit < 0:
+        return -1
+    return plan_limit + addon
+
+
+def check_message_quota(user) -> bool:
+    """Returns True if tenant can send another AI message this month."""
+    tenant = _get_tenant_profile(user)
+    if not tenant or not tenant.plan:
+        return True
+    limit = _effective_limit(tenant.plan.max_messages_per_month, tenant.addon_messages)
+    if limit < 0:
+        return True
+    return tenant.messages_this_month < limit
+
+
+def check_image_quota(user) -> bool:
+    """Returns True if tenant can upload another image this month."""
+    tenant = _get_tenant_profile(user)
+    if not tenant or not tenant.plan:
+        return True
+    limit = _effective_limit(tenant.plan.max_images_per_month, tenant.addon_images)
+    if limit < 0:
+        return True
+    return tenant.images_this_month < limit
+
+
+def check_voice_quota(user) -> bool:
+    """Returns True if tenant can use another voice command this month."""
+    tenant = _get_tenant_profile(user)
+    if not tenant or not tenant.plan:
+        return True
+    limit = _effective_limit(tenant.plan.max_voice_per_month, tenant.addon_voice)
+    if limit < 0:
+        return True
+    return tenant.voice_this_month < limit
+
+
+def usage_summary(user) -> dict:
+    """Return a dict of current usage vs limits for the billing page."""
+    tenant = _get_tenant_profile(user)
+    if not tenant or not tenant.plan:
+        return {}
+    plan = tenant.plan
+    return {
+        'messages': {
+            'used': tenant.messages_this_month,
+            'addon': tenant.addon_messages,
+            'limit': _effective_limit(plan.max_messages_per_month, tenant.addon_messages),
+        },
+        'images': {
+            'used': tenant.images_this_month,
+            'addon': tenant.addon_images,
+            'limit': _effective_limit(plan.max_images_per_month, tenant.addon_images),
+        },
+        'voice': {
+            'used': tenant.voice_this_month,
+            'addon': tenant.addon_voice,
+            'limit': _effective_limit(plan.max_voice_per_month, tenant.addon_voice),
+        },
+        'sessions': {
+            'used': tenant.sessions_this_month,
+            'limit': plan.max_sessions_per_month,
+        },
+    }
 
 
 def gate_feature(feature: str):

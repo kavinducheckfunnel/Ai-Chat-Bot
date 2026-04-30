@@ -45,8 +45,25 @@ class Plan(models.Model):
     # ── Advanced ──────────────────────────────────────────────────────────────
     allow_api_access = models.BooleanField(default=False)
     allow_multi_language = models.BooleanField(default=False)
+    allow_real_time_inventory = models.BooleanField(default=False)
+    allow_advanced_reports = models.BooleanField(default=False)
     priority_support = models.BooleanField(default=False)
     sla_response_hours = models.IntegerField(default=48)
+
+    # ── Message-based usage limits ────────────────────────────────────────────
+    max_messages_per_month = models.IntegerField(default=500)   # AI responses; -1 = unlimited
+    max_images_per_month = models.IntegerField(default=0)        # image uploads; -1 = unlimited
+    max_voice_per_month = models.IntegerField(default=0)         # voice commands; -1 = unlimited
+
+    # ── Dashboard & channels ──────────────────────────────────────────────────
+    max_dashboard_metrics = models.IntegerField(default=3)       # 3 / 7 / -1 (all)
+    max_social_channels = models.IntegerField(default=0)         # 0=none, -1=unlimited
+
+    # ── Data retention ────────────────────────────────────────────────────────
+    data_retention_days = models.IntegerField(default=30)        # 30 / 90 / 365 / -1 (forever)
+
+    # ── Annual billing ────────────────────────────────────────────────────────
+    stripe_price_id_annual = models.CharField(max_length=100, blank=True, null=True)
 
     is_public = models.BooleanField(default=True)  # show on pricing page
     sort_order = models.IntegerField(default=0)
@@ -197,6 +214,21 @@ class TenantProfile(models.Model):
     stripe_subscription_id = models.CharField(max_length=100, blank=True, null=True)
     stripe_subscription_status = models.CharField(max_length=50, blank=True, null=True)
     trial_ends_at = models.DateTimeField(blank=True, null=True)
+    billing_interval = models.CharField(
+        max_length=10, default='monthly',
+        choices=[('monthly', 'Monthly'), ('annual', 'Annual')],
+    )
+    billing_cycle_anchor = models.DateField(blank=True, null=True)
+
+    # ── Per-resource usage counters (reset each billing cycle) ────────────────
+    messages_this_month = models.IntegerField(default=0)
+    images_this_month = models.IntegerField(default=0)
+    voice_this_month = models.IntegerField(default=0)
+
+    # ── Add-on top-ups (purchased, consumed first before plan quota) ──────────
+    addon_messages = models.IntegerField(default=0)
+    addon_images = models.IntegerField(default=0)
+    addon_voice = models.IntegerField(default=0)
 
     def __str__(self):
         return f"{self.company_name or self.user.username}"
