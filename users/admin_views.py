@@ -857,16 +857,28 @@ def tenant_list(request):
                 'company_name': t.company_name,
                 'plan': t.plan.name if t.plan else None,
                 'plan_id': t.plan.id if t.plan else None,
-                'sessions_this_month': t.sessions_this_month,
+                'plan_max_sessions': t.plan.max_sessions_per_month if t.plan else None,
+                'plan_max_clients': t.plan.max_clients if t.plan else None,
+                'plan_max_messages': t.plan.max_messages_per_month if t.plan else None,
+                'plan_price': str(t.plan.price_monthly) if t.plan else None,
                 'clients_count': len(assigned_clients),
                 'clients': [str(c.id) for c in assigned_clients],
                 'client_details': [
                     {'id': str(c.id), 'name': c.name, 'domain_url': c.domain_url, 'chatbot_color': c.chatbot_color}
                     for c in assigned_clients
                 ],
-                'plan_max_sessions': t.plan.max_sessions_per_month if t.plan else None,
-                'plan_max_clients': t.plan.max_clients if t.plan else None,
-                'plan_price': str(t.plan.price_monthly) if t.plan else None,
+                # Usage
+                'sessions_this_month': t.sessions_this_month,
+                'messages_this_month': t.messages_this_month,
+                'images_this_month': t.images_this_month,
+                'voice_this_month': t.voice_this_month,
+                'addon_messages': t.addon_messages,
+                'addon_images': t.addon_images,
+                'addon_voice': t.addon_voice,
+                # Billing / trial
+                'stripe_subscription_status': t.stripe_subscription_status,
+                'billing_interval': t.billing_interval,
+                'trial_ends_at': t.trial_ends_at.isoformat() if t.trial_ends_at else None,
             })
         return Response(data)
 
@@ -959,6 +971,82 @@ def tenant_detail(request, tenant_id):
         return Response(status=204)
 
 
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsSuperAdmin])
+def tenant_subscription(request, tenant_id):
+    """
+    GET  — return full subscription details for a tenant.
+    PATCH — update trial_ends_at, billing_interval, or reset usage counters.
+    """
+    try:
+        tenant = TenantProfile.objects.select_related('plan').get(pk=tenant_id)
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    if request.method == 'GET':
+        plan = tenant.plan
+        return Response({
+            'plan': _plan_to_dict(plan) if plan else None,
+            'stripe_customer_id': tenant.stripe_customer_id,
+            'stripe_subscription_id': tenant.stripe_subscription_id,
+            'stripe_subscription_status': tenant.stripe_subscription_status,
+            'billing_interval': tenant.billing_interval,
+            'trial_ends_at': tenant.trial_ends_at.isoformat() if tenant.trial_ends_at else None,
+            'billing_cycle_anchor': tenant.billing_cycle_anchor.isoformat() if tenant.billing_cycle_anchor else None,
+            'sessions_this_month': tenant.sessions_this_month,
+            'messages_this_month': tenant.messages_this_month,
+            'images_this_month': tenant.images_this_month,
+            'voice_this_month': tenant.voice_this_month,
+            'addon_messages': tenant.addon_messages,
+            'addon_images': tenant.addon_images,
+            'addon_voice': tenant.addon_voice,
+        })
+
+    # PATCH
+    update_fields = []
+
+    if 'trial_ends_at' in request.data:
+        raw = request.data['trial_ends_at']
+        if raw:
+            from django.utils.dateparse import parse_datetime
+            tenant.trial_ends_at = parse_datetime(raw)
+        else:
+            tenant.trial_ends_at = None
+        update_fields.append('trial_ends_at')
+
+    if 'billing_interval' in request.data:
+        val = request.data['billing_interval']
+        if val in ('monthly', 'annual'):
+            tenant.billing_interval = val
+            update_fields.append('billing_interval')
+
+    if request.data.get('reset_messages'):
+        tenant.messages_this_month = 0
+        update_fields.append('messages_this_month')
+
+    if request.data.get('reset_images'):
+        tenant.images_this_month = 0
+        update_fields.append('images_this_month')
+
+    if request.data.get('reset_voice'):
+        tenant.voice_this_month = 0
+        update_fields.append('voice_this_month')
+
+    if request.data.get('reset_sessions'):
+        tenant.sessions_this_month = 0
+        update_fields.append('sessions_this_month')
+
+    for field in ('addon_messages', 'addon_images', 'addon_voice'):
+        if field in request.data:
+            setattr(tenant, field, int(request.data[field]))
+            update_fields.append(field)
+
+    if update_fields:
+        tenant.save(update_fields=update_fields)
+
+    return Response({'detail': 'Updated.'})
+
+
 @api_view(['POST'])
 @permission_classes([IsSuperAdmin])
 def assign_plan(request, tenant_id):
@@ -1021,44 +1109,97 @@ def plan_history(request, tenant_id):
     return Response(data)
 
 
+def _plan_to_dict(p):
+    """Serialize a Plan to a dict with all fields."""
+    return {
+        'id': p.id,
+        'name': p.name,
+        'price_monthly': str(p.price_monthly),
+        'stripe_price_id': p.stripe_price_id or '',
+        'stripe_price_id_annual': p.stripe_price_id_annual or '',
+        # Quota limits
+        'max_clients': p.max_clients,
+        'max_sessions_per_month': p.max_sessions_per_month,
+        'max_messages_per_month': p.max_messages_per_month,
+        'max_images_per_month': p.max_images_per_month,
+        'max_voice_per_month': p.max_voice_per_month,
+        'max_knowledge_pages': p.max_knowledge_pages,
+        'max_canned_responses': p.max_canned_responses,
+        'max_dashboard_metrics': p.max_dashboard_metrics,
+        'max_social_channels': p.max_social_channels,
+        'data_retention_days': p.data_retention_days,
+        'sla_response_hours': p.sla_response_hours,
+        # Channels
+        'allow_whatsapp': p.allow_whatsapp,
+        'allow_telegram': p.allow_telegram,
+        'allow_messenger': p.allow_messenger,
+        # AI & Knowledge
+        'allow_byok': p.allow_byok,
+        # Integrations
+        'allow_hubspot': p.allow_hubspot,
+        'allow_slack': p.allow_slack,
+        'allow_webhooks': p.allow_webhooks,
+        # Inbox & Ops
+        'allow_god_view': p.allow_god_view,
+        'allow_canned_responses': p.allow_canned_responses,
+        'allow_conversation_tags': p.allow_conversation_tags,
+        'allow_csv_export': p.allow_csv_export,
+        # Widget
+        'allow_voice_input': p.allow_voice_input,
+        'allow_image_input': p.allow_image_input,
+        'allow_fomo_triggers': p.allow_fomo_triggers,
+        # Advanced
+        'allow_real_time_inventory': p.allow_real_time_inventory,
+        'allow_advanced_reports': p.allow_advanced_reports,
+        'allow_api_access': p.allow_api_access,
+        'allow_multi_language': p.allow_multi_language,
+        'priority_support': p.priority_support,
+        # Branding
+        'remove_branding': p.remove_branding,
+        'allow_custom_domain': p.allow_custom_domain,
+        'allow_custom_logo': p.allow_custom_logo,
+    }
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def plan_list(request):
-    """List all available plans."""
+    """List all available plans with full feature flags."""
     plans = Plan.objects.all().order_by('price_monthly')
-    data = [{
-        'id': p.id,
-        'name': p.name,
-        'max_clients': p.max_clients,
-        'max_sessions_per_month': p.max_sessions_per_month,
-        'price_monthly': str(p.price_monthly),
-        'stripe_price_id': p.stripe_price_id or '',
-    } for p in plans]
-    return Response(data)
+    return Response([_plan_to_dict(p) for p in plans])
+
+
+_PLAN_EDITABLE_FIELDS = [
+    'name', 'price_monthly', 'stripe_price_id', 'stripe_price_id_annual',
+    'max_clients', 'max_sessions_per_month', 'max_messages_per_month',
+    'max_images_per_month', 'max_voice_per_month', 'max_knowledge_pages',
+    'max_canned_responses', 'max_dashboard_metrics', 'max_social_channels',
+    'data_retention_days', 'sla_response_hours',
+    'allow_whatsapp', 'allow_telegram', 'allow_messenger', 'allow_byok',
+    'allow_hubspot', 'allow_slack', 'allow_webhooks', 'allow_god_view',
+    'allow_canned_responses', 'allow_conversation_tags', 'allow_csv_export',
+    'allow_voice_input', 'allow_image_input', 'allow_fomo_triggers',
+    'allow_real_time_inventory', 'allow_advanced_reports',
+    'allow_api_access', 'allow_multi_language', 'priority_support',
+    'remove_branding', 'allow_custom_domain', 'allow_custom_logo',
+    'is_public', 'sort_order',
+]
 
 
 @api_view(['PATCH'])
 @permission_classes([IsSuperAdmin])
 def plan_detail(request, plan_id):
-    """Update a plan (superadmin only — currently used to set stripe_price_id)."""
+    """Update any plan field (superadmin only)."""
     try:
         plan = Plan.objects.get(pk=plan_id)
     except Plan.DoesNotExist:
         return Response({'detail': 'Plan not found.'}, status=404)
 
-    allowed = ['stripe_price_id', 'name', 'max_clients', 'max_sessions_per_month', 'price_monthly']
-    for field in allowed:
+    for field in _PLAN_EDITABLE_FIELDS:
         if field in request.data:
             setattr(plan, field, request.data[field])
     plan.save()
-    return Response({
-        'id': plan.id,
-        'name': plan.name,
-        'max_clients': plan.max_clients,
-        'max_sessions_per_month': plan.max_sessions_per_month,
-        'price_monthly': str(plan.price_monthly),
-        'stripe_price_id': plan.stripe_price_id or '',
-    })
+    return Response(_plan_to_dict(plan))
 
 
 @api_view(['POST'])

@@ -50,19 +50,17 @@
             <td>{{ t.company_name || '—' }}</td>
             <td>
               <div class="plan-cell">
-                <span class="plan-badge" :class="t.plan ? 'has-plan' : 'no-plan'">
-                  {{ t.plan || 'No Plan' }}
-                </span>
-                <template v-if="t.plan && t.plan_max_sessions">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span class="plan-badge" :class="t.plan ? 'has-plan' : 'no-plan'">{{ t.plan || 'No Plan' }}</span>
+                  <span v-if="t.stripe_subscription_status" class="stripe-status-pill" :class="subStatusClass(t.stripe_subscription_status)">{{ t.stripe_subscription_status }}</span>
+                  <span v-if="t.trial_ends_at && new Date(t.trial_ends_at) > new Date()" class="trial-pill">Trial</span>
+                </div>
+                <template v-if="t.plan && t.plan_max_messages">
                   <div class="usage-row">
                     <div class="usage-bar-wrap">
-                      <div
-                        class="usage-bar-fill"
-                        :class="usageClass(t.sessions_this_month, t.plan_max_sessions)"
-                        :style="{ width: usagePct(t.sessions_this_month, t.plan_max_sessions) + '%' }"
-                      ></div>
+                      <div class="usage-bar-fill" :class="usageClass(t.messages_this_month, t.plan_max_messages)" :style="{ width: usagePct(t.messages_this_month, t.plan_max_messages) + '%' }"></div>
                     </div>
-                    <span class="usage-label">{{ t.sessions_this_month }} / {{ t.plan_max_sessions }} sessions</span>
+                    <span class="usage-label">{{ t.messages_this_month }} / {{ t.plan_max_messages < 0 ? '∞' : t.plan_max_messages }} msgs</span>
                   </div>
                 </template>
               </div>
@@ -87,6 +85,7 @@
                 <button class="action-btn history-btn" @click="openHistory(t)" title="Plan history">
                   <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg>
                 </button>
+                <button class="action-btn sub-btn" @click="openSubscription(t)" title="Subscription & usage">💳</button>
                 <button class="action-btn overrides-btn" @click="openOverrides(t)" title="Feature overrides">🎁</button>
                 <button class="action-btn impersonate-btn" @click="loginAsTenant(t)" :disabled="impersonating === t.id" title="Login as this tenant">
                   {{ impersonating === t.id ? '...' : 'Login As' }}
@@ -266,9 +265,21 @@
               <div class="plan-option-top">
                 <div>
                   <div class="plan-name">{{ p.name }}</div>
-                  <div class="plan-limits">{{ p.max_clients }} clients · {{ p.max_sessions_per_month }} sessions/mo</div>
+                  <div class="plan-limits">
+                    {{ p.max_clients }} clients ·
+                    {{ p.max_messages_per_month < 0 ? '∞' : p.max_messages_per_month.toLocaleString() }} msgs/mo ·
+                    {{ p.max_sessions_per_month < 0 ? '∞' : p.max_sessions_per_month.toLocaleString() }} sessions/mo
+                  </div>
                 </div>
                 <div class="plan-price">${{ p.price_monthly }}<span>/mo</span></div>
+              </div>
+              <!-- Feature flags grid -->
+              <div class="plan-flags">
+                <span v-for="f in planFlags(p)" :key="f.key" class="pf-pill" :class="f.on ? 'pf-on' : 'pf-off'">
+                  <svg v-if="f.on" width="9" height="9" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg v-else width="9" height="9" fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+                  {{ f.label }}
+                </span>
               </div>
               <span v-if="p.name === planTenant.plan" class="current-tag">Current</span>
             </div>
@@ -453,6 +464,87 @@
       </div>
     </div>
 
+    <!-- ── Subscription Management Modal ── -->
+    <div v-if="subTenant" class="modal-overlay" @click.self="subTenant = null">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3>Subscription — {{ subTenant.username }}</h3>
+          <button class="modal-close" @click="subTenant = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body" v-if="subData">
+
+          <!-- Status header -->
+          <div class="sub-status-row">
+            <div class="sub-plan-name">{{ subData.plan?.name || 'No Plan' }}</div>
+            <span class="sub-status-badge" :class="subStatusClass(subData.stripe_subscription_status)">
+              {{ subData.stripe_subscription_status || 'No subscription' }}
+            </span>
+            <span v-if="subData.billing_interval" class="sub-interval-badge">{{ subData.billing_interval }}</span>
+          </div>
+
+          <!-- Usage bars -->
+          <div class="section-label" style="margin-top:14px">Usage This Month</div>
+          <div class="sub-usage-grid">
+            <div class="sub-usage-card" v-for="res in subUsageRows" :key="res.key">
+              <div class="sub-usage-label">
+                <span>{{ res.label }}</span>
+                <span class="sub-usage-nums">{{ res.used }} / {{ res.limit < 0 ? '∞' : res.limit }}</span>
+              </div>
+              <div class="stat-bar-wrap">
+                <div class="stat-bar-fill" :class="usageClass(res.used, res.limit < 0 ? 0 : res.limit)" :style="{ width: usagePct(res.used, res.limit < 0 ? 0 : res.limit) + '%' }"></div>
+              </div>
+              <button class="reset-btn" @click="resetUsage(res.resetKey)" :disabled="resetting">Reset</button>
+            </div>
+          </div>
+
+          <!-- Add-on top-ups -->
+          <div class="section-label" style="margin-top:18px">Add-On Top-Ups</div>
+          <div class="addon-grid">
+            <div class="addon-row" v-for="a in addonRows" :key="a.key">
+              <label class="addon-label">{{ a.label }}</label>
+              <input type="number" min="0" class="form-input addon-input" v-model.number="subForm[a.key]" />
+            </div>
+          </div>
+
+          <!-- Trial & billing interval -->
+          <div class="section-label" style="margin-top:18px">Trial & Billing Interval</div>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label>Trial ends at (leave blank to clear)</label>
+              <input type="datetime-local" class="form-input" v-model="subForm.trial_ends_at" />
+            </div>
+            <div class="form-group">
+              <label>Billing interval</label>
+              <select class="form-input" v-model="subForm.billing_interval">
+                <option value="monthly">Monthly</option>
+                <option value="annual">Annual</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Stripe IDs (read-only info) -->
+          <div class="section-label" style="margin-top:18px">Stripe Info</div>
+          <div class="stripe-info-grid">
+            <div class="si-row"><span class="si-key">Customer ID</span><span class="si-val">{{ subData.stripe_customer_id || '—' }}</span></div>
+            <div class="si-row"><span class="si-key">Subscription ID</span><span class="si-val">{{ subData.stripe_subscription_id || '—' }}</span></div>
+          </div>
+
+          <p v-if="subError" class="form-error" style="margin-top:10px">{{ subError }}</p>
+        </div>
+        <div class="modal-body" v-else-if="subLoading">
+          <div class="history-loading">Loading subscription data…</div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="subTenant = null">Close</button>
+          <button class="submit-btn" @click="saveSubscription" :disabled="savingSub">
+            {{ savingSub ? 'Saving…' : 'Save Changes' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Impersonate toast -->
     <div v-if="impersonateToast" class="toast" :class="impersonateToast.type">
       {{ impersonateToast.msg }}
@@ -476,7 +568,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const api = useAdminApi()
@@ -522,6 +614,141 @@ const deletingOverride = ref(null)
 const overrideError = ref('')
 const newOverride = ref({ feature_name: '', enabled: true, expires_at: '', reason: '' })
 
+// ── Subscription modal ────────────────────────────────────────────────────────
+const subTenant = ref(null)
+const subData = ref(null)
+const subLoading = ref(false)
+const savingSub = ref(false)
+const resetting = ref(false)
+const subError = ref('')
+const subForm = ref({ trial_ends_at: '', billing_interval: 'monthly', addon_messages: 0, addon_images: 0, addon_voice: 0 })
+
+const subUsageRows = computed(() => {
+  if (!subData.value) return []
+  const d = subData.value
+  const plan = d.plan || {}
+  return [
+    { key: 'messages', label: 'AI Messages', used: d.messages_this_month, limit: plan.max_messages_per_month ?? -1, resetKey: 'reset_messages' },
+    { key: 'sessions', label: 'Sessions',    used: d.sessions_this_month, limit: plan.max_sessions_per_month  ?? -1, resetKey: 'reset_sessions' },
+    { key: 'images',   label: 'Images',      used: d.images_this_month,   limit: plan.max_images_per_month   ?? -1, resetKey: 'reset_images' },
+    { key: 'voice',    label: 'Voice',       used: d.voice_this_month,    limit: plan.max_voice_per_month    ?? -1, resetKey: 'reset_voice' },
+  ]
+})
+
+const addonRows = [
+  { key: 'addon_messages', label: 'Bonus messages' },
+  { key: 'addon_images',   label: 'Bonus images' },
+  { key: 'addon_voice',    label: 'Bonus voice cmds' },
+]
+
+function subStatusClass(status) {
+  if (!status) return 'ss-none'
+  if (status === 'active' || status === 'trialing') return 'ss-active'
+  if (status === 'past_due') return 'ss-warn'
+  if (status === 'canceled') return 'ss-danger'
+  return 'ss-none'
+}
+
+async function openSubscription(t) {
+  subTenant.value = t
+  subData.value = null
+  subError.value = ''
+  subLoading.value = true
+  try {
+    const d = await api.getTenantSubscription(t.id)
+    subData.value = d
+    subForm.value = {
+      trial_ends_at: d.trial_ends_at ? d.trial_ends_at.slice(0, 16) : '',
+      billing_interval: d.billing_interval || 'monthly',
+      addon_messages: d.addon_messages || 0,
+      addon_images: d.addon_images || 0,
+      addon_voice: d.addon_voice || 0,
+    }
+  } catch (e) {
+    subError.value = e.message || 'Failed to load subscription.'
+  } finally {
+    subLoading.value = false
+  }
+}
+
+async function saveSubscription() {
+  savingSub.value = true
+  subError.value = ''
+  try {
+    const payload = {
+      billing_interval: subForm.value.billing_interval,
+      addon_messages: subForm.value.addon_messages,
+      addon_images: subForm.value.addon_images,
+      addon_voice: subForm.value.addon_voice,
+    }
+    if (subForm.value.trial_ends_at) {
+      payload.trial_ends_at = new Date(subForm.value.trial_ends_at).toISOString()
+    } else {
+      payload.trial_ends_at = null
+    }
+    await api.updateTenantSubscription(subTenant.value.id, payload)
+    // refresh tenant row
+    const idx = tenants.value.findIndex(x => x.id === subTenant.value.id)
+    if (idx >= 0) {
+      tenants.value[idx] = {
+        ...tenants.value[idx],
+        billing_interval: payload.billing_interval,
+        trial_ends_at: payload.trial_ends_at,
+        addon_messages: payload.addon_messages,
+        addon_images: payload.addon_images,
+        addon_voice: payload.addon_voice,
+      }
+    }
+    subTenant.value = null
+  } catch (e) {
+    subError.value = e.message || 'Failed to save.'
+  } finally {
+    savingSub.value = false
+  }
+}
+
+async function resetUsage(resetKey) {
+  resetting.value = true
+  try {
+    await api.updateTenantSubscription(subTenant.value.id, { [resetKey]: true })
+    // update local display
+    const map = { reset_messages: 'messages_this_month', reset_sessions: 'sessions_this_month', reset_images: 'images_this_month', reset_voice: 'voice_this_month' }
+    if (subData.value) subData.value[map[resetKey]] = 0
+  } catch (e) {
+    subError.value = e.message || 'Reset failed.'
+  } finally {
+    resetting.value = false
+  }
+}
+
+// ── Plan feature flags helper ─────────────────────────────────────────────────
+const FLAG_LABELS = [
+  { key: 'allow_whatsapp',          label: 'WhatsApp' },
+  { key: 'allow_telegram',          label: 'Telegram' },
+  { key: 'allow_messenger',         label: 'Messenger' },
+  { key: 'allow_byok',              label: 'BYOK' },
+  { key: 'allow_hubspot',           label: 'HubSpot' },
+  { key: 'allow_slack',             label: 'Slack' },
+  { key: 'allow_webhooks',          label: 'Webhooks' },
+  { key: 'allow_god_view',          label: 'God View' },
+  { key: 'allow_canned_responses',  label: 'Canned Resp.' },
+  { key: 'allow_conversation_tags', label: 'Tags' },
+  { key: 'allow_csv_export',        label: 'CSV Export' },
+  { key: 'allow_voice_input',       label: 'Voice' },
+  { key: 'allow_image_input',       label: 'Images' },
+  { key: 'allow_fomo_triggers',     label: 'FOMO' },
+  { key: 'allow_advanced_reports',  label: 'Adv. Reports' },
+  { key: 'remove_branding',         label: 'No Branding' },
+  { key: 'allow_custom_domain',     label: 'Custom Domain' },
+  { key: 'allow_api_access',        label: 'API Access' },
+  { key: 'allow_multi_language',    label: 'Multi-Lang' },
+  { key: 'priority_support',        label: 'Priority Sup.' },
+]
+
+function planFlags(plan) {
+  return FLAG_LABELS.map(f => ({ key: f.key, label: f.label, on: !!plan[f.key] }))
+}
+
 const allFeatures = [
   { key: 'allow_whatsapp',          label: 'WhatsApp Business' },
   { key: 'allow_telegram',          label: 'Telegram Bot' },
@@ -536,11 +763,14 @@ const allFeatures = [
   { key: 'allow_csv_export',        label: 'Analytics CSV Export' },
   { key: 'allow_voice_input',       label: 'Voice Input' },
   { key: 'allow_image_input',       label: 'Image Input' },
-  { key: 'allow_fomo_triggers',     label: 'FOMO Triggers' },
-  { key: 'remove_branding',         label: 'Remove Branding' },
-  { key: 'allow_custom_domain',     label: 'Custom Domain' },
-  { key: 'allow_api_access',        label: 'API Access' },
-  { key: 'allow_multi_language',    label: 'Multi-Language' },
+  { key: 'allow_fomo_triggers',        label: 'FOMO Triggers' },
+  { key: 'allow_real_time_inventory',  label: 'Real-Time Inventory' },
+  { key: 'allow_advanced_reports',     label: 'Advanced Analytics' },
+  { key: 'remove_branding',            label: 'Remove Branding' },
+  { key: 'allow_custom_domain',        label: 'Custom Domain' },
+  { key: 'allow_api_access',           label: 'API Access' },
+  { key: 'allow_multi_language',       label: 'Multi-Language' },
+  { key: 'priority_support',           label: 'Priority Support' },
 ]
 
 function openPlanManager() {
@@ -976,4 +1206,45 @@ onMounted(load)
 .del-icon { font-size: 32px; margin-bottom: 12px; }
 .del-title { font-size: 17px; font-weight: 700; color: #0F172A; margin-bottom: 8px; }
 .del-sub { font-size: 13px; color: #64748B; line-height: 1.5; }
+
+/* Subscription button */
+.sub-btn { background: #F0F9FF; border-color: #BAE6FD; color: #0369A1; }
+.sub-btn:hover { background: #E0F2FE; }
+
+/* Stripe status pills in table */
+.stripe-status-pill { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.trial-pill { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(167,139,250,0.15); color: #7C3AED; }
+.ss-active  { background: #DCFCE7; color: #15803D; }
+.ss-warn    { background: #FEF3C7; color: #92400E; }
+.ss-danger  { background: #FEE2E2; color: #B91C1C; }
+.ss-none    { background: #F1F5F9; color: #64748B; }
+
+/* Plan flags in plan picker */
+.plan-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.pf-pill { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+.pf-on  { background: #DCFCE7; color: #15803D; }
+.pf-off { background: #F1F5F9; color: #CBD5E1; }
+
+/* Subscription modal */
+.sub-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sub-plan-name { font-size: 16px; font-weight: 700; color: #0F172A; }
+.sub-interval-badge { font-size: 10px; font-weight: 700; background: #F0F9FF; color: #0369A1; border: 1px solid #BAE6FD; padding: 2px 8px; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.sub-usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sub-usage-card { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.sub-usage-label { display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: #64748B; }
+.sub-usage-nums { color: #0F172A; font-weight: 700; }
+.reset-btn { align-self: flex-end; font-size: 10px; font-weight: 600; background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626; border-radius: 5px; padding: 2px 8px; cursor: pointer; font-family: inherit; }
+.reset-btn:hover:not(:disabled) { background: #FEE2E2; }
+.reset-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.addon-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.addon-row { display: flex; flex-direction: column; gap: 4px; }
+.addon-label { font-size: 11px; font-weight: 600; color: #475569; }
+.addon-input { width: 100%; padding: 8px 10px !important; font-size: 13px; }
+
+.stripe-info-grid { display: flex; flex-direction: column; gap: 6px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 14px; }
+.si-row { display: flex; gap: 12px; font-size: 12px; }
+.si-key { color: #64748B; font-weight: 600; min-width: 120px; }
+.si-val { color: #0F172A; font-family: monospace; word-break: break-all; }
 </style>

@@ -52,6 +52,7 @@ urlpatterns = [
     path('tenants/', admin_views.tenant_list, name='admin-tenants'),
     path('tenants/<int:tenant_id>/', admin_views.tenant_detail, name='admin-tenant-detail'),
     path('tenants/<int:tenant_id>/assign-plan/', admin_views.assign_plan, name='admin-assign-plan'),
+    path('tenants/<int:tenant_id>/subscription/', admin_views.tenant_subscription, name='admin-tenant-subscription'),
     path('tenants/<int:tenant_id>/plan-history/', admin_views.plan_history, name='admin-plan-history'),
     path('tenants/<int:tenant_id>/impersonate/', admin_views.impersonate_tenant, name='admin-tenant-impersonate'),
     path('tenants/<int:tenant_id>/feature-overrides/', admin_views.tenant_feature_overrides, name='admin-tenant-overrides'),

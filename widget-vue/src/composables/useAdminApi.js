@@ -295,6 +295,12 @@ export function useAdminApi() {
       return apiFetch(`/api/admin/audit/${qs ? '?' + qs : ''}`)
     },
 
+    // ── Subscription management (superadmin) ─────────────────────────
+    getTenantSubscription: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/subscription/`),
+    updateTenantSubscription: (tenantId, data) => apiFetch(`/api/admin/tenants/${tenantId}/subscription/`, {
+      method: 'PATCH', body: JSON.stringify(data),
+    }),
+
     // ── Feature Overrides ─────────────────────────────────────────────
     getTenantFeatureOverrides: (tenantId) => apiFetch(`/api/admin/tenants/${tenantId}/feature-overrides/`),
     createFeatureOverride: (tenantId, data) => apiFetch(`/api/admin/tenants/${tenantId}/feature-overrides/`, {
