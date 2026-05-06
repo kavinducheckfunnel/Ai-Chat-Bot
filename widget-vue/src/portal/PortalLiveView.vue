@@ -304,8 +304,8 @@ watch(() => props.client, () => loadData())
 .page-header {
   display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px;
 }
-.page-title { font-size: 22px; font-weight: 700; color: var(--cf-text); letter-spacing: -0.4px; }
-.page-sub { font-size: 13px; color: var(--cf-text-3); margin-top: 3px; }
+.page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
+.page-sub { font-size: 13px; color: #475569; margin-top: 3px; }
 
 .header-right { display: flex; align-items: center; gap: 12px; }
 
@@ -322,10 +322,10 @@ watch(() => props.client, () => loadData())
   display: flex; align-items: center; gap: 6px;
   background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.09);
   border-radius: 8px; padding: 7px 13px;
-  font-size: 13px; font-weight: 500; color: var(--cf-text-2);
+  font-size: 13px; font-weight: 500; color: #94a3b8;
   cursor: pointer; transition: all 0.12s; font-family: inherit;
 }
-.refresh-btn:hover { background: rgba(255,255,255,0.09); color: var(--cf-text); }
+.refresh-btn:hover { background: rgba(255,255,255,0.09); color: #f1f5f9; }
 .refresh-btn:disabled { opacity: 0.5; }
 .spin { animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -336,7 +336,7 @@ watch(() => props.client, () => loadData())
 }
 
 .stat-card {
-  background: var(--cf-surface); border: 1px solid rgba(255,255,255,0.06);
+  background: #161616; border: 1px solid rgba(255,255,255,0.06);
   border-radius: 12px; padding: 16px;
   display: flex; align-items: center; gap: 12px;
 }
@@ -350,8 +350,8 @@ watch(() => props.client, () => loadData())
 .stat-orange { background: rgba(249,115,22,0.12); color: #fb923c; }
 .stat-blue   { background: rgba(59,130,246,0.12); color: #60a5fa; }
 
-.stat-label { font-size: 11px; color: var(--cf-text-3); font-weight: 500; margin-bottom: 3px; }
-.stat-value { font-size: 22px; font-weight: 700; color: var(--cf-text); letter-spacing: -0.4px; }
+.stat-label { font-size: 11px; color: #475569; font-weight: 500; margin-bottom: 3px; }
+.stat-value { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
 .stat-hot  { color: #ef4444; }
 .stat-warm { color: #f97316; }
 
@@ -360,15 +360,15 @@ watch(() => props.client, () => loadData())
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 14px;
 }
-.section-title { font-size: 15px; font-weight: 600; color: var(--cf-text); }
+.section-title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
 
 .filter-tabs { display: flex; gap: 3px; background: rgba(255,255,255,0.04); border-radius: 8px; padding: 3px; }
 .filter-tab {
   background: none; border: none; padding: 5px 11px;
-  font-size: 12px; font-weight: 500; color: var(--cf-text-3);
+  font-size: 12px; font-weight: 500; color: #475569;
   cursor: pointer; border-radius: 6px; transition: all 0.12s; font-family: inherit;
 }
-.filter-tab.active { background: rgba(255,255,255,0.08); color: var(--cf-text); }
+.filter-tab.active { background: rgba(255,255,255,0.08); color: #f1f5f9; }
 
 /* Sessions grid */
 .sessions-grid {
@@ -376,7 +376,7 @@ watch(() => props.client, () => loadData())
 }
 
 .session-card {
-  background: var(--cf-surface); border-radius: 13px; padding: 16px;
+  background: #161616; border-radius: 13px; padding: 16px;
   border: 1px solid rgba(255,255,255,0.06); cursor: pointer;
   transition: all 0.15s;
 }
@@ -407,22 +407,22 @@ watch(() => props.client, () => loadData())
 
 .session-metrics { display: flex; flex-direction: column; gap: 7px; margin-bottom: 12px; }
 .metric { display: flex; align-items: center; gap: 7px; }
-.metric-label { font-size: 10px; color: var(--cf-text-3); width: 40px; flex-shrink: 0; }
+.metric-label { font-size: 10px; color: #334155; width: 40px; flex-shrink: 0; }
 .mini-bar-wrap { flex: 1; background: rgba(255,255,255,0.05); border-radius: 2px; height: 4px; overflow: hidden; }
 .mini-bar { height: 100%; border-radius: 2px; transition: width 0.5s; }
 .intent  { background: #6366f1; }
 .budget  { background: #22c55e; }
 .urgency { background: #f97316; }
-.metric-val { font-size: 10px; font-weight: 600; color: var(--cf-text-3); width: 26px; text-align: right; }
+.metric-val { font-size: 10px; font-weight: 600; color: #475569; width: 26px; text-align: right; }
 
 .session-footer { display: flex; justify-content: space-between; align-items: center; }
-.visitor-id { font-size: 11px; color: var(--cf-text-3); font-family: monospace; }
-.msg-count { font-size: 11px; color: var(--cf-text-3); }
+.visitor-id { font-size: 11px; color: #334155; font-family: monospace; }
+.msg-count { font-size: 11px; color: #334155; }
 
 /* Loading / Empty */
 .loading-state, .empty-state {
   display: flex; flex-direction: column; align-items: center;
-  gap: 10px; padding: 60px; color: var(--cf-text-3); font-size: 13px;
+  gap: 10px; padding: 60px; color: #334155; font-size: 13px;
 }
 .loader {
   width: 28px; height: 28px;
@@ -441,7 +441,7 @@ watch(() => props.client, () => loadData())
 }
 
 .modal {
-  background: var(--cf-surface); border: 1px solid rgba(255,255,255,0.08);
+  background: #161616; border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px; width: 100%; max-width: 600px; max-height: 80vh;
   display: flex; flex-direction: column;
   box-shadow: 0 25px 60px rgba(0,0,0,0.6);
@@ -452,8 +452,8 @@ watch(() => props.client, () => loadData())
   padding: 18px 20px 14px;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.modal-title { font-size: 15px; font-weight: 600; color: var(--cf-text); }
-.modal-sub { font-size: 11px; color: var(--cf-text-3); font-family: monospace; margin-top: 3px; }
+.modal-title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+.modal-sub { font-size: 11px; color: #475569; font-family: monospace; margin-top: 3px; }
 
 .modal-heat {
   font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
@@ -464,9 +464,9 @@ watch(() => props.client, () => loadData())
 
 .modal-close {
   background: none; border: none; cursor: pointer; padding: 4px;
-  color: var(--cf-text-3); border-radius: 6px; transition: all 0.12s;
+  color: #475569; border-radius: 6px; transition: all 0.12s;
 }
-.modal-close:hover { background: rgba(255,255,255,0.06); color: var(--cf-text-2); }
+.modal-close:hover { background: rgba(255,255,255,0.06); color: #94a3b8; }
 
 .modal-loading { display: flex; justify-content: center; padding: 40px; }
 
@@ -480,7 +480,7 @@ watch(() => props.client, () => loadData())
 .ai-msg { align-self: flex-start; }
 
 .msg-role {
-  font-size: 10px; font-weight: 600; color: var(--cf-text-3);
+  font-size: 10px; font-weight: 600; color: #334155;
   margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;
 }
 .user-msg .msg-role { text-align: right; }
@@ -489,7 +489,7 @@ watch(() => props.client, () => loadData())
   font-size: 13px; line-height: 1.5; padding: 10px 14px; border-radius: 12px; margin: 0;
 }
 .user-msg .msg-text { background: rgba(99,102,241,0.15); color: #c7d2fe; border-bottom-right-radius: 4px; }
-.ai-msg  .msg-text { background: var(--cf-surface-2); color: var(--cf-text-2); border: 1px solid rgba(255,255,255,0.05); border-bottom-left-radius: 4px; }
+.ai-msg  .msg-text { background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.05); border-bottom-left-radius: 4px; }
 
-.no-history { color: var(--cf-text-3); font-size: 13px; text-align: center; padding: 24px; }
+.no-history { color: #334155; font-size: 13px; text-align: center; padding: 24px; }
 </style>

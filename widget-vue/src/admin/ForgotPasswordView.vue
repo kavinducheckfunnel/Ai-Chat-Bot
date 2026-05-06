@@ -115,7 +115,7 @@ async function handleSubmit() {
 
 .auth-card {
   position: relative;
-  background: var(--cf-surface-2);
+  background: #1E293B;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
   padding: 40px;
@@ -127,13 +127,13 @@ async function handleSubmit() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--cf-text-3);
+  color: #64748b;
   font-size: 13px;
   text-decoration: none;
   margin-bottom: 24px;
   transition: color 0.2s;
 }
-.back-link:hover { color: var(--cf-text-2); }
+.back-link:hover { color: #94a3b8; }
 
 .brand {
   display: flex;
@@ -149,22 +149,22 @@ async function handleSubmit() {
   align-items: center;
   justify-content: center;
 }
-.brand-name { font-weight: 700; font-size: 18px; color: var(--cf-text); }
+.brand-name { font-weight: 700; font-size: 18px; color: #f1f5f9; }
 
-.auth-title { font-size: 22px; font-weight: 700; color: var(--cf-text); margin: 0 0 6px; }
-.auth-sub { font-size: 14px; color: var(--cf-text-3); margin: 0 0 28px; line-height: 1.5; }
-.auth-sub strong { color: var(--cf-text-2); }
+.auth-title { font-size: 22px; font-weight: 700; color: #f1f5f9; margin: 0 0 6px; }
+.auth-sub { font-size: 14px; color: #64748b; margin: 0 0 28px; line-height: 1.5; }
+.auth-sub strong { color: #94a3b8; }
 
 .auth-form { display: flex; flex-direction: column; gap: 16px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field label { font-size: 13px; font-weight: 500; color: var(--cf-text-2); }
+.field label { font-size: 13px; font-weight: 500; color: #94a3b8; }
 .field input {
   background: #0F172A;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 10px;
   padding: 11px 14px;
-  color: var(--cf-text);
+  color: #f1f5f9;
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
@@ -213,5 +213,5 @@ async function handleSubmit() {
 .success-state { text-align: center; }
 .success-icon { display: flex; justify-content: center; margin-bottom: 16px; }
 
-.footer-note { text-align: center; color: var(--cf-text-3); font-size: 12px; margin-top: 28px; }
+.footer-note { text-align: center; color: #334155; font-size: 12px; margin-top: 28px; }
 </style>

@@ -78,10 +78,6 @@
           <p class="user-role">{{ user?.role || 'admin' }}</p>
         </div>
       </div>
-      <button class="theme-btn" @click="toggle" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'">
-        <svg v-if="theme === 'dark'" width="15" height="15" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <svg v-else width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
       <button class="logout-btn" @click="logout" title="Logout">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -92,11 +88,9 @@
 <script setup>
 import { computed } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
-import { useTheme } from '../composables/useTheme'
 import UsageBar from './UsageBar.vue'
 
 const api = useAdminApi()
-const { theme, toggle } = useTheme()
 const user = computed(() => api.getUser())
 const initials = computed(() => {
   const name = user.value?.username || 'A'
@@ -244,22 +238,6 @@ function returnFromImpersonation() {
 .logout-btn:hover {
   background: rgba(239,68,68,0.1);
   color: #FCA5A5;
-}
-
-.theme-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 7px;
-  color: #475569;
-  display: flex; align-items: center;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-.theme-btn:hover {
-  background: rgba(99,102,241,0.15);
-  color: #A5B4FC;
 }
 
 .impersonate-banner {

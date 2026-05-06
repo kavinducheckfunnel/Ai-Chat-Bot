@@ -144,7 +144,7 @@ async function handleLogin() {
 
 .login-card {
   position: relative;
-  background: var(--cf-surface-2);
+  background: #1E293B;
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
   padding: 40px;
@@ -170,21 +170,21 @@ async function handleLogin() {
 .brand-name {
   font-size: 18px;
   font-weight: 700;
-  color: var(--cf-text);
+  color: #F1F5F9;
   letter-spacing: -0.3px;
 }
 
 .login-title {
   font-size: 26px;
   font-weight: 700;
-  color: var(--cf-text);
+  color: #F1F5F9;
   margin-bottom: 6px;
   letter-spacing: -0.5px;
 }
 
 .login-sub {
   font-size: 14px;
-  color: var(--cf-text-3);
+  color: #64748B;
   margin-bottom: 28px;
 }
 
@@ -203,7 +203,7 @@ async function handleLogin() {
 .field label {
   font-size: 13px;
   font-weight: 500;
-  color: var(--cf-text-2);
+  color: #94A3B8;
 }
 
 .field input {
@@ -212,7 +212,7 @@ async function handleLogin() {
   border-radius: 10px;
   padding: 11px 14px;
   font-size: 14px;
-  color: var(--cf-text);
+  color: #F1F5F9;
   font-family: inherit;
   outline: none;
   transition: border-color 0.2s;
@@ -223,7 +223,7 @@ async function handleLogin() {
   box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
 }
 
-.field input::placeholder { color: var(--cf-text-3); }
+.field input::placeholder { color: #334155; }
 
 .password-wrap {
   position: relative;
@@ -301,7 +301,7 @@ async function handleLogin() {
   margin-top: 20px;
   text-align: center;
   font-size: 13px;
-  color: var(--cf-text-3);
+  color: #475569;
 }
 
 .signup-prompt a {
@@ -315,6 +315,6 @@ async function handleLogin() {
   margin-top: 12px;
   text-align: center;
   font-size: 12px;
-  color: var(--cf-text-3);
+  color: #334155;
 }
 </style>
