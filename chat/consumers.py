@@ -264,6 +264,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         max_s = tenant.plan.max_sessions_per_month
         used = tenant.sessions_this_month
 
+        # -1 means unlimited — never block
+        if max_s < 0:
+            return False, ''
+
         # Hard limit — block the connection
         if used >= max_s:
             return True, (
