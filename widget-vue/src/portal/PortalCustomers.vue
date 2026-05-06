@@ -1,36 +1,56 @@
 <template>
-  <div class="customers-page">
-    <div class="page-header">
+  <div class="flex flex-col gap-6 p-6 max-w-6xl">
+
+    <!-- Header -->
+    <div class="flex items-start justify-between gap-4">
       <div>
-        <h1 class="page-title">Customers</h1>
-        <p class="page-sub">Leads and contacts from your chatbot</p>
+        <h1 class="text-2xl font-semibold tracking-tight">Customers</h1>
+        <p class="text-sm text-muted-foreground mt-1">Leads and contacts from your chatbot</p>
       </div>
-      <button class="btn-export" @click="exportCSV" :disabled="exporting">
-        <svg width="13" height="13" fill="none" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <Button variant="outline" @click="exportCSV" :disabled="exporting" class="gap-2">
+        <Download class="h-4 w-4" />
         {{ exporting ? 'Exporting…' : 'Export CSV' }}
-      </button>
+      </Button>
     </div>
 
     <!-- Tabs -->
-    <div class="tabs">
-      <button class="tab" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">
-        All leads <span class="tab-count">{{ leads.length }}</span>
-      </button>
-      <button class="tab" :class="{ active: activeTab === 'hot' }" @click="activeTab = 'hot'">
-        Hot leads <span class="tab-count hot" v-if="hotLeads.length">{{ hotLeads.length }}</span>
-      </button>
-      <button class="tab" :class="{ active: activeTab === 'converted' }" @click="activeTab = 'converted'">
-        Converted
-      </button>
+    <div class="border-b border-border">
+      <div class="flex gap-1">
+        <button
+          v-for="tab in tabs" :key="tab.value"
+          class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
+          :class="activeTab === tab.value
+            ? 'border-primary text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground'"
+          @click="activeTab = tab.value"
+        >
+          {{ tab.label }}
+          <span
+            v-if="tab.count !== undefined"
+            class="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-bold"
+            :class="tab.value === 'hot' && tab.count > 0 ? 'bg-red-100 text-red-600' : 'bg-muted text-muted-foreground'"
+          >
+            {{ tab.count }}
+          </span>
+        </button>
+      </div>
     </div>
 
     <!-- Filters -->
-    <div class="filters-bar">
-      <div class="search-wrap">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke="#475569" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="#475569" stroke-width="2" stroke-linecap="round"/></svg>
-        <input v-model="search" type="text" class="search-input" placeholder="Search by email or state…" />
+    <div class="flex gap-3 items-center">
+      <div class="relative flex-1">
+        <Search class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <input
+          v-model="search"
+          type="text"
+          placeholder="Search by email or state…"
+          class="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        />
       </div>
-      <select v-model="sortBy" class="filter-select">
+      <select
+        v-model="sortBy"
+        class="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      >
         <option value="-heat_score">Hottest first</option>
         <option value="-created_at">Newest first</option>
         <option value="created_at">Oldest first</option>
@@ -38,98 +58,148 @@
     </div>
 
     <!-- Table -->
-    <div class="table-wrap">
-      <div v-if="loading" class="loading-rows">
-        <div class="skeleton-row" v-for="n in 6" :key="n">
-          <div class="sk-cell wide"></div>
-          <div class="sk-cell"></div>
-          <div class="sk-cell"></div>
-          <div class="sk-cell narrow"></div>
+    <Card>
+      <CardContent class="p-0">
+        <!-- Loading skeleton -->
+        <div v-if="loading" class="space-y-0">
+          <div v-for="n in 6" :key="n" class="flex items-center gap-4 px-5 py-3.5 border-b border-border last:border-0 animate-pulse">
+            <div class="h-8 w-8 rounded-full bg-muted shrink-0"></div>
+            <div class="flex-1 space-y-1.5">
+              <div class="h-3.5 w-40 rounded bg-muted"></div>
+              <div class="h-2.5 w-24 rounded bg-muted"></div>
+            </div>
+            <div class="h-5 w-16 rounded-full bg-muted"></div>
+            <div class="h-3 w-24 rounded bg-muted"></div>
+            <div class="h-3 w-8 rounded bg-muted"></div>
+            <div class="h-3 w-20 rounded bg-muted"></div>
+          </div>
         </div>
-      </div>
 
-      <table v-else class="leads-table">
-        <thead>
-          <tr>
-            <th>Visitor</th>
-            <th>State</th>
-            <th>Heat</th>
-            <th>Messages</th>
-            <th>Seen</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-if="filtered.length === 0">
-            <td colspan="5" class="empty-row">No leads match your filters</td>
-          </tr>
-          <tr v-for="lead in filtered" :key="lead.session_id" class="clickable-row" @click="openSession(lead)">
-            <td>
-              <div class="visitor-cell">
-                <div class="visitor-avatar" :style="{ background: heatColor(lead.heat_score) }">
-                  {{ lead.lead_email ? lead.lead_email[0].toUpperCase() : '#' }}
+        <!-- Table -->
+        <table v-else class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border">
+              <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Visitor</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">State</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Heat</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Messages</th>
+              <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-if="filtered.length === 0">
+              <td colspan="5" class="px-5 py-12 text-center text-sm text-muted-foreground">No leads match your filters</td>
+            </tr>
+            <tr
+              v-for="lead in filtered"
+              :key="lead.session_id"
+              class="border-b border-border last:border-0 cursor-pointer hover:bg-muted/40 transition-colors"
+              @click="openSession(lead)"
+            >
+              <!-- Visitor -->
+              <td class="px-5 py-3.5">
+                <div class="flex items-center gap-3">
+                  <div
+                    class="h-8 w-8 rounded-full shrink-0 flex items-center justify-center text-[11px] font-bold text-white"
+                    :style="{ background: heatColor(lead.heat_score) }"
+                  >
+                    {{ lead.lead_email ? lead.lead_email[0].toUpperCase() : '#' }}
+                  </div>
+                  <div>
+                    <p class="font-medium text-foreground text-sm">{{ lead.lead_email || 'Anonymous' }}</p>
+                    <p v-if="lead.lead_phone" class="text-xs text-muted-foreground mt-0.5">{{ lead.lead_phone }}</p>
+                  </div>
                 </div>
-                <div>
-                  <p class="visitor-email">{{ lead.lead_email || 'Anonymous' }}</p>
-                  <p class="visitor-phone" v-if="lead.lead_phone">{{ lead.lead_phone }}</p>
+              </td>
+              <!-- State -->
+              <td class="px-5 py-3.5">
+                <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide" :class="kanbanBadgeClass(lead.kanban_state)">
+                  {{ lead.kanban_state || 'NEW' }}
+                </span>
+              </td>
+              <!-- Heat -->
+              <td class="px-5 py-3.5">
+                <div class="flex items-center gap-2">
+                  <div class="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div class="h-full rounded-full" :style="{ width: (lead.heat_score || 0) + '%', background: heatColor(lead.heat_score) }"></div>
+                  </div>
+                  <span class="text-xs text-muted-foreground font-mono w-8">{{ Math.round(lead.heat_score || 0) }}%</span>
                 </div>
-              </div>
-            </td>
-            <td><span class="state-badge" :class="kanbanClass(lead.kanban_state)">{{ lead.kanban_state }}</span></td>
-            <td>
-              <div class="heat-cell">
-                <div class="heat-track">
-                  <div class="heat-fill" :style="{ width: (lead.heat_score || 0) + '%', background: heatColor(lead.heat_score) }"></div>
-                </div>
-                <span class="heat-pct">{{ Math.round(lead.heat_score || 0) }}%</span>
-              </div>
-            </td>
-            <td class="count-cell">{{ lead.message_count || 0 }}</td>
-            <td class="time-cell">{{ formatDate(lead.created_at) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              </td>
+              <!-- Messages -->
+              <td class="px-5 py-3.5 font-mono text-muted-foreground text-sm">{{ lead.message_count || 0 }}</td>
+              <!-- Seen -->
+              <td class="px-5 py-3.5 text-xs text-muted-foreground">{{ formatDate(lead.created_at) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </CardContent>
+    </Card>
 
     <!-- Chat History Modal -->
-    <div v-if="selectedSession" class="modal-overlay" @click.self="selectedSession = null">
-      <div class="modal">
-        <div class="modal-header">
+    <div v-if="selectedSession" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" @click.self="selectedSession = null">
+      <div class="bg-background border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-xl">
+        <!-- Modal header -->
+        <div class="flex items-start justify-between px-5 py-4 border-b border-border">
           <div>
-            <h3 class="modal-title">Chat History</h3>
-            <p class="modal-sub">{{ selectedSession.lead_email || selectedSession.visitor_id?.slice(0, 28) || 'Anonymous' }}</p>
+            <h3 class="text-base font-semibold text-foreground">Chat History</h3>
+            <p class="text-xs text-muted-foreground font-mono mt-0.5">
+              {{ selectedSession.lead_email || selectedSession.visitor_id?.slice(0, 28) || 'Anonymous' }}
+            </p>
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div class="modal-heat-badge" :class="heatBadgeClass(selectedSession.heat_score)">
+          <div class="flex items-center gap-2">
+            <span
+              class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold"
+              :class="heatBadgeClass(selectedSession.heat_score)"
+            >
               {{ Math.round(selectedSession.heat_score || 0) }}% heat
-            </div>
-            <button class="modal-close" @click="selectedSession = null">
-              <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </span>
+            <button class="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" @click="selectedSession = null">
+              <X class="h-4 w-4" />
             </button>
           </div>
         </div>
-        <div v-if="loadingSession" class="modal-loading">
-          <div class="modal-loader"></div>
+
+        <!-- Loading -->
+        <div v-if="loadingSession" class="flex justify-center items-center py-12">
+          <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
-        <div v-else class="chat-history">
+
+        <!-- Messages -->
+        <div v-else class="flex flex-col gap-3 overflow-y-auto px-5 py-4">
           <div
             v-for="(msg, i) in sessionDetail?.chat_history || []"
             :key="i"
-            class="chat-msg"
-            :class="msg.role === 'user' ? 'user-msg' : 'ai-msg'"
+            class="flex flex-col max-w-[88%]"
+            :class="msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'"
           >
-            <span class="msg-role">{{ msg.role === 'user' ? 'Visitor' : 'AI' }}</span>
-            <p class="msg-text">{{ msg.message || msg.content }}</p>
+            <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              {{ msg.role === 'user' ? 'Visitor' : 'AI' }}
+            </span>
+            <p
+              class="text-sm leading-relaxed px-3.5 py-2.5 rounded-xl m-0"
+              :class="msg.role === 'user'
+                ? 'bg-primary text-primary-foreground rounded-br-sm'
+                : 'bg-muted text-foreground rounded-bl-sm'"
+            >
+              {{ msg.message || msg.content }}
+            </p>
           </div>
-          <p v-if="!sessionDetail?.chat_history?.length" class="no-history">No messages yet.</p>
+          <p v-if="!sessionDetail?.chat_history?.length" class="text-sm text-muted-foreground text-center py-6">No messages yet.</p>
         </div>
       </div>
     </div>
+
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
+import { Download, Search, X, Loader2 } from 'lucide-vue-next'
 import { useAdminApi } from '../composables/useAdminApi'
+import Card from '@/components/ui/Card.vue'
+import CardContent from '@/components/ui/CardContent.vue'
+import Button from '@/components/ui/Button.vue'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
@@ -145,6 +215,12 @@ const sessionDetail = ref(null)
 const loadingSession = ref(false)
 
 const hotLeads = computed(() => leads.value.filter(l => l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD'))
+
+const tabs = computed(() => [
+  { value: 'all', label: 'All leads', count: leads.value.length },
+  { value: 'hot', label: 'Hot leads', count: hotLeads.value.length },
+  { value: 'converted', label: 'Converted' },
+])
 
 const filtered = computed(() => {
   let list = leads.value
@@ -191,25 +267,25 @@ async function openSession(lead) {
   loadingSession.value = false
 }
 
-function heatBadgeClass(score) {
-  if (score >= 75) return 'badge-heat-hot'
-  if (score >= 40) return 'badge-heat-warm'
-  return 'badge-heat-cool'
-}
-
 function heatColor(score) {
-  if (!score) return '#1e293b'
+  if (!score) return 'hsl(var(--muted-foreground))'
   if (score >= 75) return '#ef4444'
   if (score >= 40) return '#f59e0b'
-  return '#6366f1'
+  return 'hsl(var(--primary))'
 }
 
-function kanbanClass(state) {
-  if (state === 'HOT_LEAD') return 'badge-hot'
-  if (state === 'CONVERTED') return 'badge-converted'
-  if (state === 'ENGAGED') return 'badge-engaged'
-  if (state === 'LOST') return 'badge-lost'
-  return 'badge-new'
+function heatBadgeClass(score) {
+  if (score >= 75) return 'bg-red-100 text-red-600'
+  if (score >= 40) return 'bg-amber-100 text-amber-600'
+  return 'bg-primary/10 text-primary'
+}
+
+function kanbanBadgeClass(state) {
+  if (state === 'HOT_LEAD') return 'bg-red-100 text-red-600'
+  if (state === 'CONVERTED') return 'bg-emerald-100 text-emerald-600'
+  if (state === 'ENGAGED') return 'bg-blue-100 text-blue-600'
+  if (state === 'LOST') return 'bg-muted text-muted-foreground'
+  return 'bg-slate-100 text-slate-500'
 }
 
 function formatDate(ts) {
@@ -220,217 +296,3 @@ function formatDate(ts) {
 onMounted(loadLeads)
 watch(() => props.client, loadLeads)
 </script>
-
-<style scoped>
-* { box-sizing: border-box; }
-
-.customers-page {
-  padding: 28px 32px;
-  font-family: 'Inter', -apple-system, sans-serif;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
-.page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
-.page-sub { font-size: 13px; color: #475569; margin-top: 3px; }
-
-.btn-export {
-  display: flex; align-items: center; gap: 7px;
-  padding: 8px 16px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.09);
-  border-radius: 9px;
-  font-size: 13px; font-weight: 500; color: #94a3b8;
-  cursor: pointer; transition: all 0.12s;
-}
-.btn-export:hover { background: rgba(255,255,255,0.09); color: #f1f5f9; }
-.btn-export:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.tabs {
-  display: flex; gap: 2px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
-  margin-bottom: 16px;
-}
-
-.tab {
-  display: flex; align-items: center; gap: 7px;
-  padding: 9px 16px;
-  background: none; border: none;
-  border-bottom: 2px solid transparent;
-  font-size: 13px; font-weight: 500; color: #475569;
-  cursor: pointer; transition: all 0.12s; margin-bottom: -1px;
-}
-.tab:hover { color: #94a3b8; }
-.tab.active { color: #a5b4fc; border-bottom-color: #6366f1; }
-
-.tab-count {
-  background: #1e293b; color: #64748b;
-  font-size: 10px; font-weight: 700;
-  padding: 1px 6px; border-radius: 10px;
-}
-.tab-count.hot { background: rgba(239,68,68,0.12); color: #ef4444; }
-
-.filters-bar {
-  display: flex; gap: 10px; margin-bottom: 14px; align-items: center;
-}
-
-.search-wrap {
-  flex: 1; display: flex; align-items: center; gap: 9px;
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 9px;
-  padding: 0 12px;
-}
-
-.search-input {
-  flex: 1; padding: 9px 0;
-  background: none; border: none; outline: none;
-  font-size: 13px; color: #f1f5f9;
-}
-.search-input::placeholder { color: #334155; }
-
-.filter-select {
-  padding: 9px 12px;
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 9px;
-  font-size: 13px; color: #94a3b8;
-  outline: none; cursor: pointer;
-}
-
-.table-wrap { overflow-x: auto; }
-
-.leads-table { width: 100%; border-collapse: collapse; }
-
-.leads-table th {
-  padding: 10px 14px;
-  font-size: 11px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em;
-  color: #334155;
-  text-align: left;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  white-space: nowrap;
-}
-
-.leads-table td {
-  padding: 12px 14px;
-  font-size: 13px; color: #94a3b8;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  vertical-align: middle;
-}
-
-.leads-table tr:hover td { background: rgba(255,255,255,0.02); }
-
-.empty-row { text-align: center; color: #334155; padding: 40px; }
-
-.visitor-cell { display: flex; align-items: center; gap: 10px; }
-.visitor-avatar { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: white; flex-shrink: 0; }
-.visitor-email { font-size: 13px; font-weight: 500; color: #e2e8f0; }
-.visitor-phone { font-size: 11px; color: #475569; margin-top: 2px; }
-
-.state-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
-.badge-hot { background: rgba(239,68,68,0.12); color: #ef4444; }
-.badge-converted { background: rgba(34,197,94,0.12); color: #22c55e; }
-.badge-engaged { background: rgba(99,102,241,0.12); color: #a5b4fc; }
-.badge-lost { background: rgba(71,85,105,0.2); color: #475569; }
-.badge-new { background: rgba(71,85,105,0.15); color: #64748b; }
-
-.heat-cell { display: flex; align-items: center; gap: 8px; }
-.heat-track { width: 60px; height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; }
-.heat-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
-.heat-pct { font-size: 11px; color: #475569; font-family: monospace; width: 30px; }
-
-.count-cell { color: #64748b; font-family: monospace; }
-.time-cell { color: #334155; font-size: 12px; }
-
-.loading-rows { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; }
-.skeleton-row { display: flex; gap: 16px; padding: 10px 14px; }
-.sk-cell { height: 14px; background: #1e293b; border-radius: 4px; flex: 1; }
-.sk-cell.wide { flex: 2; }
-.sk-cell.narrow { flex: 0.5; }
-
-.clickable-row { cursor: pointer; }
-
-/* Modal */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.7); backdrop-filter: blur(6px);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 100; padding: 20px;
-}
-
-.modal {
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  width: 100%; max-width: 600px; max-height: 80vh;
-  display: flex; flex-direction: column;
-  box-shadow: 0 25px 60px rgba(0,0,0,0.5);
-}
-
-.modal-header {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-
-.modal-title { font-size: 16px; font-weight: 600; color: #f1f5f9; }
-.modal-sub { font-size: 12px; color: #475569; font-family: monospace; margin-top: 3px; }
-
-.modal-heat-badge {
-  font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px;
-}
-.badge-heat-hot { background: rgba(239,68,68,0.15); color: #ef4444; }
-.badge-heat-warm { background: rgba(245,158,11,0.15); color: #f59e0b; }
-.badge-heat-cool { background: rgba(99,102,241,0.15); color: #a5b4fc; }
-
-.modal-close {
-  background: none; border: none; cursor: pointer; padding: 4px;
-  color: #475569; border-radius: 6px; transition: all 0.12s;
-}
-.modal-close:hover { background: rgba(255,255,255,0.06); color: #94a3b8; }
-
-.modal-loading { display: flex; justify-content: center; padding: 48px; }
-.modal-loader {
-  width: 28px; height: 28px;
-  border: 2px solid rgba(255,255,255,0.08);
-  border-top-color: #6366f1;
-  border-radius: 50%;
-  animation: spin 0.7s linear infinite;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.chat-history {
-  overflow-y: auto; padding: 16px 20px;
-  display: flex; flex-direction: column; gap: 10px;
-}
-
-.chat-msg { max-width: 88%; }
-.user-msg { align-self: flex-end; }
-.ai-msg { align-self: flex-start; }
-
-.msg-role {
-  font-size: 10px; font-weight: 600; color: #334155;
-  margin-bottom: 4px; display: block; text-transform: uppercase; letter-spacing: 0.05em;
-}
-.user-msg .msg-role { text-align: right; }
-
-.msg-text {
-  font-size: 13px; line-height: 1.5; padding: 10px 14px; border-radius: 12px; margin: 0;
-}
-.user-msg .msg-text {
-  background: rgba(99,102,241,0.15);
-  color: #c7d2fe;
-  border-bottom-right-radius: 4px;
-}
-.ai-msg .msg-text {
-  background: #1e293b;
-  color: #94a3b8;
-  border: 1px solid rgba(255,255,255,0.05);
-  border-bottom-left-radius: 4px;
-}
-
-.no-history { color: #334155; font-size: 13px; text-align: center; padding: 24px; }
-</style>

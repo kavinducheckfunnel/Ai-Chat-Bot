@@ -1,367 +1,434 @@
 <template>
-  <div class="reports-page">
+  <div class="flex flex-col gap-5 p-6 max-w-6xl">
 
     <!-- Header -->
-    <div class="page-header">
+    <div class="flex items-start justify-between gap-4 flex-wrap">
       <div>
-        <h1 class="page-title">Reports</h1>
-        <p class="page-sub">Performance overview for your chatbot</p>
+        <h1 class="text-2xl font-semibold tracking-tight">Reports</h1>
+        <p class="text-sm text-muted-foreground mt-1">Performance overview for your chatbot</p>
       </div>
-      <div class="header-right">
-        <div class="period-tabs">
-          <button v-for="p in periods" :key="p.val" class="period-btn" :class="{ active: period === p.val }" @click="period = p.val; load()">
-            {{ p.label }}
-          </button>
+      <div class="flex items-center gap-3">
+        <!-- Period tabs -->
+        <div class="flex rounded-lg border border-border overflow-hidden">
+          <button
+            v-for="p in periods" :key="p.val"
+            class="px-3.5 py-1.5 text-xs font-medium transition-colors"
+            :class="period === p.val ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'"
+            @click="period = p.val; load()"
+          >{{ p.label }}</button>
         </div>
-        <button class="export-btn" @click="exportCSV" :disabled="exporting" title="Download CSV">
-          <svg v-if="!exporting" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span v-if="exporting" class="mini-spinner-sm"></span>
-          {{ exporting ? 'Exporting…' : 'Export CSV' }}
-        </button>
+        <!-- Export -->
+        <Button variant="outline" size="sm" @click="exportCSV" :disabled="exporting" class="gap-2">
+          <Loader2 v-if="exporting" class="h-3.5 w-3.5 animate-spin" />
+          <Download v-else class="h-3.5 w-3.5" />
+          Export CSV
+        </Button>
       </div>
     </div>
 
     <!-- Tab navigation -->
-    <div class="tab-nav">
-      <button
-        v-for="t in tabs"
-        :key="t.key"
-        class="tab-btn"
-        :class="{ active: activeTab === t.key, locked: t.locked }"
-        @click="t.locked ? showUpgrade(t.requiredPlan) : (activeTab = t.key)"
-        :title="t.locked ? `Upgrade to ${t.requiredPlan} to unlock` : ''"
-      >
-        {{ t.label }}
-        <svg v-if="t.locked" width="11" height="11" fill="none" viewBox="0 0 24 24" style="margin-left:4px;opacity:.5"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <div class="border-b border-border">
+      <div class="flex gap-1">
+        <button
+          v-for="t in tabs" :key="t.key"
+          class="flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
+          :class="[
+            activeTab === t.key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+            t.locked && 'opacity-50 cursor-not-allowed hover:text-muted-foreground'
+          ]"
+          @click="t.locked ? showUpgrade(t.requiredPlan) : (activeTab = t.key)"
+        >
+          {{ t.label }}
+          <Lock v-if="t.locked" class="h-3 w-3" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Upgrade banner -->
+    <div v-if="upgradeMsg" class="flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-700">
+      <Star class="h-4 w-4 shrink-0 text-violet-500" />
+      {{ upgradeMsg }}
+      <RouterLink to="/portal/billing" class="ml-1 font-semibold underline">Upgrade plan →</RouterLink>
+      <button class="ml-auto text-violet-400 hover:text-violet-600" @click="upgradeMsg = ''">
+        <X class="h-4 w-4" />
       </button>
     </div>
 
-    <!-- Upgrade banner (dismissible) -->
-    <div v-if="upgradeMsg" class="upgrade-banner">
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      {{ upgradeMsg }}
-      <a href="/portal/billing" class="upgrade-link">Upgrade plan →</a>
-      <button class="banner-close" @click="upgradeMsg = ''">✕</button>
-    </div>
-
-    <!-- ═══════════════════════ OVERVIEW TAB ═══════════════════════ -->
+    <!-- ═══ OVERVIEW TAB ═══ -->
     <template v-if="activeTab === 'overview'">
 
       <!-- Hero metric cards -->
-      <div class="metric-grid" v-if="!loading">
-        <div class="metric-card" v-for="m in heroMetrics" :key="m.key">
-          <div class="metric-icon" :class="m.iconClass">
-            <component :is="m.icon" />
-          </div>
-          <div class="metric-body">
-            <div class="metric-value">{{ m.value }}</div>
-            <div class="metric-label">{{ m.label }}</div>
-          </div>
-          <div class="metric-delta" :class="deltaCls(m.delta, m.invertDelta)">
-            <span>{{ formatDelta(m.delta) }}</span>
-            <span class="delta-sub">vs prev period</span>
-          </div>
-        </div>
-      </div>
-      <div class="metric-grid" v-else>
-        <div class="metric-card skeleton" v-for="n in 4" :key="n">
-          <div class="sk-icon"></div>
-          <div class="sk-body"><div class="sk-val"></div><div class="sk-lbl"></div></div>
-        </div>
-      </div>
-
-      <!-- Secondary row: duration + missed (Growth+) -->
-      <div v-if="!canSeeCharts" class="locked-section">
-        <div class="locked-card">
-          <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" stroke="#a78bfa" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="#a78bfa" stroke-width="2" stroke-linecap="round"/></svg>
-          <div>
-            <div class="locked-title">Advanced metrics locked</div>
-            <div class="locked-sub">Avg duration, missed chats, daily trends and more. <a href="/portal/billing" class="upgrade-link">Upgrade to Growth →</a></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="secondary-row" v-else-if="!loading">
-        <div class="secondary-card">
-          <div class="sc-label">Avg chat duration</div>
-          <div class="sc-value">{{ fmtDuration(val('avg_duration_seconds')) }}</div>
-          <div class="sc-delta" :class="deltaCls(delta('avg_duration_seconds'))">{{ formatDelta(delta('avg_duration_seconds')) }} vs prev</div>
-        </div>
-        <div class="secondary-card">
-          <div class="sc-label">Total chat time</div>
-          <div class="sc-value">{{ fmtDuration(val('total_duration_seconds')) }}</div>
-          <div class="sc-delta" :class="deltaCls(delta('total_duration_seconds'))">{{ formatDelta(delta('total_duration_seconds')) }} vs prev</div>
-        </div>
-        <div class="secondary-card">
-          <div class="sc-label">Missed chats</div>
-          <div class="sc-value">{{ val('missed_chats') }}</div>
-          <div class="sc-delta" :class="deltaCls(delta('missed_chats'), true)">{{ formatDelta(delta('missed_chats')) }} vs prev</div>
-        </div>
-        <div class="secondary-card">
-          <div class="sc-label">AI resolution rate</div>
-          <div class="sc-value">{{ val('ai_resolution_rate') }}%</div>
-          <div class="sc-delta" :class="deltaCls(delta('ai_resolution_rate'))">{{ formatDeltaFloat(delta('ai_resolution_rate')) }}% vs prev</div>
-        </div>
-      </div>
-      <div class="secondary-row" v-else-if="canSeeCharts">
-        <div class="secondary-card skeleton" v-for="n in 4" :key="n"><div class="sk-val"></div><div class="sk-lbl"></div></div>
-      </div>
-
-      <!-- Daily trend chart (Growth+) -->
-      <div class="card chart-card" v-if="canSeeCharts && !loading && analytics.daily_trend?.length">
-        <div class="card-header-row">
-          <h3 class="card-title">Daily chats</h3>
-          <span class="chart-total">{{ val('total_sessions') }} total</span>
-        </div>
-        <div class="chart-wrap">
-          <svg :viewBox="`0 0 ${cW} ${cH}`" preserveAspectRatio="none" class="trend-svg">
-            <!-- Grid lines -->
-            <line v-for="y in gridYs" :key="y" :x1="pad" :y1="y" :x2="cW - pad" :y2="y" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
-            <!-- Area fill -->
-            <defs>
-              <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#6366f1" stop-opacity="0.25"/>
-                <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            <polygon v-if="chartPoints.length" :points="areaPolygon" fill="url(#areaGrad)"/>
-            <!-- Line -->
-            <polyline v-if="chartPoints.length" :points="chartPoints" fill="none" stroke="#6366f1" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-            <!-- Dots -->
-            <circle v-for="(pt, i) in chartDots" :key="i" :cx="pt.x" :cy="pt.y" r="3" fill="#6366f1"/>
-          </svg>
-          <!-- X axis labels -->
-          <div class="chart-labels">
-            <span v-for="(d, i) in chartLabelDates" :key="i" class="chart-lbl">{{ d }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Funnel + states (Growth+) -->
-      <div class="section-row" v-if="canSeeCharts">
-        <div class="card funnel-card">
-          <h3 class="card-title">Lead funnel</h3>
-          <div class="funnel-stages" v-if="!loading">
-            <div class="funnel-stage" v-for="stage in funnel" :key="stage.key">
-              <div class="stage-info">
-                <span class="stage-label">{{ stage.label }}</span>
-                <span class="stage-count" :style="{ color: stage.color }">{{ stage.count }}</span>
+      <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <template v-if="!loading">
+          <Card v-for="m in heroMetrics" :key="m.key">
+            <CardContent class="pt-5 pb-5">
+              <div class="flex items-start gap-3">
+                <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" :class="m.iconBg">
+                  <component :is="m.icon" class="h-4.5 w-4.5" :class="m.iconColor" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-2xl font-bold tracking-tight text-foreground leading-none">{{ m.value }}</p>
+                  <p class="text-xs text-muted-foreground mt-1.5">{{ m.label }}</p>
+                </div>
               </div>
-              <div class="stage-bar-wrap">
-                <div class="stage-bar" :style="{ width: stageWidth(stage.count) + '%', background: stage.color }"></div>
+              <p class="mt-3 text-xs" :class="deltaClass(m.delta, m.invertDelta)">
+                {{ formatDelta(m.delta) }} <span class="text-muted-foreground">vs prev period</span>
+              </p>
+            </CardContent>
+          </Card>
+        </template>
+        <template v-else>
+          <Card v-for="n in 4" :key="n">
+            <CardContent class="pt-5 pb-5 animate-pulse space-y-3">
+              <div class="flex gap-3">
+                <div class="h-9 w-9 rounded-lg bg-muted shrink-0"></div>
+                <div class="flex-1 space-y-2">
+                  <div class="h-5 w-16 rounded bg-muted"></div>
+                  <div class="h-3 w-24 rounded bg-muted"></div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div v-else class="funnel-skeleton"><div class="sk-stage" v-for="n in 4" :key="n"></div></div>
-        </div>
+            </CardContent>
+          </Card>
+        </template>
+      </div>
 
-        <div class="card states-card">
-          <h3 class="card-title">Conversation states</h3>
-          <div class="states-list" v-if="!loading">
-            <div class="state-row" v-for="s in conversationStates" :key="s.label">
-              <span class="state-dot" :style="{ background: s.color }"></span>
-              <span class="state-name">{{ s.label }}</span>
-              <span class="state-val">{{ s.count }}</span>
-            </div>
-          </div>
-          <div v-else class="states-skeleton"><div class="sk-state" v-for="n in 5" :key="n"></div></div>
+      <!-- Advanced metrics locked -->
+      <div v-if="!canSeeCharts" class="flex items-center gap-4 rounded-xl border border-dashed border-violet-200 bg-violet-50/50 px-5 py-4">
+        <Lock class="h-5 w-5 text-violet-400 shrink-0" />
+        <div>
+          <p class="text-sm font-semibold text-foreground">Advanced metrics locked</p>
+          <p class="text-xs text-muted-foreground mt-0.5">Avg duration, missed chats, daily trends and more.
+            <RouterLink to="/portal/billing" class="font-medium text-primary underline">Upgrade to Growth →</RouterLink>
+          </p>
         </div>
       </div>
+
+      <!-- Secondary metrics row -->
+      <template v-else>
+        <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <template v-if="!loading">
+            <Card v-for="m in secondaryMetrics" :key="m.label">
+              <CardContent class="pt-4 pb-4">
+                <p class="text-xs text-muted-foreground font-medium">{{ m.label }}</p>
+                <p class="text-xl font-bold text-foreground mt-1.5 tracking-tight">{{ m.value }}</p>
+                <p class="text-xs mt-1" :class="deltaClass(m.delta, m.invertDelta)">{{ formatDelta(m.delta) }} vs prev</p>
+              </CardContent>
+            </Card>
+          </template>
+          <template v-else>
+            <Card v-for="n in 4" :key="n">
+              <CardContent class="pt-4 pb-4 animate-pulse space-y-2">
+                <div class="h-3 w-24 rounded bg-muted"></div>
+                <div class="h-5 w-16 rounded bg-muted"></div>
+              </CardContent>
+            </Card>
+          </template>
+        </div>
+
+        <!-- Daily trend chart -->
+        <Card v-if="!loading && analytics.daily_trend?.length">
+          <CardContent class="pt-5 pb-5">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-semibold">Daily chats</h3>
+              <span class="text-xs text-muted-foreground">{{ val('total_sessions') }} total</span>
+            </div>
+            <svg :viewBox="`0 0 ${cW} ${cH}`" preserveAspectRatio="none" class="w-full h-20 overflow-visible">
+              <line v-for="y in gridYs" :key="y" :x1="pad" :y1="y" :x2="cW - pad" :y2="y" stroke="hsl(var(--border))" stroke-width="1"/>
+              <defs>
+                <linearGradient id="rptGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="hsl(var(--primary))" stop-opacity="0.25"/>
+                  <stop offset="100%" stop-color="hsl(var(--primary))" stop-opacity="0"/>
+                </linearGradient>
+              </defs>
+              <polygon v-if="chartPoints.length" :points="areaPolygon" fill="url(#rptGrad)"/>
+              <polyline v-if="chartPoints.length" :points="chartPoints" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+              <circle v-for="(pt, i) in chartDots" :key="i" :cx="pt.x" :cy="pt.y" r="3" fill="hsl(var(--primary))"/>
+            </svg>
+            <div class="flex justify-between mt-1.5 px-1">
+              <span v-for="(d, i) in chartLabelDates" :key="i" class="text-[10px] text-muted-foreground">{{ d }}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Funnel + states -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <!-- Lead funnel -->
+          <Card>
+            <CardContent class="pt-5 pb-5">
+              <h3 class="text-sm font-semibold mb-4">Lead funnel</h3>
+              <div v-if="!loading" class="space-y-3">
+                <div v-for="stage in funnel" :key="stage.key">
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-xs text-muted-foreground">{{ stage.label }}</span>
+                    <span class="text-sm font-bold" :style="{ color: stage.color }">{{ stage.count }}</span>
+                  </div>
+                  <div class="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div class="h-full rounded-full transition-all" :style="{ width: stageWidth(stage.count) + '%', background: stage.color }"></div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="space-y-3 animate-pulse">
+                <div v-for="n in 4" :key="n" class="h-7 rounded bg-muted"></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <!-- Conversation states -->
+          <Card>
+            <CardContent class="pt-5 pb-5">
+              <h3 class="text-sm font-semibold mb-4">Conversation states</h3>
+              <div v-if="!loading" class="space-y-2.5">
+                <div v-for="s in conversationStates" :key="s.label" class="flex items-center gap-3">
+                  <div class="h-2 w-2 rounded-full shrink-0" :style="{ background: s.color }"></div>
+                  <span class="flex-1 text-sm text-muted-foreground">{{ s.label }}</span>
+                  <span class="text-sm font-semibold text-foreground">{{ s.count }}</span>
+                </div>
+              </div>
+              <div v-else class="space-y-2.5 animate-pulse">
+                <div v-for="n in 5" :key="n" class="h-5 rounded bg-muted"></div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </template>
 
     </template>
 
-    <!-- ═══════════════════════ CHATS TAB ═══════════════════════ -->
+    <!-- ═══ CHATS TAB ═══ -->
     <template v-if="activeTab === 'chats' && canSeeChatsTab">
 
-      <!-- Chat type breakdown -->
-      <div class="breakdown-grid" v-if="!loading">
-        <div class="breakdown-card ai-card">
-          <div class="bk-label">Automated (AI)</div>
-          <div class="bk-value">{{ val('ai_handled') }}</div>
-          <div class="bk-sub">
-            <span class="bk-pct">{{ aiPct }}%</span> of total chats
-          </div>
-          <div class="bk-delta" :class="deltaCls(delta('ai_handled'))">{{ formatDelta(delta('ai_handled')) }} vs prev period</div>
-        </div>
-        <div class="breakdown-card manual-card">
-          <div class="bk-label">Manual (God View)</div>
-          <div class="bk-value">{{ val('manual_handled') }}</div>
-          <div class="bk-sub">
-            <span class="bk-pct">{{ manualPct }}%</span> of total chats
-          </div>
-          <div class="bk-delta" :class="deltaCls(delta('manual_handled'))">{{ formatDelta(delta('manual_handled')) }} vs prev period</div>
-        </div>
-        <div class="breakdown-card missed-card">
-          <div class="bk-label">Missed</div>
-          <div class="bk-value">{{ val('missed_chats') }}</div>
-          <div class="bk-sub">
-            <span class="bk-pct">{{ missedPct }}%</span> of total chats
-          </div>
-          <div class="bk-delta" :class="deltaCls(delta('missed_chats'), true)">{{ formatDelta(delta('missed_chats')) }} vs prev period</div>
-        </div>
-      </div>
-      <div class="breakdown-grid" v-else>
-        <div class="breakdown-card skeleton" v-for="n in 3" :key="n"><div class="sk-val"></div><div class="sk-lbl"></div></div>
-      </div>
-
-      <!-- AI Resolution rate bar -->
-      <div class="card res-card" v-if="!loading">
-        <div class="card-header-row">
-          <h3 class="card-title">AI resolution rate</h3>
-          <span class="res-pct-badge">{{ val('ai_resolution_rate') }}%</span>
-        </div>
-        <div class="res-track">
-          <div class="res-fill" :style="{ width: val('ai_resolution_rate') + '%' }"></div>
-        </div>
-        <p class="res-sub">{{ val('ai_handled') }} of {{ val('total_sessions') }} chats handled entirely by AI without human intervention.</p>
+      <!-- Breakdown cards -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <template v-if="!loading">
+          <Card class="border-blue-200 bg-blue-50/30">
+            <CardContent class="pt-5 pb-5">
+              <p class="text-xs font-semibold uppercase tracking-wide text-blue-500 mb-3">Automated (AI)</p>
+              <p class="text-4xl font-bold tracking-tight text-foreground">{{ val('ai_handled') }}</p>
+              <p class="text-xs text-muted-foreground mt-1.5"><span class="font-semibold text-foreground">{{ aiPct }}%</span> of total chats</p>
+              <p class="text-xs mt-2" :class="deltaClass(delta('ai_handled'))">{{ formatDelta(delta('ai_handled')) }} vs prev period</p>
+            </CardContent>
+          </Card>
+          <Card class="border-amber-200 bg-amber-50/30">
+            <CardContent class="pt-5 pb-5">
+              <p class="text-xs font-semibold uppercase tracking-wide text-amber-500 mb-3">Manual (God View)</p>
+              <p class="text-4xl font-bold tracking-tight text-foreground">{{ val('manual_handled') }}</p>
+              <p class="text-xs text-muted-foreground mt-1.5"><span class="font-semibold text-foreground">{{ manualPct }}%</span> of total chats</p>
+              <p class="text-xs mt-2" :class="deltaClass(delta('manual_handled'))">{{ formatDelta(delta('manual_handled')) }} vs prev period</p>
+            </CardContent>
+          </Card>
+          <Card class="border-red-200 bg-red-50/30">
+            <CardContent class="pt-5 pb-5">
+              <p class="text-xs font-semibold uppercase tracking-wide text-red-500 mb-3">Missed</p>
+              <p class="text-4xl font-bold tracking-tight text-foreground">{{ val('missed_chats') }}</p>
+              <p class="text-xs text-muted-foreground mt-1.5"><span class="font-semibold text-foreground">{{ missedPct }}%</span> of total chats</p>
+              <p class="text-xs mt-2" :class="deltaClass(delta('missed_chats'), true)">{{ formatDelta(delta('missed_chats')) }} vs prev period</p>
+            </CardContent>
+          </Card>
+        </template>
+        <template v-else>
+          <Card v-for="n in 3" :key="n">
+            <CardContent class="pt-5 pb-5 animate-pulse space-y-3">
+              <div class="h-3 w-20 rounded bg-muted"></div>
+              <div class="h-8 w-12 rounded bg-muted"></div>
+            </CardContent>
+          </Card>
+        </template>
       </div>
 
-      <!-- Duration row -->
-      <div class="section-row" v-if="!loading">
-        <div class="card dur-card">
-          <h3 class="card-title">Avg chat duration</h3>
-          <div class="dur-value">{{ fmtDuration(val('avg_duration_seconds')) }}</div>
-          <div class="dur-delta" :class="deltaCls(delta('avg_duration_seconds'))">{{ formatDelta(delta('avg_duration_seconds')) }}s vs prev period</div>
-        </div>
-        <div class="card dur-card">
-          <h3 class="card-title">Total chat time</h3>
-          <div class="dur-value">{{ fmtDuration(val('total_duration_seconds')) }}</div>
-          <div class="dur-delta" :class="deltaCls(delta('total_duration_seconds'))">vs prev {{ fmtDuration(prev('total_duration_seconds')) }}</div>
-        </div>
+      <!-- AI Resolution rate -->
+      <Card v-if="!loading">
+        <CardContent class="pt-5 pb-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold">AI resolution rate</h3>
+            <span class="text-xl font-bold text-primary">{{ val('ai_resolution_rate') }}%</span>
+          </div>
+          <div class="h-2 rounded-full bg-muted overflow-hidden">
+            <div class="h-full rounded-full bg-gradient-to-r from-primary to-primary/60 transition-all" :style="{ width: val('ai_resolution_rate') + '%' }"></div>
+          </div>
+          <p class="text-xs text-muted-foreground mt-2.5">{{ val('ai_handled') }} of {{ val('total_sessions') }} chats handled entirely by AI without human intervention.</p>
+        </CardContent>
+      </Card>
+
+      <!-- Duration -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" v-if="!loading">
+        <Card>
+          <CardContent class="pt-5 pb-5">
+            <h3 class="text-sm font-semibold text-muted-foreground mb-2">Avg chat duration</h3>
+            <p class="text-3xl font-bold tracking-tight text-foreground">{{ fmtDuration(val('avg_duration_seconds')) }}</p>
+            <p class="text-xs mt-2" :class="deltaClass(delta('avg_duration_seconds'))">{{ formatDelta(delta('avg_duration_seconds')) }}s vs prev period</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent class="pt-5 pb-5">
+            <h3 class="text-sm font-semibold text-muted-foreground mb-2">Total chat time</h3>
+            <p class="text-3xl font-bold tracking-tight text-foreground">{{ fmtDuration(val('total_duration_seconds')) }}</p>
+            <p class="text-xs text-muted-foreground mt-2">vs prev {{ fmtDuration(prev('total_duration_seconds')) }}</p>
+          </CardContent>
+        </Card>
       </div>
 
-      <!-- Placeholder: CSAT, First response, Queue -->
-      <div class="card na-card" v-if="!loading">
-        <h3 class="card-title">Additional metrics</h3>
-        <div class="na-grid">
-          <div class="na-item" v-for="m in naMetrics" :key="m.label">
-            <div class="na-label">{{ m.label }}</div>
-            <div class="na-value">N/A</div>
-            <div class="na-hint">{{ m.hint }}</div>
+      <!-- N/A placeholders -->
+      <Card v-if="!loading">
+        <CardContent class="pt-5 pb-5">
+          <h3 class="text-sm font-semibold mb-4">Additional metrics</h3>
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div v-for="m in naMetrics" :key="m.label" class="rounded-lg border border-border bg-muted/30 p-3.5">
+              <p class="text-xs text-muted-foreground font-medium">{{ m.label }}</p>
+              <p class="text-xl font-bold text-muted-foreground/50 mt-1">N/A</p>
+              <p class="text-[10px] text-muted-foreground/50 mt-1 leading-tight">{{ m.hint }}</p>
+            </div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <!-- Recent sessions -->
-      <div class="card recent-card" v-if="!loading">
-        <h3 class="card-title">Recent activity</h3>
-        <table class="activity-table" v-if="recentSessions.length">
-          <thead>
-            <tr>
-              <th>Visitor</th>
-              <th>Type</th>
-              <th>State</th>
-              <th>Heat</th>
-              <th>Messages</th>
-              <th>Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="s in recentSessions" :key="s.session_id">
-              <td>{{ s.lead_email || 'Visitor #' + String(s.session_id).slice(0, 6) }}</td>
-              <td><span class="mini-badge" :class="s.taken_over_by ? 'b-manual' : 'b-ai'">{{ s.taken_over_by ? 'Manual' : 'AI' }}</span></td>
-              <td><span class="mini-badge" :class="kanbanClass(s.kanban_state)">{{ s.kanban_state }}</span></td>
-              <td>
-                <div class="mini-heat">
-                  <div class="mini-track"><div class="mini-fill" :style="{ width: (s.heat_score || 0) + '%', background: heatColor(s.heat_score) }"></div></div>
-                  <span>{{ Math.round(s.heat_score || 0) }}%</span>
-                </div>
-              </td>
-              <td>{{ s.message_count || 0 }}</td>
-              <td>{{ formatDate(s.created_at) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-else class="empty-msg">No sessions yet.</div>
-      </div>
-      <div class="card recent-card" v-else>
-        <div class="table-skeleton"><div class="sk-row" v-for="n in 5" :key="n"></div></div>
-      </div>
+      <Card>
+        <CardContent class="p-0">
+          <div class="px-5 py-4 border-b border-border">
+            <h3 class="text-sm font-semibold">Recent activity</h3>
+          </div>
+          <div v-if="loading" class="space-y-0 animate-pulse">
+            <div v-for="n in 5" :key="n" class="px-5 py-3 border-b border-border last:border-0">
+              <div class="h-4 w-full rounded bg-muted"></div>
+            </div>
+          </div>
+          <table v-else-if="recentSessions.length" class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-border">
+                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Visitor</th>
+                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Type</th>
+                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">State</th>
+                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Heat</th>
+                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Msgs</th>
+                <th class="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in recentSessions" :key="s.session_id" class="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
+                <td class="px-5 py-3 text-foreground font-medium">{{ s.lead_email || 'Visitor #' + String(s.session_id).slice(0, 6) }}</td>
+                <td class="px-5 py-3">
+                  <span class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold uppercase" :class="s.taken_over_by ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'">
+                    {{ s.taken_over_by ? 'Manual' : 'AI' }}
+                  </span>
+                </td>
+                <td class="px-5 py-3">
+                  <span class="inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold uppercase" :class="kanbanBadgeClass(s.kanban_state)">{{ s.kanban_state || 'NEW' }}</span>
+                </td>
+                <td class="px-5 py-3">
+                  <div class="flex items-center gap-2">
+                    <div class="w-12 h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div class="h-full rounded-full" :style="{ width: (s.heat_score || 0) + '%', background: heatColor(s.heat_score) }"></div>
+                    </div>
+                    <span class="text-xs text-muted-foreground font-mono">{{ Math.round(s.heat_score || 0) }}%</span>
+                  </div>
+                </td>
+                <td class="px-5 py-3 font-mono text-muted-foreground">{{ s.message_count || 0 }}</td>
+                <td class="px-5 py-3 text-xs text-muted-foreground">{{ formatDate(s.created_at) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="text-sm text-muted-foreground text-center py-8">No sessions yet.</p>
+        </CardContent>
+      </Card>
 
     </template>
 
-    <!-- ═══════════════════════ ENGAGEMENT TAB ═══════════════════════ -->
+    <!-- ═══ ENGAGEMENT TAB ═══ -->
     <template v-if="activeTab === 'engagement' && canSeeEngagementTab">
 
-      <!-- EMA signal scores -->
-      <div class="card signals-card" v-if="!loading">
-        <h3 class="card-title">Buyer signal averages</h3>
-        <div class="signals-grid">
-          <div class="signal-item" v-for="sig in signals" :key="sig.label">
-            <div class="sig-label">{{ sig.label }}</div>
-            <div class="sig-bar-wrap">
-              <div class="sig-bar" :style="{ width: sig.value + '%', background: sig.color }"></div>
-            </div>
-            <div class="sig-value" :style="{ color: sig.color }">{{ sig.value }}%</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Heat distribution -->
-      <div class="section-row" v-if="!loading">
-        <div class="card heat-dist-card">
-          <h3 class="card-title">Heat distribution</h3>
-          <div class="heat-dist">
-            <div class="heat-seg hot" :style="{ flex: heatDist.hot }">
-              <span class="heat-seg-val">{{ heatDist.hot }}</span>
-              <span class="heat-seg-lbl">Hot</span>
-            </div>
-            <div class="heat-seg warm" :style="{ flex: heatDist.warm }">
-              <span class="heat-seg-val">{{ heatDist.warm }}</span>
-              <span class="heat-seg-lbl">Warm</span>
-            </div>
-            <div class="heat-seg cold" :style="{ flex: Math.max(heatDist.cold, 0.1) }">
-              <span class="heat-seg-val">{{ heatDist.cold }}</span>
-              <span class="heat-seg-lbl">Cold</span>
-            </div>
-          </div>
-          <div class="avg-heat-row">
-            <span class="avg-heat-lbl">Avg heat score</span>
-            <span class="avg-heat-val" :style="{ color: heatColor(analytics.avg_heat_score) }">{{ analytics.avg_heat_score }}%</span>
-          </div>
-        </div>
-
-        <div class="card kanban-card">
-          <h3 class="card-title">Kanban pipeline</h3>
-          <div class="kanban-list">
-            <div class="kanban-row" v-for="kb in kanbanBreakdown" :key="kb.key">
-              <span class="kanban-dot" :style="{ background: kb.color }"></span>
-              <span class="kanban-name">{{ kb.label }}</span>
-              <div class="kanban-bar-wrap">
-                <div class="kanban-bar" :style="{ width: kanbanWidth(kb.count) + '%', background: kb.color }"></div>
+      <!-- Buyer signal averages -->
+      <Card v-if="!loading">
+        <CardContent class="pt-5 pb-5">
+          <h3 class="text-sm font-semibold mb-4">Buyer signal averages</h3>
+          <div class="space-y-4">
+            <div v-for="sig in signals" :key="sig.label" class="flex items-center gap-4">
+              <span class="text-sm text-muted-foreground w-36 shrink-0">{{ sig.label }}</span>
+              <div class="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div class="h-full rounded-full transition-all" :style="{ width: sig.value + '%', background: sig.color }"></div>
               </div>
-              <span class="kanban-val">{{ kb.count }}</span>
+              <span class="text-sm font-semibold w-10 text-right" :style="{ color: sig.color }">{{ sig.value }}%</span>
             </div>
           </div>
-        </div>
+        </CardContent>
+      </Card>
+
+      <!-- Heat dist + Kanban -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" v-if="!loading">
+        <!-- Heat distribution -->
+        <Card>
+          <CardContent class="pt-5 pb-5">
+            <h3 class="text-sm font-semibold mb-4">Heat distribution</h3>
+            <div class="flex h-12 rounded-lg overflow-hidden gap-0.5 mb-4">
+              <div class="flex flex-col items-center justify-center min-w-8 transition-all bg-red-100" :style="{ flex: heatDist.hot }">
+                <span class="text-sm font-bold text-red-600">{{ heatDist.hot }}</span>
+                <span class="text-[9px] text-red-400 uppercase tracking-wide">Hot</span>
+              </div>
+              <div class="flex flex-col items-center justify-center min-w-8 transition-all bg-amber-100" :style="{ flex: heatDist.warm }">
+                <span class="text-sm font-bold text-amber-600">{{ heatDist.warm }}</span>
+                <span class="text-[9px] text-amber-400 uppercase tracking-wide">Warm</span>
+              </div>
+              <div class="flex flex-col items-center justify-center min-w-8 transition-all bg-primary/10" :style="{ flex: Math.max(heatDist.cold, 0.1) }">
+                <span class="text-sm font-bold text-primary">{{ heatDist.cold }}</span>
+                <span class="text-[9px] text-primary/60 uppercase tracking-wide">Cold</span>
+              </div>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-muted-foreground">Avg heat score</span>
+              <span class="text-lg font-bold" :style="{ color: heatColor(analytics.avg_heat_score) }">{{ analytics.avg_heat_score }}%</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <!-- Kanban pipeline -->
+        <Card>
+          <CardContent class="pt-5 pb-5">
+            <h3 class="text-sm font-semibold mb-4">Kanban pipeline</h3>
+            <div class="space-y-2.5">
+              <div v-for="kb in kanbanBreakdown" :key="kb.key" class="flex items-center gap-3">
+                <div class="h-2 w-2 rounded-full shrink-0" :style="{ background: kb.color }"></div>
+                <span class="text-xs text-muted-foreground w-16 shrink-0">{{ kb.label }}</span>
+                <div class="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div class="h-full rounded-full transition-all" :style="{ width: kanbanWidth(kb.count) + '%', background: kb.color }"></div>
+                </div>
+                <span class="text-sm font-semibold text-foreground w-7 text-right">{{ kb.count }}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <!-- Engagement events -->
-      <div class="card events-card" v-if="!loading">
-        <h3 class="card-title">Engagement events</h3>
-        <div class="events-grid">
-          <div class="event-item" v-for="ev in engagementEvents" :key="ev.label">
-            <div class="ev-icon-wrap" :class="ev.cls">
-              <component :is="ev.icon" />
+      <Card v-if="!loading">
+        <CardContent class="pt-5 pb-5">
+          <h3 class="text-sm font-semibold mb-4">Engagement events</h3>
+          <div class="grid grid-cols-3 gap-4">
+            <div v-for="ev in engagementEvents" :key="ev.label" class="flex flex-col items-center text-center rounded-lg border border-border bg-muted/30 p-4">
+              <div class="h-9 w-9 rounded-lg flex items-center justify-center mb-2.5" :class="ev.bgClass">
+                <component :is="ev.icon" class="h-4 w-4" :class="ev.colorClass" />
+              </div>
+              <p class="text-2xl font-bold tracking-tight text-foreground">{{ ev.value }}</p>
+              <p class="text-xs text-muted-foreground mt-1">{{ ev.label }}</p>
             </div>
-            <div class="ev-val">{{ ev.value }}</div>
-            <div class="ev-label">{{ ev.label }}</div>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      <!-- Leads breakdown -->
-      <div class="section-row" v-if="!loading">
-        <div class="card leads-card">
-          <h3 class="card-title">Leads captured</h3>
-          <div class="big-number">{{ val('leads_captured') }}</div>
-          <div class="big-delta" :class="deltaCls(delta('leads_captured'))">{{ formatDelta(delta('leads_captured')) }} vs prev period</div>
-        </div>
-        <div class="card hot-card">
-          <h3 class="card-title">Hot leads</h3>
-          <div class="big-number" style="color:#ef4444">{{ val('hot_sessions') }}</div>
-          <div class="big-delta" :class="deltaCls(delta('hot_sessions'))">{{ formatDelta(delta('hot_sessions')) }} vs prev period</div>
-        </div>
+      <!-- Big numbers: Leads + Hot -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2" v-if="!loading">
+        <Card>
+          <CardContent class="pt-5 pb-5">
+            <h3 class="text-sm font-semibold text-muted-foreground mb-2">Leads captured</h3>
+            <p class="text-5xl font-bold tracking-tight text-foreground">{{ val('leads_captured') }}</p>
+            <p class="text-sm mt-2" :class="deltaClass(delta('leads_captured'))">{{ formatDelta(delta('leads_captured')) }} vs prev period</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent class="pt-5 pb-5">
+            <h3 class="text-sm font-semibold text-muted-foreground mb-2">Hot leads</h3>
+            <p class="text-5xl font-bold tracking-tight text-red-500">{{ val('hot_sessions') }}</p>
+            <p class="text-sm mt-2" :class="deltaClass(delta('hot_sessions'))">{{ formatDelta(delta('hot_sessions')) }} vs prev period</p>
+          </CardContent>
+        </Card>
       </div>
 
     </template>
@@ -371,7 +438,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch, h } from 'vue'
+import { Download, Lock, Star, X, Loader2, MessageSquare, Users, Zap, TrendingUp, Eye, DoorOpen, Tag } from 'lucide-vue-next'
 import { useAdminApi } from '../composables/useAdminApi'
+import Card from '@/components/ui/Card.vue'
+import CardContent from '@/components/ui/CardContent.vue'
+import Button from '@/components/ui/Button.vue'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
@@ -383,10 +454,9 @@ const activeTab = ref('overview')
 const analytics = ref({})
 const recentSessions = ref([])
 const upgradeMsg = ref('')
-const metricLimit = ref(-1) // -1 = unlimited until subscription loaded
+const metricLimit = ref(-1)
 
-// ── Feature gating ────────────────────────────────────────────────────────────
-
+// ── Feature gating ─────────────────────────────────────────────────────────────
 const canSeeCharts = computed(() => metricLimit.value < 0 || metricLimit.value >= 7)
 const canSeeChatsTab = computed(() => metricLimit.value < 0 || metricLimit.value >= 7)
 const canSeeEngagementTab = computed(() => metricLimit.value < 0)
@@ -395,14 +465,13 @@ function showUpgrade(plan) {
   upgradeMsg.value = `This section requires the ${plan} plan or higher.`
 }
 
-// ── Periods (limit to 30d on Starter) ─────────────────────────────────────────
-
+// ── Periods ────────────────────────────────────────────────────────────────────
 const periods = computed(() => {
   const all = [
     { val: 'today', label: 'Today' },
-    { val: '7d', label: '7 days' },
-    { val: '30d', label: '30 days' },
-    { val: '90d', label: '90 days' },
+    { val: '7d', label: '7d' },
+    { val: '30d', label: '30d' },
+    { val: '90d', label: '90d' },
   ]
   return canSeeCharts.value ? all : all.slice(0, 3)
 })
@@ -413,7 +482,7 @@ const tabs = computed(() => [
   { key: 'engagement', label: 'Engagement', locked: !canSeeEngagementTab.value,  requiredPlan: 'Pro' },
 ])
 
-// ── Metric helpers ───────────────────────────────────────────────────────────
+// ── Metric helpers ─────────────────────────────────────────────────────────────
 function val(key) {
   const m = analytics.value[key]
   if (m && typeof m === 'object' && 'value' in m) return m.value
@@ -438,11 +507,11 @@ function formatDeltaFloat(d) {
   if (d === 0 || d == null) return '—'
   return d > 0 ? `+${d.toFixed(1)}` : `${d.toFixed(1)}`
 }
-function deltaCls(d, invert = false) {
-  if (d === 0 || d == null) return 'delta-neutral'
+function deltaClass(d, invert = false) {
+  if (d === 0 || d == null) return 'text-muted-foreground'
   const positive = d > 0
   const good = invert ? !positive : positive
-  return good ? 'delta-up' : 'delta-down'
+  return good ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'
 }
 
 function fmtDuration(seconds) {
@@ -455,7 +524,7 @@ function fmtDuration(seconds) {
   return `${s}s`
 }
 
-// ── SVG chart ────────────────────────────────────────────────────────────────
+// ── SVG chart ──────────────────────────────────────────────────────────────────
 const cW = 600
 const cH = 100
 const pad = 12
@@ -470,25 +539,17 @@ const chartDots = computed(() => {
   }))
 })
 
-const chartPoints = computed(() =>
-  chartDots.value.map(p => `${p.x},${p.y}`).join(' ')
-)
+const chartPoints = computed(() => chartDots.value.map(p => `${p.x},${p.y}`).join(' '))
 
 const areaPolygon = computed(() => {
   const pts = chartDots.value
   if (!pts.length) return ''
   const first = pts[0]
   const last = pts[pts.length - 1]
-  return [
-    ...pts.map(p => `${p.x},${p.y}`),
-    `${last.x},${cH - pad}`,
-    `${first.x},${cH - pad}`,
-  ].join(' ')
+  return [...pts.map(p => `${p.x},${p.y}`), `${last.x},${cH - pad}`, `${first.x},${cH - pad}`].join(' ')
 })
 
-const gridYs = computed(() => {
-  return [pad, pad + (cH - 2 * pad) / 2, cH - pad]
-})
+const gridYs = computed(() => [pad, pad + (cH - 2 * pad) / 2, cH - pad])
 
 const chartLabelDates = computed(() => {
   const trend = analytics.value.daily_trend || []
@@ -497,7 +558,7 @@ const chartLabelDates = computed(() => {
   return trend.filter((_, i) => i % step === 0 || i === trend.length - 1).map(d => d.date)
 })
 
-// ── Funnel / states ──────────────────────────────────────────────────────────
+// ── Funnel / states ────────────────────────────────────────────────────────────
 const funnel = computed(() => {
   const kb = analytics.value.kanban_breakdown || {}
   return [
@@ -524,51 +585,52 @@ const conversationStates = computed(() => {
   ]
 })
 
-// ── Hero metrics config ───────────────────────────────────────────────────────
-const IconChat = { render: () => h('svg', { width: 18, height: 18, fill: 'none', viewBox: '0 0 24 24' }, [h('path', { d: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })]) }
-const IconUser = { render: () => h('svg', { width: 18, height: 18, fill: 'none', viewBox: '0 0 24 24' }, [h('path', { d: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round' }), h('circle', { cx: '9', cy: '7', r: '4', stroke: 'currentColor', 'stroke-width': '2' })]) }
-const IconBolt = { render: () => h('svg', { width: 18, height: 18, fill: 'none', viewBox: '0 0 24 24' }, [h('path', { d: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })]) }
-const IconLead = { render: () => h('svg', { width: 18, height: 18, fill: 'none', viewBox: '0 0 24 24' }, [h('polyline', { points: '22 12 18 12 15 21 9 3 6 12 2 12', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })]) }
-
+// ── Hero metrics ───────────────────────────────────────────────────────────────
 const heroMetrics = computed(() => [
-  { key: 'total_sessions',     label: 'Total chats',       value: val('total_sessions'),     delta: delta('total_sessions'),     icon: IconChat, iconClass: 'ic-indigo',  invertDelta: false },
-  { key: 'unique_visitors',    label: 'Unique visitors',   value: val('unique_visitors'),    delta: delta('unique_visitors'),    icon: IconUser, iconClass: 'ic-green',   invertDelta: false },
-  { key: 'ai_resolution_rate', label: 'AI resolution rate', value: val('ai_resolution_rate') + '%', delta: delta('ai_resolution_rate'), icon: IconBolt, iconClass: 'ic-amber',   invertDelta: false },
-  { key: 'leads_captured',     label: 'Leads captured',    value: val('leads_captured'),     delta: delta('leads_captured'),     icon: IconLead, iconClass: 'ic-purple',  invertDelta: false },
+  { key: 'total_sessions',     label: 'Total chats',        value: val('total_sessions'),            delta: delta('total_sessions'),     icon: MessageSquare, iconBg: 'bg-primary/10',    iconColor: 'text-primary',    invertDelta: false },
+  { key: 'unique_visitors',    label: 'Unique visitors',    value: val('unique_visitors'),           delta: delta('unique_visitors'),    icon: Users,         iconBg: 'bg-emerald-100',   iconColor: 'text-emerald-600', invertDelta: false },
+  { key: 'ai_resolution_rate', label: 'AI resolution rate', value: val('ai_resolution_rate') + '%', delta: delta('ai_resolution_rate'), icon: Zap,           iconBg: 'bg-amber-100',     iconColor: 'text-amber-600',   invertDelta: false },
+  { key: 'leads_captured',     label: 'Leads captured',     value: val('leads_captured'),            delta: delta('leads_captured'),     icon: TrendingUp,    iconBg: 'bg-violet-100',    iconColor: 'text-violet-600',  invertDelta: false },
 ])
 
-// ── Chats tab ────────────────────────────────────────────────────────────────
+const secondaryMetrics = computed(() => [
+  { label: 'Avg chat duration', value: fmtDuration(val('avg_duration_seconds')), delta: delta('avg_duration_seconds'), invertDelta: false },
+  { label: 'Total chat time',   value: fmtDuration(val('total_duration_seconds')), delta: delta('total_duration_seconds'), invertDelta: false },
+  { label: 'Missed chats',      value: val('missed_chats'),       delta: delta('missed_chats'),      invertDelta: true },
+  { label: 'AI resolution rate',value: val('ai_resolution_rate') + '%', delta: delta('ai_resolution_rate'), invertDelta: false },
+])
+
+// ── Chats tab ──────────────────────────────────────────────────────────────────
 const total = computed(() => val('total_sessions') || 1)
 const aiPct = computed(() => Math.round(val('ai_handled') / total.value * 100))
 const manualPct = computed(() => Math.round(val('manual_handled') / total.value * 100))
 const missedPct = computed(() => Math.round(val('missed_chats') / total.value * 100))
 
 const naMetrics = [
-  { label: 'CSAT score',            hint: 'Requires customer survey integration' },
-  { label: 'First response time',   hint: 'Agent timing not yet tracked' },
-  { label: 'Queued customers',      hint: 'Queue system not configured' },
-  { label: 'Chats per hour (AI)',   hint: 'Hourly rate breakdown coming soon' },
+  { label: 'CSAT score',          hint: 'Requires customer survey integration' },
+  { label: 'First response time', hint: 'Agent timing not yet tracked' },
+  { label: 'Queued customers',    hint: 'Queue system not configured' },
+  { label: 'Chats per hour (AI)', hint: 'Hourly rate breakdown coming soon' },
 ]
 
-// ── Engagement tab ────────────────────────────────────────────────────────────
+// ── Engagement tab ─────────────────────────────────────────────────────────────
 const signals = computed(() => [
-  { label: 'Purchase intent',   value: analytics.value.avg_intent  || 0, color: '#6366f1' },
-  { label: 'Budget signal',     value: analytics.value.avg_budget  || 0, color: '#22c55e' },
-  { label: 'Urgency signal',    value: analytics.value.avg_urgency || 0, color: '#f59e0b' },
+  { label: 'Purchase intent', value: analytics.value.avg_intent  || 0, color: '#6366f1' },
+  { label: 'Budget signal',   value: analytics.value.avg_budget  || 0, color: '#22c55e' },
+  { label: 'Urgency signal',  value: analytics.value.avg_urgency || 0, color: '#f59e0b' },
 ])
 
 const heatDist = computed(() => analytics.value.heat_distribution || { hot: 0, warm: 0, cold: 0 })
 
 const kanbanBreakdown = computed(() => {
   const kb = analytics.value.kanban_breakdown || {}
-  const items = [
+  return [
     { key: 'NEW',       label: 'New',       count: kb.NEW       || 0, color: '#64748b' },
     { key: 'ENGAGED',   label: 'Engaged',   count: kb.ENGAGED   || 0, color: '#6366f1' },
     { key: 'HOT_LEAD',  label: 'Hot lead',  count: kb.HOT_LEAD  || 0, color: '#f59e0b' },
     { key: 'CONVERTED', label: 'Converted', count: kb.CONVERTED || 0, color: '#22c55e' },
     { key: 'LOST',      label: 'Lost',      count: kb.LOST      || 0, color: '#ef4444' },
   ]
-  return items
 })
 
 function kanbanWidth(count) {
@@ -576,32 +638,28 @@ function kanbanWidth(count) {
   return Math.round((count / max) * 100)
 }
 
-const IconEye     = { render: () => h('svg', { width: 16, height: 16, fill: 'none', viewBox: '0 0 24 24' }, [h('path', { d: 'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z', stroke: 'currentColor', 'stroke-width': '2' }), h('circle', { cx: '12', cy: '12', r: '3', stroke: 'currentColor', 'stroke-width': '2' })]) }
-const IconDoor    = { render: () => h('svg', { width: 16, height: 16, fill: 'none', viewBox: '0 0 24 24' }, [h('path', { d: 'M18 3H6a1 1 0 00-1 1v16a1 1 0 001 1h12a1 1 0 001-1V4a1 1 0 00-1-1z', stroke: 'currentColor', 'stroke-width': '2' }), h('path', { d: 'M15 12H9m0 0l3-3m-3 3l3 3', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round' })]) }
-const IconTag     = { render: () => h('svg', { width: 16, height: 16, fill: 'none', viewBox: '0 0 24 24' }, [h('path', { d: 'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }), h('line', { x1: '7', y1: '7', x2: '7.01', y2: '7', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round' })]) }
-
 const engagementEvents = computed(() => {
   const ev = analytics.value.analytics_events || {}
   return [
-    { label: 'Page views',          value: ev.page_views         || 0, icon: IconEye,  cls: 'ev-indigo' },
-    { label: 'Exit intent fired',   value: ev.exit_intent_count  || 0, icon: IconDoor, cls: 'ev-red' },
-    { label: 'Pricing page visits', value: ev.pricing_page_visits || 0, icon: IconTag,  cls: 'ev-amber' },
+    { label: 'Page views',           value: ev.page_views          || 0, icon: Eye,      bgClass: 'bg-primary/10',    colorClass: 'text-primary' },
+    { label: 'Exit intent fired',    value: ev.exit_intent_count   || 0, icon: DoorOpen, bgClass: 'bg-red-100',       colorClass: 'text-red-500' },
+    { label: 'Pricing page visits',  value: ev.pricing_page_visits || 0, icon: Tag,      bgClass: 'bg-amber-100',     colorClass: 'text-amber-600' },
   ]
 })
 
-// ── Common helpers ────────────────────────────────────────────────────────────
+// ── Common helpers ─────────────────────────────────────────────────────────────
 function heatColor(score) {
-  if (!score) return '#1e293b'
+  if (!score) return 'hsl(var(--muted-foreground))'
   if (score > 70) return '#ef4444'
   if (score > 40) return '#f59e0b'
   return '#6366f1'
 }
 
-function kanbanClass(state) {
-  if (state === 'HOT_LEAD') return 'b-hot'
-  if (state === 'CONVERTED') return 'b-converted'
-  if (state === 'ENGAGED') return 'b-engaged'
-  return 'b-new'
+function kanbanBadgeClass(state) {
+  if (state === 'HOT_LEAD') return 'bg-red-100 text-red-600'
+  if (state === 'CONVERTED') return 'bg-emerald-100 text-emerald-600'
+  if (state === 'ENGAGED') return 'bg-blue-100 text-blue-600'
+  return 'bg-muted text-muted-foreground'
 }
 
 function formatDate(ts) {
@@ -609,7 +667,7 @@ function formatDate(ts) {
   return new Date(ts).toLocaleDateString()
 }
 
-// ── Data loading ──────────────────────────────────────────────────────────────
+// ── Data loading ───────────────────────────────────────────────────────────────
 async function load() {
   if (!props.client) return
   loading.value = true
@@ -644,279 +702,3 @@ async function exportCSV() {
 onMounted(load)
 watch(() => props.client, load)
 </script>
-
-<style scoped>
-* { box-sizing: border-box; }
-
-.reports-page {
-  padding: 28px 32px;
-  font-family: 'Inter', -apple-system, sans-serif;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-/* Header */
-.page-header { display: flex; align-items: flex-start; justify-content: space-between; }
-.page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
-.page-sub { font-size: 13px; color: #475569; margin-top: 3px; }
-.header-right { display: flex; gap: 10px; align-items: center; }
-
-.period-tabs { display: flex; gap: 4px; background: #161616; border: 1px solid rgba(255,255,255,0.07); border-radius: 9px; padding: 3px; }
-.period-btn { padding: 6px 14px; background: none; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; color: #475569; cursor: pointer; transition: all 0.12s; }
-.period-btn:hover { color: #94a3b8; }
-.period-btn.active { background: rgba(99,102,241,0.15); color: #a5b4fc; }
-.export-btn { display: flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); border-radius: 9px; font-size: 12px; font-weight: 500; color: #a5b4fc; cursor: pointer; transition: all 0.12s; }
-.export-btn:hover:not(:disabled) { background: rgba(99,102,241,0.2); }
-.export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.mini-spinner-sm { display: inline-block; width: 12px; height: 12px; border: 2px solid rgba(165,180,252,0.3); border-top-color: #a5b4fc; border-radius: 50%; animation: spin 0.6s linear infinite; }
-
-/* Tab nav */
-.tab-nav { display: flex; gap: 0; border-bottom: 1px solid rgba(255,255,255,0.07); }
-.tab-btn { padding: 10px 20px; background: none; border: none; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; color: #475569; cursor: pointer; transition: all 0.12s; margin-bottom: -1px; display: flex; align-items: center; }
-.tab-btn:hover { color: #94a3b8; }
-.tab-btn.active { color: #a5b4fc; border-bottom-color: #6366f1; }
-.tab-btn.locked { opacity: 0.5; cursor: not-allowed; }
-.tab-btn.locked:hover { color: #475569; }
-
-/* Upgrade banner */
-.upgrade-banner {
-  display: flex; align-items: center; gap: 10px;
-  background: rgba(167,139,250,0.08); border: 1px solid rgba(167,139,250,0.2);
-  border-radius: 10px; padding: 10px 14px; font-size: 13px; color: #c4b5fd;
-}
-.upgrade-link { color: #a78bfa; font-weight: 600; text-decoration: none; margin-left: 4px; }
-.upgrade-link:hover { text-decoration: underline; }
-.banner-close { background: none; border: none; color: #64748b; cursor: pointer; margin-left: auto; font-size: 14px; }
-
-/* Locked section */
-.locked-section { margin: 4px 0; }
-.locked-card {
-  display: flex; align-items: center; gap: 14px;
-  background: rgba(167,139,250,0.04); border: 1px dashed rgba(167,139,250,0.2);
-  border-radius: 14px; padding: 18px 20px;
-}
-.locked-title { font-size: 14px; font-weight: 600; color: #94a3b8; margin-bottom: 4px; }
-.locked-sub { font-size: 12px; color: #475569; line-height: 1.5; }
-
-/* Hero metric cards */
-.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-
-.metric-card {
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 14px;
-  padding: 18px;
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  position: relative;
-}
-
-.metric-icon {
-  width: 38px; height: 38px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.ic-indigo { background: rgba(99,102,241,0.12); color: #a5b4fc; }
-.ic-green  { background: rgba(34,197,94,0.10);  color: #22c55e; }
-.ic-amber  { background: rgba(245,158,11,0.10); color: #f59e0b; }
-.ic-purple { background: rgba(168,85,247,0.10); color: #c084fc; }
-
-.metric-body { flex: 1; min-width: 0; }
-.metric-value { font-size: 26px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.8px; line-height: 1; }
-.metric-label { font-size: 11px; color: #475569; font-weight: 500; margin-top: 5px; }
-
-.metric-delta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-.metric-delta span:first-child { font-size: 13px; font-weight: 600; }
-.delta-sub { font-size: 9px; color: #334155; white-space: nowrap; }
-
-/* Delta classes */
-.delta-up   span:first-child { color: #22c55e; }
-.delta-down span:first-child { color: #ef4444; }
-.delta-neutral span:first-child { color: #475569; }
-.delta-up   .sc-delta { color: #22c55e; }
-.delta-down .sc-delta { color: #ef4444; }
-.delta-neutral .sc-delta { color: #475569; }
-.delta-up   .bk-delta  { color: #22c55e; }
-.delta-down .bk-delta  { color: #ef4444; }
-.delta-neutral .bk-delta  { color: #475569; }
-.delta-up   .dur-delta { color: #22c55e; }
-.delta-down .dur-delta { color: #ef4444; }
-.delta-neutral .dur-delta { color: #475569; }
-.delta-up   .big-delta { color: #22c55e; }
-.delta-down .big-delta { color: #ef4444; }
-.delta-neutral .big-delta { color: #475569; }
-
-/* Secondary metric row */
-.secondary-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-
-.secondary-card {
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 12px;
-  padding: 16px 18px;
-}
-.sc-label { font-size: 11px; color: #475569; font-weight: 500; margin-bottom: 6px; }
-.sc-value { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.5px; }
-.sc-delta  { font-size: 11px; margin-top: 5px; }
-
-/* Chart */
-.card {
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 14px;
-  padding: 20px;
-}
-.card-title { font-size: 14px; font-weight: 600; color: #e2e8f0; margin-bottom: 16px; }
-.card-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
-.card-header-row .card-title { margin-bottom: 0; }
-.chart-total { font-size: 12px; color: #475569; }
-
-.chart-wrap { display: flex; flex-direction: column; gap: 6px; }
-.trend-svg { width: 100%; height: 80px; overflow: visible; }
-.chart-labels { display: flex; justify-content: space-between; padding: 0 4px; }
-.chart-lbl { font-size: 10px; color: #334155; }
-
-/* Section row */
-.section-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-
-/* Funnel */
-.funnel-stages { display: flex; flex-direction: column; gap: 12px; }
-.funnel-stage { display: flex; flex-direction: column; gap: 5px; }
-.stage-info { display: flex; justify-content: space-between; align-items: center; }
-.stage-label { font-size: 12px; color: #64748b; }
-.stage-count { font-size: 14px; font-weight: 700; }
-.stage-bar-wrap { height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden; }
-.stage-bar { height: 100%; border-radius: 3px; transition: width 0.5s; }
-
-.funnel-skeleton { display: flex; flex-direction: column; gap: 12px; }
-.sk-stage { height: 28px; background: #1e293b; border-radius: 6px; }
-
-/* States */
-.states-list { display: flex; flex-direction: column; gap: 10px; }
-.state-row { display: flex; align-items: center; gap: 9px; }
-.state-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.state-name { flex: 1; font-size: 13px; color: #64748b; }
-.state-val { font-size: 14px; font-weight: 600; color: #e2e8f0; }
-.states-skeleton { display: flex; flex-direction: column; gap: 10px; }
-.sk-state { height: 20px; background: #1e293b; border-radius: 4px; }
-
-/* Breakdown grid (Chats tab) */
-.breakdown-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.breakdown-card {
-  border-radius: 14px;
-  padding: 20px;
-  border: 1px solid rgba(255,255,255,0.07);
-}
-.ai-card     { background: rgba(99,102,241,0.06);  border-color: rgba(99,102,241,0.18); }
-.manual-card { background: rgba(245,158,11,0.06);  border-color: rgba(245,158,11,0.18); }
-.missed-card { background: rgba(239,68,68,0.06);   border-color: rgba(239,68,68,0.18); }
-.bk-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; }
-.bk-value { font-size: 36px; font-weight: 700; color: #f1f5f9; letter-spacing: -1.5px; line-height: 1; }
-.bk-sub { font-size: 12px; color: #475569; margin-top: 6px; }
-.bk-pct { font-weight: 600; color: #94a3b8; }
-.bk-delta { font-size: 11px; margin-top: 10px; }
-
-/* Resolution bar */
-.res-card {}
-.res-pct-badge { font-size: 20px; font-weight: 700; color: #a5b4fc; }
-.res-track { height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; }
-.res-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #a5b4fc); border-radius: 4px; transition: width 0.6s ease; }
-.res-sub { font-size: 12px; color: #475569; margin-top: 10px; line-height: 1.5; }
-
-/* Duration */
-.dur-card {}
-.dur-value { font-size: 32px; font-weight: 700; color: #f1f5f9; letter-spacing: -1px; }
-.dur-delta { font-size: 12px; margin-top: 8px; }
-
-/* N/A placeholders */
-.na-card {}
-.na-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-.na-item { background: #0f172a; border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 14px; }
-.na-label { font-size: 11px; color: #475569; font-weight: 500; margin-bottom: 6px; }
-.na-value { font-size: 22px; font-weight: 700; color: #334155; }
-.na-hint  { font-size: 10px; color: #1e293b; margin-top: 5px; line-height: 1.4; }
-
-/* Recent sessions */
-.recent-card {}
-.activity-table { width: 100%; border-collapse: collapse; }
-.activity-table th { padding: 8px 12px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: #334155; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
-.activity-table td { padding: 10px 12px; font-size: 13px; color: #64748b; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: middle; }
-.activity-table tr:hover td { background: rgba(255,255,255,0.02); }
-.activity-table tr:last-child td { border-bottom: none; }
-
-.mini-badge { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
-.b-hot       { background: rgba(239,68,68,0.12);  color: #ef4444; }
-.b-converted { background: rgba(34,197,94,0.12);  color: #22c55e; }
-.b-engaged   { background: rgba(99,102,241,0.12); color: #a5b4fc; }
-.b-new       { background: rgba(71,85,105,0.2);   color: #475569; }
-.b-ai        { background: rgba(99,102,241,0.12); color: #a5b4fc; }
-.b-manual    { background: rgba(245,158,11,0.12); color: #f59e0b; }
-
-.mini-heat { display: flex; align-items: center; gap: 7px; }
-.mini-track { width: 48px; height: 3px; background: #1e293b; border-radius: 2px; overflow: hidden; }
-.mini-fill  { height: 100%; border-radius: 2px; }
-.mini-heat span { font-size: 11px; color: #475569; font-family: monospace; }
-
-.empty-msg { text-align: center; color: #334155; padding: 24px; font-size: 13px; }
-.table-skeleton { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
-.sk-row { height: 16px; background: #1e293b; border-radius: 4px; }
-
-/* Engagement tab — signals */
-.signals-card {}
-.signals-grid { display: flex; flex-direction: column; gap: 14px; }
-.signal-item { display: flex; align-items: center; gap: 12px; }
-.sig-label { font-size: 13px; color: #64748b; width: 130px; flex-shrink: 0; }
-.sig-bar-wrap { flex: 1; height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden; }
-.sig-bar { height: 100%; border-radius: 3px; transition: width 0.5s; }
-.sig-value { font-size: 13px; font-weight: 600; width: 42px; text-align: right; }
-
-/* Heat distribution */
-.heat-dist-card {}
-.heat-dist { display: flex; height: 48px; border-radius: 10px; overflow: hidden; gap: 2px; margin-bottom: 12px; }
-.heat-seg { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 28px; transition: flex 0.4s; }
-.heat-seg.hot  { background: rgba(239,68,68,0.20); }
-.heat-seg.warm { background: rgba(245,158,11,0.20); }
-.heat-seg.cold { background: rgba(99,102,241,0.15); }
-.heat-seg-val { font-size: 14px; font-weight: 700; color: #e2e8f0; }
-.heat-seg-lbl { font-size: 9px; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; }
-.avg-heat-row { display: flex; justify-content: space-between; align-items: center; }
-.avg-heat-lbl { font-size: 12px; color: #475569; }
-.avg-heat-val { font-size: 18px; font-weight: 700; }
-
-/* Kanban */
-.kanban-card {}
-.kanban-list { display: flex; flex-direction: column; gap: 10px; }
-.kanban-row { display: flex; align-items: center; gap: 9px; }
-.kanban-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.kanban-name { font-size: 12px; color: #64748b; width: 70px; }
-.kanban-bar-wrap { flex: 1; height: 5px; background: #1e293b; border-radius: 3px; overflow: hidden; }
-.kanban-bar { height: 100%; border-radius: 3px; transition: width 0.5s; }
-.kanban-val { font-size: 13px; font-weight: 600; color: #e2e8f0; width: 28px; text-align: right; }
-
-/* Engagement events */
-.events-card {}
-.events-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.event-item { text-align: center; padding: 16px; background: #0f172a; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); }
-.ev-icon-wrap { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; }
-.ev-indigo { background: rgba(99,102,241,0.12); color: #a5b4fc; }
-.ev-red    { background: rgba(239,68,68,0.12);  color: #ef4444; }
-.ev-amber  { background: rgba(245,158,11,0.12); color: #f59e0b; }
-.ev-val    { font-size: 26px; font-weight: 700; color: #f1f5f9; letter-spacing: -1px; }
-.ev-label  { font-size: 11px; color: #475569; margin-top: 4px; }
-
-/* Big number */
-.leads-card, .hot-card {}
-.big-number { font-size: 52px; font-weight: 700; color: #f1f5f9; letter-spacing: -2px; line-height: 1.1; }
-.big-delta  { font-size: 13px; font-weight: 600; margin-top: 6px; }
-
-/* Skeletons */
-.metric-card.skeleton { gap: 14px; }
-.sk-icon { width: 38px; height: 38px; background: #1e293b; border-radius: 10px; }
-.sk-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.sk-val  { height: 26px; width: 60%; background: #1e293b; border-radius: 4px; }
-.sk-lbl  { height: 12px; width: 45%; background: #1e293b; border-radius: 4px; }
-.secondary-card.skeleton { display: flex; flex-direction: column; gap: 8px; }
-.breakdown-card.skeleton { display: flex; flex-direction: column; gap: 10px; padding: 20px; background: #161616; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; }
-</style>
