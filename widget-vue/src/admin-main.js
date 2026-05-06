@@ -1,4 +1,3 @@
-import './assets/admin.css'
 import { createApp, defineComponent, h } from 'vue'
 import { createRouter, createWebHistory, RouterView } from 'vue-router'
 
@@ -43,6 +42,10 @@ const routes = [
   { path: '/forgot-password', component: ForgotPasswordView, meta: { public: true } },
   { path: '/reset-password', component: ResetPasswordView, meta: { public: true } },
 
+  // ── Superadmin standalone pages (have own Sidebar, dark theme) ──────────────
+  { path: '/admin/superadmin', component: SuperAdminDashboard, meta: { superadminOnly: true } },
+  { path: '/admin/permissions', component: PermissionsManager, meta: { superadminOnly: true } },
+
   // ── Superadmin / staff admin SPA ─────────────────────────────────────────
   {
     path: '/admin',
@@ -56,8 +59,6 @@ const routes = [
       { path: 'leads', component: LeadManagement },
       { path: 'godview/:id', component: GodView },
       { path: 'tenants', component: TenantManagement, meta: { superadminOnly: true } },
-      { path: 'superadmin', component: SuperAdminDashboard, meta: { superadminOnly: true } },
-      { path: 'permissions', component: PermissionsManager, meta: { superadminOnly: true } },
     ],
   },
 

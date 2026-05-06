@@ -1,520 +1,575 @@
 <template>
-  <div class="flex flex-col gap-6 p-6">
-
-    <!-- Header -->
-    <div class="flex items-start justify-between">
+  <div class="tenants-page">
+    <div class="page-header">
       <div>
-        <h1 class="text-2xl font-semibold tracking-tight">Tenant Management</h1>
-        <p class="text-sm text-muted-foreground mt-1">Create and manage tenant accounts and plan assignments</p>
+        <h1 class="page-title">Tenant Management</h1>
+        <p class="page-sub">Create and manage tenant accounts and plan assignments</p>
       </div>
-      <div class="flex gap-2">
-        <Button variant="outline" size="sm" @click="openPlanManager">
-          <Monitor class="h-4 w-4" />
+      <div style="display:flex;gap:10px">
+        <button class="add-btn" style="background:#1e293b;border:1px solid rgba(255,255,255,0.08);color:#94a3b8;" @click="openPlanManager">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><line x1="8" y1="21" x2="16" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="17" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           Manage Plans
-        </Button>
-        <Button size="sm" @click="showCreate = true">
-          <Plus class="h-4 w-4" />
+        </button>
+        <button class="add-btn" @click="showCreate = true">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           New Tenant
-        </Button>
+        </button>
       </div>
     </div>
 
     <!-- Tenants Table -->
-    <Card class="overflow-hidden">
-      <div v-if="loading" class="flex justify-center p-12">
-        <Loader2 class="h-7 w-7 animate-spin text-primary" />
+    <div class="table-card">
+      <div v-if="loading" class="loading-center">
+        <div class="loader"></div>
       </div>
-      <div v-else-if="!tenants.length" class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-        <Users class="h-10 w-10" />
-        <p class="text-sm">No tenants yet</p>
+      <div v-else-if="!tenants.length" class="empty-state">
+        <svg width="40" height="40" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="#CBD5E1" stroke-width="1.5"/><circle cx="9" cy="7" r="4" stroke="#CBD5E1" stroke-width="1.5"/></svg>
+        <p>No tenants yet</p>
       </div>
-      <div v-else class="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Username</TableHead>
-              <TableHead>Company</TableHead>
-              <TableHead>Plan &amp; Usage</TableHead>
-              <TableHead>Assigned Clients</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            <TableRow v-for="t in tenants" :key="t.id" class="hover:bg-muted/30">
-              <TableCell>
-                <div class="flex items-center gap-2.5">
-                  <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
-                    {{ t.username.slice(0,2).toUpperCase() }}
-                  </div>
-                  <div>
-                    <p class="text-sm font-semibold text-foreground">{{ t.username }}</p>
-                    <p class="text-[11px] text-muted-foreground">{{ t.email }}</p>
-                  </div>
-                </div>
-              </TableCell>
-              <TableCell class="text-sm text-foreground">{{ t.company_name || '—' }}</TableCell>
-              <TableCell>
-                <div class="flex flex-col gap-1.5 min-w-[160px]">
-                  <div class="flex items-center gap-1.5 flex-wrap">
-                    <Badge :variant="t.plan ? 'secondary' : 'outline'">{{ t.plan || 'No Plan' }}</Badge>
-                    <Badge v-if="t.stripe_subscription_status" :variant="stripeVariant(t.stripe_subscription_status)" class="text-[9px]">{{ t.stripe_subscription_status }}</Badge>
-                    <span v-if="t.trial_ends_at && new Date(t.trial_ends_at) > new Date()" class="rounded-full bg-violet-100 text-violet-700 text-[9px] font-bold px-1.5 py-0.5">Trial</span>
-                  </div>
-                  <template v-if="t.plan && t.plan_max_messages">
-                    <div class="h-1 w-full rounded-full bg-muted overflow-hidden">
-                      <div class="h-full rounded-full transition-all" :class="usageBarClass(t.messages_this_month, t.plan_max_messages)" :style="{ width: usagePct(t.messages_this_month, t.plan_max_messages) + '%' }"></div>
-                    </div>
-                    <span class="text-[10px] text-muted-foreground">{{ t.messages_this_month }} / {{ t.plan_max_messages < 0 ? '∞' : t.plan_max_messages }} msgs</span>
-                  </template>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div class="flex flex-wrap gap-1.5">
-                  <span v-if="!t.client_details || !t.client_details.length" class="text-xs text-muted-foreground italic">None assigned</span>
-                  <span
-                    v-for="c in t.client_details" :key="c.id"
-                    class="rounded-full border px-2 py-0.5 text-[11px] font-semibold"
-                    :style="{ background: (c.chatbot_color || '#6366F1') + '18', color: c.chatbot_color || '#6366F1', borderColor: (c.chatbot_color || '#6366F1') + '44' }"
-                    :title="c.domain_url"
-                  >{{ c.name }}</span>
-                </div>
-              </TableCell>
-              <TableCell>
-                <div class="flex flex-wrap gap-1">
-                  <Button variant="outline" size="sm" class="text-blue-600 border-blue-200 hover:bg-blue-50 h-7 px-2 text-xs" @click="openEdit(t)">Edit</Button>
-                  <Button variant="outline" size="sm" class="text-primary border-primary/30 hover:bg-primary/10 h-7 px-2 text-xs" @click="openPlan(t)">Plan</Button>
-                  <Button variant="ghost" size="icon" class="h-7 w-7" title="Plan history" @click="openHistory(t)">
-                    <Clock class="h-3.5 w-3.5" />
-                  </Button>
-                  <Button variant="ghost" size="icon" class="h-7 w-7" title="Subscription" @click="openSubscription(t)">💳</Button>
-                  <Button variant="ghost" size="icon" class="h-7 w-7" title="Feature overrides" @click="openOverrides(t)">🎁</Button>
-                  <Button variant="outline" size="sm" class="text-emerald-600 border-emerald-200 hover:bg-emerald-50 h-7 px-2 text-xs" @click="loginAsTenant(t)" :disabled="impersonating === t.id">
-                    {{ impersonating === t.id ? '…' : 'Login As' }}
-                  </Button>
-                  <Button variant="outline" size="sm" class="text-destructive border-destructive/30 hover:bg-destructive/10 h-7 px-2 text-xs" @click="confirmDelete(t)">Delete</Button>
-                </div>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
-    </Card>
-
-    <!-- Toast -->
-    <div v-if="impersonateToast" class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 rounded-lg px-5 py-3 text-sm font-semibold shadow-lg" :class="impersonateToast.type === 'success' ? 'bg-emerald-600 text-white' : 'bg-destructive text-destructive-foreground'">
-      {{ impersonateToast.msg }}
-    </div>
-
-    <!-- Create Tenant Dialog -->
-    <Dialog :open="showCreate" @close="showCreate = false">
-      <DialogHeader><DialogTitle>New Tenant</DialogTitle></DialogHeader>
-      <div class="px-6 pb-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <Label>Username *</Label>
-            <Input v-model="createForm.username" placeholder="tenant_username" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Password *</Label>
-            <Input v-model="createForm.password" type="password" placeholder="••••••••" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Email</Label>
-            <Input v-model="createForm.email" type="email" placeholder="tenant@company.com" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Company Name</Label>
-            <Input v-model="createForm.company_name" placeholder="Acme Corp" />
-          </div>
-          <div class="col-span-2 space-y-1.5">
-            <Label>Plan</Label>
-            <select v-model="createForm.plan_id" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-              <option value="">No plan</option>
-              <option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }} (${{ p.price_monthly }}/mo)</option>
-            </select>
-          </div>
-          <div class="col-span-2 space-y-1.5">
-            <Label>Assign Clients</Label>
-            <div class="max-h-48 overflow-y-auto space-y-2 rounded-md border border-border p-2">
-              <p v-if="!allClients.length" class="text-xs text-muted-foreground p-2">No clients available — create a client first.</p>
-              <label v-for="c in allClients" :key="c.id" class="flex items-center gap-3 cursor-pointer rounded-lg border p-2.5 transition-colors" :class="createForm.client_ids.includes(c.id) ? 'border-primary bg-primary/5' : 'border-transparent hover:border-border'">
-                <input type="checkbox" :value="c.id" v-model="createForm.client_ids" class="hidden" />
-                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white text-[10px] font-bold" :style="{ background: c.chatbot_color || '#6366F1' }">{{ c.name.slice(0,2).toUpperCase() }}</div>
-                <div class="flex-1">
-                  <p class="text-sm font-medium text-foreground">{{ c.name }}</p>
-                  <p class="text-[11px] text-muted-foreground">{{ (c.domain_url || '').replace(/https?:\/\//, '') }}</p>
-                </div>
-                <span v-if="c.tenant_name" class="text-[10px] font-bold text-amber-500">Already: {{ c.tenant_name }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <p v-if="createError" class="mt-3 text-xs text-destructive">{{ createError }}</p>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" @click="showCreate = false">Cancel</Button>
-        <Button @click="createTenant" :disabled="creating">
-          <Loader2 v-if="creating" class="h-4 w-4 animate-spin" />
-          Create Tenant
-        </Button>
-      </DialogFooter>
-    </Dialog>
-
-    <!-- Edit Tenant Dialog -->
-    <Dialog :open="!!editTenant" @close="editTenant = null">
-      <DialogHeader><DialogTitle>Edit: {{ editTenant?.username }}</DialogTitle></DialogHeader>
-      <div class="px-6 pb-4">
-        <div class="grid grid-cols-2 gap-4">
-          <div class="space-y-1.5">
-            <Label>Email</Label>
-            <Input v-model="editForm.email" type="email" />
-          </div>
-          <div class="space-y-1.5">
-            <Label>Company Name</Label>
-            <Input v-model="editForm.company_name" />
-          </div>
-          <div class="col-span-2 space-y-1.5">
-            <Label>New Password (leave blank to keep current)</Label>
-            <Input v-model="editForm.password" type="password" placeholder="••••••••" />
-          </div>
-          <div class="col-span-2 space-y-1.5">
-            <Label>Assigned Clients</Label>
-            <div class="max-h-48 overflow-y-auto space-y-2 rounded-md border border-border p-2">
-              <p v-if="!allClients.length" class="text-xs text-muted-foreground p-2">No clients available.</p>
-              <label v-for="c in allClients" :key="c.id" class="flex items-center gap-3 cursor-pointer rounded-lg border p-2.5 transition-colors" :class="editForm.client_ids.includes(c.id) ? 'border-primary bg-primary/5' : 'border-transparent hover:border-border'">
-                <input type="checkbox" :value="c.id" v-model="editForm.client_ids" class="hidden" />
-                <div class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white text-[10px] font-bold" :style="{ background: c.chatbot_color || '#6366F1' }">{{ c.name.slice(0,2).toUpperCase() }}</div>
-                <div class="flex-1">
-                  <p class="text-sm font-medium text-foreground">{{ c.name }}</p>
-                  <p class="text-[11px] text-muted-foreground">{{ (c.domain_url || '').replace(/https?:\/\//, '') }}</p>
-                </div>
-                <span v-if="c.tenant_name && !editForm.client_ids.includes(c.id)" class="text-[10px] font-bold text-amber-500">Owned by: {{ c.tenant_name }}</span>
-              </label>
-            </div>
-          </div>
-        </div>
-        <p v-if="editError" class="mt-3 text-xs text-destructive">{{ editError }}</p>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" @click="editTenant = null">Cancel</Button>
-        <Button @click="saveTenant" :disabled="saving">
-          <Loader2 v-if="saving" class="h-4 w-4 animate-spin" />
-          Save Changes
-        </Button>
-      </DialogFooter>
-    </Dialog>
-
-    <!-- Plan Management Dialog -->
-    <Dialog :open="!!planTenant" @close="planTenant = null" class="max-w-2xl">
-      <DialogHeader><DialogTitle>Plan Management — {{ planTenant?.username }}</DialogTitle></DialogHeader>
-      <div class="px-6 pb-4 space-y-5 max-h-[70vh] overflow-y-auto">
-
-        <!-- Current usage -->
-        <div v-if="planTenant?.plan" class="rounded-lg bg-muted p-4 space-y-3">
-          <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Current Usage — {{ planTenant.plan }}</p>
-          <div class="space-y-2.5">
-            <div>
-              <div class="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>Sessions this month</span>
-                <span class="font-semibold text-foreground">{{ planTenant.sessions_this_month }} / {{ planTenant.plan_max_sessions || '∞' }}</span>
-              </div>
-              <div class="h-1.5 w-full rounded-full bg-background overflow-hidden">
-                <div class="h-full rounded-full" :class="usageBarClass(planTenant.sessions_this_month, planTenant.plan_max_sessions)" :style="{ width: usagePct(planTenant.sessions_this_month, planTenant.plan_max_sessions)+'%' }"></div>
-              </div>
-            </div>
-            <div>
-              <div class="flex justify-between text-xs text-muted-foreground mb-1">
-                <span>Clients assigned</span>
-                <span class="font-semibold text-foreground">{{ planTenant.clients_count }} / {{ planTenant.plan_max_clients || '∞' }}</span>
-              </div>
-              <div class="h-1.5 w-full rounded-full bg-background overflow-hidden">
-                <div class="h-full rounded-full" :class="usageBarClass(planTenant.clients_count, planTenant.plan_max_clients)" :style="{ width: usagePct(planTenant.clients_count, planTenant.plan_max_clients)+'%' }"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-else class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">No plan assigned yet.</div>
-
-        <!-- Plan options -->
-        <div>
-          <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Select New Plan</p>
-          <div class="space-y-2">
-            <div
-              v-for="p in plans" :key="p.id"
-              class="rounded-lg border-2 p-3.5 cursor-pointer transition-all relative"
-              :class="selectedPlanId === p.id ? 'border-primary bg-primary/5' : p.name === planTenant?.plan ? 'border-emerald-300 bg-emerald-50/50' : 'border-border hover:border-border/70'"
-              @click="selectedPlanId = p.id"
-            >
-              <div class="flex items-start justify-between">
+      <table v-else class="table">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Company</th>
+            <th>Plan &amp; Usage</th>
+            <th>Assigned Clients</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="t in tenants" :key="t.id">
+            <td>
+              <div class="user-cell">
+                <div class="avatar">{{ t.username.slice(0,2).toUpperCase() }}</div>
                 <div>
-                  <p class="text-sm font-bold text-foreground">{{ p.name }}</p>
-                  <p class="text-[11px] text-muted-foreground mt-0.5">
-                    {{ p.max_clients }} clients · {{ p.max_messages_per_month < 0 ? '∞' : p.max_messages_per_month.toLocaleString() }} msgs/mo · {{ p.max_sessions_per_month < 0 ? '∞' : p.max_sessions_per_month.toLocaleString() }} sessions/mo
-                  </p>
+                  <p class="user-name">{{ t.username }}</p>
+                  <p class="user-email">{{ t.email }}</p>
                 </div>
-                <p class="text-lg font-bold text-primary">${{ p.price_monthly }}<span class="text-[11px] font-normal text-muted-foreground">/mo</span></p>
               </div>
-              <div class="flex flex-wrap gap-1 mt-2.5">
-                <span v-for="f in planFlags(p)" :key="f.key" class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-semibold" :class="f.on ? 'bg-emerald-100 text-emerald-700' : 'bg-muted text-muted-foreground/50'">
-                  {{ f.on ? '✓' : '✕' }} {{ f.label }}
+            </td>
+            <td>{{ t.company_name || '—' }}</td>
+            <td>
+              <div class="plan-cell">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span class="plan-badge" :class="t.plan ? 'has-plan' : 'no-plan'">{{ t.plan || 'No Plan' }}</span>
+                  <span v-if="t.stripe_subscription_status" class="stripe-status-pill" :class="subStatusClass(t.stripe_subscription_status)">{{ t.stripe_subscription_status }}</span>
+                  <span v-if="t.trial_ends_at && new Date(t.trial_ends_at) > new Date()" class="trial-pill">Trial</span>
+                </div>
+                <template v-if="t.plan && t.plan_max_messages">
+                  <div class="usage-row">
+                    <div class="usage-bar-wrap">
+                      <div class="usage-bar-fill" :class="usageClass(t.messages_this_month, t.plan_max_messages)" :style="{ width: usagePct(t.messages_this_month, t.plan_max_messages) + '%' }"></div>
+                    </div>
+                    <span class="usage-label">{{ t.messages_this_month }} / {{ t.plan_max_messages < 0 ? '∞' : t.plan_max_messages }} msgs</span>
+                  </div>
+                </template>
+              </div>
+            </td>
+            <td>
+              <div class="client-badges">
+                <span v-if="!t.client_details || !t.client_details.length" class="no-clients">None assigned</span>
+                <span
+                  v-for="c in t.client_details" :key="c.id"
+                  class="client-badge"
+                  :style="{ background: (c.chatbot_color || '#6366F1') + '18', color: c.chatbot_color || '#6366F1', borderColor: (c.chatbot_color || '#6366F1') + '44' }"
+                  :title="c.domain_url"
+                >
+                  {{ c.name }}
                 </span>
               </div>
-              <span v-if="p.name === planTenant?.plan" class="absolute top-2 right-2 rounded text-[9px] font-bold bg-emerald-500 text-white px-1.5 py-0.5 uppercase">Current</span>
+            </td>
+            <td>
+              <div class="action-row">
+                <button class="action-btn edit-btn" @click="openEdit(t)">Edit</button>
+                <button class="action-btn plan-btn" @click="openPlan(t)">Plan</button>
+                <button class="action-btn history-btn" @click="openHistory(t)" title="Plan history">
+                  <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/></svg>
+                </button>
+                <button class="action-btn sub-btn" @click="openSubscription(t)" title="Subscription & usage">💳</button>
+                <button class="action-btn overrides-btn" @click="openOverrides(t)" title="Feature overrides">🎁</button>
+                <button class="action-btn impersonate-btn" @click="loginAsTenant(t)" :disabled="impersonating === t.id" title="Login as this tenant">
+                  {{ impersonating === t.id ? '...' : 'Login As' }}
+                </button>
+                <button class="action-btn del-btn" @click="confirmDelete(t)">Delete</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Create Tenant Modal -->
+    <div v-if="showCreate" class="modal-overlay" @click.self="showCreate = false">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>New Tenant</h3>
+          <button class="modal-close" @click="showCreate = false">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Username *</label>
+              <input v-model="createForm.username" class="form-input" placeholder="tenant_username" />
             </div>
-          </div>
-        </div>
-
-        <!-- Remarks -->
-        <div class="space-y-1.5">
-          <Label class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Remarks (optional)</Label>
-          <Textarea v-model="planRemarks" placeholder="e.g. Upgraded as per client request on call…" :rows="2" />
-        </div>
-
-        <!-- Plan History -->
-        <div v-if="planHistoryLoading" class="text-xs text-muted-foreground text-center py-3">Loading history…</div>
-        <template v-else-if="planHistoryData.length">
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Plan History</p>
-            <div class="border-l-2 border-border ml-1.5 pl-4 space-y-4">
-              <div v-for="h in planHistoryData" :key="h.id" class="relative">
-                <div class="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary border-2 border-background"></div>
-                <div class="flex items-center gap-2 text-sm">
-                  <span class="text-muted-foreground font-medium">{{ h.from_plan || 'None' }}</span>
-                  <span class="text-muted-foreground">→</span>
-                  <span class="font-bold text-primary">{{ h.to_plan || 'None' }}</span>
-                </div>
-                <p class="text-[11px] text-muted-foreground mt-0.5">by <strong>{{ h.changed_by }}</strong> · {{ fmtDate(h.changed_at) }}</p>
-                <p v-if="h.remarks" class="text-[11px] italic text-muted-foreground mt-0.5">"{{ h.remarks }}"</p>
+            <div class="form-group">
+              <label>Password *</label>
+              <input v-model="createForm.password" class="form-input" type="password" placeholder="••••••••" />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input v-model="createForm.email" class="form-input" type="email" placeholder="tenant@company.com" />
+            </div>
+            <div class="form-group">
+              <label>Company Name</label>
+              <input v-model="createForm.company_name" class="form-input" placeholder="Acme Corp" />
+            </div>
+            <div class="form-group full">
+              <label>Plan</label>
+              <select v-model="createForm.plan_id" class="form-input">
+                <option value="">No plan</option>
+                <option v-for="p in plans" :key="p.id" :value="p.id">{{ p.name }} (${{ p.price_monthly }}/mo)</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <label>Assign Clients</label>
+              <div class="client-checkboxes">
+                <p v-if="!allClients.length" class="no-clients-hint">No clients available — create a client first.</p>
+                <label v-for="c in allClients" :key="c.id" class="client-check-row" :class="{ checked: createForm.client_ids.includes(c.id) }">
+                  <input type="checkbox" :value="c.id" v-model="createForm.client_ids" />
+                  <div class="check-dot" :style="{ background: c.chatbot_color || '#6366F1' }">{{ c.name.slice(0,2).toUpperCase() }}</div>
+                  <div class="check-info">
+                    <span class="check-name">{{ c.name }}</span>
+                    <span class="check-url">{{ (c.domain_url || '').replace(/https?:\/\//, '') }}</span>
+                  </div>
+                  <span v-if="c.tenant_name" class="already-assigned">Already: {{ c.tenant_name }}</span>
+                </label>
               </div>
             </div>
           </div>
-        </template>
-        <p v-else-if="!planHistoryLoading" class="text-xs italic text-muted-foreground text-center">No plan changes recorded yet.</p>
+          <p v-if="createError" class="form-error">{{ createError }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="showCreate = false">Cancel</button>
+          <button class="submit-btn" @click="createTenant" :disabled="creating">
+            {{ creating ? 'Creating...' : 'Create Tenant' }}
+          </button>
+        </div>
       </div>
-      <DialogFooter>
-        <Button variant="ghost" @click="planTenant = null">Close</Button>
-        <Button @click="savePlan" :disabled="!selectedPlanId || selectedPlanId === planTenant?.plan_id || savingPlan">
-          <Loader2 v-if="savingPlan" class="h-4 w-4 animate-spin" />
-          Assign Plan
-        </Button>
-      </DialogFooter>
-    </Dialog>
+    </div>
 
-    <!-- Plan History Only Dialog -->
-    <Dialog :open="!!historyTenant && !planTenant" @close="historyTenant = null">
-      <DialogHeader><DialogTitle>Plan History — {{ historyTenant?.username }}</DialogTitle></DialogHeader>
-      <div class="px-6 pb-4">
-        <div v-if="planHistoryLoading" class="text-sm text-muted-foreground text-center py-4">Loading…</div>
-        <div v-else-if="!planHistoryData.length" class="text-xs italic text-muted-foreground text-center py-4">No plan changes recorded yet.</div>
-        <div v-else class="border-l-2 border-border ml-1.5 pl-4 space-y-4">
-          <div v-for="h in planHistoryData" :key="h.id" class="relative">
-            <div class="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-primary border-2 border-background"></div>
-            <div class="flex items-center gap-2 text-sm">
-              <span class="text-muted-foreground">{{ h.from_plan || 'None' }}</span>
-              <span class="text-muted-foreground">→</span>
-              <span class="font-bold text-primary">{{ h.to_plan || 'None' }}</span>
+    <!-- Edit Tenant Modal -->
+    <div v-if="editTenant" class="modal-overlay" @click.self="editTenant = null">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Edit: {{ editTenant.username }}</h3>
+          <button class="modal-close" @click="editTenant = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Email</label>
+              <input v-model="editForm.email" class="form-input" type="email" />
             </div>
-            <p class="text-[11px] text-muted-foreground mt-0.5">by <strong>{{ h.changed_by }}</strong> · {{ fmtDate(h.changed_at) }}</p>
-            <p v-if="h.remarks" class="text-[11px] italic text-muted-foreground">"{{ h.remarks }}"</p>
-          </div>
-        </div>
-      </div>
-      <DialogFooter>
-        <Button @click="historyTenant = null">Close</Button>
-      </DialogFooter>
-    </Dialog>
-
-    <!-- Plan Manager Dialog -->
-    <Dialog :open="showPlanManager" @close="showPlanManager = false">
-      <DialogHeader><DialogTitle>Plan Manager</DialogTitle></DialogHeader>
-      <div class="px-6 pb-4 space-y-4">
-        <p class="text-xs text-muted-foreground">Set the Stripe Price ID for each plan to enable self-service billing. Find Price IDs in your Stripe dashboard → Products.</p>
-        <div class="space-y-3">
-          <div v-for="p in plans" :key="p.id" class="flex items-center gap-4 rounded-lg border p-3">
-            <div class="flex-1">
-              <p class="text-sm font-semibold text-foreground">{{ p.name }}</p>
-              <p class="text-xs text-muted-foreground">${{ p.price_monthly }}/mo · {{ p.max_sessions_per_month }} sessions</p>
+            <div class="form-group">
+              <label>Company Name</label>
+              <input v-model="editForm.company_name" class="form-input" />
             </div>
-            <Input
-              class="flex-1 text-xs"
-              :value="planPriceIds[p.id] ?? p.stripe_price_id ?? ''"
-              @input="planPriceIds[p.id] = $event.target.value"
-              placeholder="price_xxx"
-            />
+            <div class="form-group full">
+              <label>New Password (leave blank to keep current)</label>
+              <input v-model="editForm.password" class="form-input" type="password" placeholder="••••••••" />
+            </div>
+            <div class="form-group full">
+              <label>Assigned Clients</label>
+              <div class="client-checkboxes">
+                <p v-if="!allClients.length" class="no-clients-hint">No clients available.</p>
+                <label v-for="c in allClients" :key="c.id" class="client-check-row" :class="{ checked: editForm.client_ids.includes(c.id) }">
+                  <input type="checkbox" :value="c.id" v-model="editForm.client_ids" />
+                  <div class="check-dot" :style="{ background: c.chatbot_color || '#6366F1' }">{{ c.name.slice(0,2).toUpperCase() }}</div>
+                  <div class="check-info">
+                    <span class="check-name">{{ c.name }}</span>
+                    <span class="check-url">{{ (c.domain_url || '').replace(/https?:\/\//, '') }}</span>
+                  </div>
+                  <span v-if="c.tenant_name && !editForm.client_ids.includes(c.id)" class="already-assigned">Owned by: {{ c.tenant_name }}</span>
+                </label>
+              </div>
+            </div>
           </div>
+          <p v-if="editError" class="form-error">{{ editError }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="editTenant = null">Cancel</button>
+          <button class="submit-btn" @click="saveTenant" :disabled="saving">
+            {{ saving ? 'Saving...' : 'Save Changes' }}
+          </button>
         </div>
       </div>
-      <DialogFooter>
-        <Button variant="ghost" @click="showPlanManager = false">Cancel</Button>
-        <Button @click="savePlanPriceIds" :disabled="savingPriceIds">
-          <Loader2 v-if="savingPriceIds" class="h-4 w-4 animate-spin" />
-          Save Price IDs
-        </Button>
-      </DialogFooter>
-    </Dialog>
+    </div>
 
-    <!-- Feature Overrides Dialog -->
-    <Dialog :open="!!overrideTenant" @close="overrideTenant = null">
-      <DialogHeader><DialogTitle>Feature Overrides — {{ overrideTenant?.username }}</DialogTitle></DialogHeader>
-      <div class="px-6 pb-4 space-y-4">
-        <p class="text-xs text-muted-foreground">Grant or revoke specific features for this tenant, overriding their plan.</p>
-        <div v-if="overridesLoading" class="text-sm text-muted-foreground text-center py-3">Loading…</div>
-        <div v-else-if="!tenantOverrides.length" class="text-xs italic text-muted-foreground">No active overrides. Their plan features apply.</div>
-        <div v-else class="space-y-2">
-          <div v-for="ov in tenantOverrides" :key="ov.id" class="flex items-center gap-3 rounded-lg border p-2.5">
-            <span class="font-mono text-xs font-medium text-primary flex-1">{{ ov.feature_name }}</span>
-            <Badge :variant="ov.enabled ? 'success' : 'destructive'" class="text-[10px]">{{ ov.enabled ? 'GRANTED' : 'REVOKED' }}</Badge>
-            <span v-if="ov.expires_at" class="text-[10px] text-muted-foreground">exp {{ fmtDate(ov.expires_at) }}</span>
-            <span v-if="ov.reason" class="text-[10px] italic text-muted-foreground">"{{ ov.reason }}"</span>
-            <Button variant="ghost" size="icon" class="h-6 w-6 text-destructive hover:bg-destructive/10" @click="deleteOverride(ov.id)" :disabled="deletingOverride === ov.id">✕</Button>
-          </div>
+    <!-- Assign Plan Modal (with history + remarks) -->
+    <div v-if="planTenant" class="modal-overlay" @click.self="planTenant = null">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3>Plan Management — {{ planTenant.username }}</h3>
+          <button class="modal-close" @click="planTenant = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
         </div>
-        <Separator />
-        <div class="space-y-3">
-          <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Add Override</p>
-          <div class="grid grid-cols-2 gap-3">
-            <select v-model="newOverride.feature_name" class="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-              <option value="">Select feature…</option>
-              <option v-for="f in allFeatures" :key="f.key" :value="f.key">{{ f.label }}</option>
-            </select>
-            <select v-model="newOverride.enabled" class="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring">
-              <option :value="true">Grant (enable)</option>
-              <option :value="false">Revoke (disable)</option>
-            </select>
+        <div class="modal-body plan-modal-body">
+          <!-- Current usage summary -->
+          <div v-if="planTenant.plan" class="usage-summary">
+            <div class="usage-title">Current Usage — {{ planTenant.plan }}</div>
+            <div class="usage-stats">
+              <div class="usage-stat">
+                <span class="stat-label">Sessions this month</span>
+                <div class="stat-bar-row">
+                  <div class="stat-bar-wrap">
+                    <div
+                      class="stat-bar-fill"
+                      :class="usageClass(planTenant.sessions_this_month, planTenant.plan_max_sessions)"
+                      :style="{ width: usagePct(planTenant.sessions_this_month, planTenant.plan_max_sessions) + '%' }"
+                    ></div>
+                  </div>
+                  <span class="stat-numbers">{{ planTenant.sessions_this_month }} / {{ planTenant.plan_max_sessions || '∞' }}</span>
+                </div>
+              </div>
+              <div class="usage-stat">
+                <span class="stat-label">Clients assigned</span>
+                <div class="stat-bar-row">
+                  <div class="stat-bar-wrap">
+                    <div
+                      class="stat-bar-fill"
+                      :class="usageClass(planTenant.clients_count, planTenant.plan_max_clients)"
+                      :style="{ width: usagePct(planTenant.clients_count, planTenant.plan_max_clients) + '%' }"
+                    ></div>
+                  </div>
+                  <span class="stat-numbers">{{ planTenant.clients_count }} / {{ planTenant.plan_max_clients || '∞' }}</span>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="grid grid-cols-2 gap-3">
-            <input type="datetime-local" v-model="newOverride.expires_at" class="h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
-            <Input v-model="newOverride.reason" placeholder="e.g. 30-day trial" />
+          <div v-else class="no-plan-hint">No plan assigned yet.</div>
+
+          <!-- Plan options -->
+          <div class="section-label">Select New Plan</div>
+          <div class="plan-options">
+            <div
+              v-for="p in plans" :key="p.id"
+              class="plan-option"
+              :class="{ selected: selectedPlanId === p.id, current: p.name === planTenant.plan }"
+              @click="selectedPlanId = p.id"
+            >
+              <div class="plan-option-top">
+                <div>
+                  <div class="plan-name">{{ p.name }}</div>
+                  <div class="plan-limits">
+                    {{ p.max_clients }} clients ·
+                    {{ p.max_messages_per_month < 0 ? '∞' : p.max_messages_per_month.toLocaleString() }} msgs/mo ·
+                    {{ p.max_sessions_per_month < 0 ? '∞' : p.max_sessions_per_month.toLocaleString() }} sessions/mo
+                  </div>
+                </div>
+                <div class="plan-price">${{ p.price_monthly }}<span>/mo</span></div>
+              </div>
+              <!-- Feature flags grid -->
+              <div class="plan-flags">
+                <span v-for="f in planFlags(p)" :key="f.key" class="pf-pill" :class="f.on ? 'pf-on' : 'pf-off'">
+                  <svg v-if="f.on" width="9" height="9" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg v-else width="9" height="9" fill="none" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>
+                  {{ f.label }}
+                </span>
+              </div>
+              <span v-if="p.name === planTenant.plan" class="current-tag">Current</span>
+            </div>
           </div>
-          <p v-if="overrideError" class="text-xs text-destructive">{{ overrideError }}</p>
+
+          <!-- Remarks -->
+          <div class="section-label" style="margin-top:16px">Remarks (optional)</div>
+          <textarea
+            v-model="planRemarks"
+            class="form-input remarks-input"
+            placeholder="e.g. Upgraded as per client request on call..."
+            rows="2"
+          ></textarea>
+
+          <!-- Plan History -->
+          <div v-if="planHistoryLoading" class="history-loading">Loading history…</div>
+          <template v-else-if="planHistoryData.length">
+            <div class="section-label" style="margin-top:16px">Plan History</div>
+            <div class="plan-timeline">
+              <div v-for="h in planHistoryData" :key="h.id" class="timeline-item">
+                <div class="timeline-dot"></div>
+                <div class="timeline-body">
+                  <div class="timeline-change">
+                    <span class="plan-from">{{ h.from_plan || 'None' }}</span>
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span class="plan-to">{{ h.to_plan || 'None' }}</span>
+                  </div>
+                  <div class="timeline-meta">
+                    by <strong>{{ h.changed_by }}</strong> · {{ fmtDate(h.changed_at) }}
+                    <span v-if="h.remarks" class="timeline-remark">"{{ h.remarks }}"</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+          <div v-else-if="!planHistoryLoading" class="no-history">No plan changes recorded yet.</div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="planTenant = null">Close</button>
+          <button class="submit-btn" @click="savePlan" :disabled="!selectedPlanId || selectedPlanId === planTenant.plan_id || savingPlan">
+            {{ savingPlan ? 'Assigning...' : 'Assign Plan' }}
+          </button>
         </div>
       </div>
-      <DialogFooter>
-        <Button variant="ghost" @click="overrideTenant = null">Close</Button>
-        <Button @click="addOverride" :disabled="addingOverride || !newOverride.feature_name">
-          <Loader2 v-if="addingOverride" class="h-4 w-4 animate-spin" />
-          Add Override
-        </Button>
-      </DialogFooter>
-    </Dialog>
+    </div>
 
-    <!-- Subscription Dialog -->
-    <Dialog :open="!!subTenant" @close="subTenant = null" class="max-w-2xl">
-      <DialogHeader><DialogTitle>Subscription — {{ subTenant?.username }}</DialogTitle></DialogHeader>
-      <div class="px-6 pb-4 max-h-[70vh] overflow-y-auto">
-        <div v-if="subLoading" class="text-sm text-muted-foreground text-center py-6">Loading subscription data…</div>
-        <div v-else-if="subData" class="space-y-5">
-          <!-- Status -->
-          <div class="flex items-center gap-3 flex-wrap">
-            <p class="text-base font-bold text-foreground">{{ subData.plan?.name || 'No Plan' }}</p>
-            <Badge :variant="stripeVariant(subData.stripe_subscription_status)">{{ subData.stripe_subscription_status || 'No subscription' }}</Badge>
-            <Badge v-if="subData.billing_interval" variant="outline" class="text-[10px] uppercase">{{ subData.billing_interval }}</Badge>
+    <!-- Plan History Only Modal (from history icon) -->
+    <div v-if="historyTenant && !planTenant" class="modal-overlay" @click.self="historyTenant = null">
+      <div class="modal modal-md">
+        <div class="modal-header">
+          <h3>Plan History — {{ historyTenant.username }}</h3>
+          <button class="modal-close" @click="historyTenant = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div v-if="planHistoryLoading" class="history-loading">Loading…</div>
+          <div v-else-if="!planHistoryData.length" class="no-history">No plan changes recorded yet.</div>
+          <div v-else class="plan-timeline">
+            <div v-for="h in planHistoryData" :key="h.id" class="timeline-item">
+              <div class="timeline-dot"></div>
+              <div class="timeline-body">
+                <div class="timeline-change">
+                  <span class="plan-from">{{ h.from_plan || 'None' }}</span>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span class="plan-to">{{ h.to_plan || 'None' }}</span>
+                </div>
+                <div class="timeline-meta">
+                  by <strong>{{ h.changed_by }}</strong> · {{ fmtDate(h.changed_at) }}
+                  <span v-if="h.remarks" class="timeline-remark">"{{ h.remarks }}"</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="submit-btn" @click="historyTenant = null">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plan Manager Modal -->
+    <div v-if="showPlanManager" class="modal-overlay" @click.self="showPlanManager = false">
+      <div class="modal modal-md">
+        <div class="modal-header">
+          <h3>Plan Manager</h3>
+          <button class="modal-close" @click="showPlanManager = false">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="pm-hint">Set the Stripe Price ID for each plan to enable self-service billing. Find Price IDs in your Stripe dashboard → Products.</p>
+          <div class="pm-plan-list">
+            <div v-for="p in plans" :key="p.id" class="pm-plan-row">
+              <div class="pm-plan-info">
+                <span class="pm-plan-name">{{ p.name }}</span>
+                <span class="pm-plan-price">${{ p.price_monthly }}/mo · {{ p.max_sessions_per_month }} sessions</span>
+              </div>
+              <div class="pm-price-field">
+                <input
+                  class="form-input pm-input"
+                  :value="planPriceIds[p.id] ?? p.stripe_price_id ?? ''"
+                  @input="planPriceIds[p.id] = $event.target.value"
+                  placeholder="price_xxx (leave blank for free)"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="showPlanManager = false">Cancel</button>
+          <button class="submit-btn" @click="savePlanPriceIds" :disabled="savingPriceIds">{{ savingPriceIds ? 'Saving…' : 'Save Price IDs' }}</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Feature Overrides Modal -->
+    <div v-if="overrideTenant" class="modal-overlay" @click.self="overrideTenant = null">
+      <div class="modal modal-md">
+        <div class="modal-header">
+          <h3>Feature Overrides — {{ overrideTenant.username }}</h3>
+          <button class="modal-close" @click="overrideTenant = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="or-hint">Grant or revoke specific features for this tenant, overriding their plan. Great for trials, deals, and betas.</p>
+
+          <!-- Existing overrides -->
+          <div v-if="overridesLoading" class="history-loading">Loading…</div>
+          <div v-else-if="!tenantOverrides.length" class="no-history">No active overrides. Their plan features apply.</div>
+          <div v-else class="or-list">
+            <div v-for="ov in tenantOverrides" :key="ov.id" class="or-row">
+              <div class="or-info">
+                <span class="or-feature">{{ ov.feature_name }}</span>
+                <span class="or-state" :class="ov.enabled ? 'state-on' : 'state-off'">{{ ov.enabled ? 'GRANTED' : 'REVOKED' }}</span>
+                <span v-if="ov.expires_at" class="or-exp">exp {{ fmtDate(ov.expires_at) }}</span>
+              </div>
+              <div class="or-meta">
+                <span v-if="ov.reason" class="or-reason">"{{ ov.reason }}"</span>
+              </div>
+              <button class="or-del-btn" @click="deleteOverride(ov.id)" :disabled="deletingOverride === ov.id">
+                {{ deletingOverride === ov.id ? '…' : '✕' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Add new override -->
+          <div class="section-label" style="margin-top:18px">Add Override</div>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">
+            <div class="form-group">
+              <label>Feature</label>
+              <select v-model="newOverride.feature_name" class="form-input">
+                <option value="">Select feature…</option>
+                <option v-for="f in allFeatures" :key="f.key" :value="f.key">{{ f.label }}</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Action</label>
+              <select v-model="newOverride.enabled" class="form-input">
+                <option :value="true">Grant (enable)</option>
+                <option :value="false">Revoke (disable)</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Expires (optional)</label>
+              <input type="datetime-local" v-model="newOverride.expires_at" class="form-input" />
+            </div>
+            <div class="form-group">
+              <label>Reason (optional)</label>
+              <input type="text" v-model="newOverride.reason" class="form-input" placeholder="e.g. 30-day trial" />
+            </div>
+          </div>
+          <p v-if="overrideError" class="form-error">{{ overrideError }}</p>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="overrideTenant = null">Close</button>
+          <button class="submit-btn" @click="addOverride" :disabled="addingOverride || !newOverride.feature_name">
+            {{ addingOverride ? 'Saving…' : 'Add Override' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Subscription Management Modal ── -->
+    <div v-if="subTenant" class="modal-overlay" @click.self="subTenant = null">
+      <div class="modal modal-lg">
+        <div class="modal-header">
+          <h3>Subscription — {{ subTenant.username }}</h3>
+          <button class="modal-close" @click="subTenant = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </div>
+        <div class="modal-body" v-if="subData">
+
+          <!-- Status header -->
+          <div class="sub-status-row">
+            <div class="sub-plan-name">{{ subData.plan?.name || 'No Plan' }}</div>
+            <span class="sub-status-badge" :class="subStatusClass(subData.stripe_subscription_status)">
+              {{ subData.stripe_subscription_status || 'No subscription' }}
+            </span>
+            <span v-if="subData.billing_interval" class="sub-interval-badge">{{ subData.billing_interval }}</span>
           </div>
 
           <!-- Usage bars -->
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Usage This Month</p>
-            <div class="grid grid-cols-2 gap-3">
-              <div v-for="res in subUsageRows" :key="res.key" class="rounded-lg border p-3 space-y-2">
-                <div class="flex justify-between text-xs">
-                  <span class="text-muted-foreground font-medium">{{ res.label }}</span>
-                  <span class="font-bold text-foreground">{{ res.used }} / {{ res.limit < 0 ? '∞' : res.limit }}</span>
-                </div>
-                <div class="h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div class="h-full rounded-full" :class="usageBarClass(res.used, res.limit < 0 ? 0 : res.limit)" :style="{ width: usagePct(res.used, res.limit < 0 ? 0 : res.limit)+'%' }"></div>
-                </div>
-                <button class="text-[10px] font-semibold rounded bg-destructive/10 border border-destructive/20 text-destructive px-2 py-0.5 hover:bg-destructive/20 cursor-pointer" @click="resetUsage(res.resetKey)" :disabled="resetting">Reset</button>
+          <div class="section-label" style="margin-top:14px">Usage This Month</div>
+          <div class="sub-usage-grid">
+            <div class="sub-usage-card" v-for="res in subUsageRows" :key="res.key">
+              <div class="sub-usage-label">
+                <span>{{ res.label }}</span>
+                <span class="sub-usage-nums">{{ res.used }} / {{ res.limit < 0 ? '∞' : res.limit }}</span>
               </div>
+              <div class="stat-bar-wrap">
+                <div class="stat-bar-fill" :class="usageClass(res.used, res.limit < 0 ? 0 : res.limit)" :style="{ width: usagePct(res.used, res.limit < 0 ? 0 : res.limit) + '%' }"></div>
+              </div>
+              <button class="reset-btn" @click="resetUsage(res.resetKey)" :disabled="resetting">Reset</button>
             </div>
           </div>
 
           <!-- Add-on top-ups -->
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Add-On Top-Ups</p>
-            <div class="grid grid-cols-3 gap-3">
-              <div v-for="a in addonRows" :key="a.key" class="space-y-1.5">
-                <Label class="text-xs">{{ a.label }}</Label>
-                <Input type="number" min="0" v-model.number="subForm[a.key]" />
-              </div>
+          <div class="section-label" style="margin-top:18px">Add-On Top-Ups</div>
+          <div class="addon-grid">
+            <div class="addon-row" v-for="a in addonRows" :key="a.key">
+              <label class="addon-label">{{ a.label }}</label>
+              <input type="number" min="0" class="form-input addon-input" v-model.number="subForm[a.key]" />
             </div>
           </div>
 
           <!-- Trial & billing interval -->
-          <div>
-            <p class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Trial &amp; Billing</p>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="space-y-1.5">
-                <Label class="text-xs">Trial ends at</Label>
-                <input type="datetime-local" class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring" v-model="subForm.trial_ends_at" />
-              </div>
-              <div class="space-y-1.5">
-                <Label class="text-xs">Billing interval</Label>
-                <select class="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring" v-model="subForm.billing_interval">
-                  <option value="monthly">Monthly</option>
-                  <option value="annual">Annual</option>
-                </select>
-              </div>
+          <div class="section-label" style="margin-top:18px">Trial & Billing Interval</div>
+          <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-group">
+              <label>Trial ends at (leave blank to clear)</label>
+              <input type="datetime-local" class="form-input" v-model="subForm.trial_ends_at" />
+            </div>
+            <div class="form-group">
+              <label>Billing interval</label>
+              <select class="form-input" v-model="subForm.billing_interval">
+                <option value="monthly">Monthly</option>
+                <option value="annual">Annual</option>
+              </select>
             </div>
           </div>
 
-          <!-- Stripe info -->
-          <div class="rounded-lg bg-muted p-3 space-y-1.5 text-xs">
-            <div class="flex gap-3"><span class="text-muted-foreground w-32">Customer ID</span><span class="font-mono text-foreground">{{ subData.stripe_customer_id || '—' }}</span></div>
-            <div class="flex gap-3"><span class="text-muted-foreground w-32">Subscription ID</span><span class="font-mono text-foreground">{{ subData.stripe_subscription_id || '—' }}</span></div>
+          <!-- Stripe IDs (read-only info) -->
+          <div class="section-label" style="margin-top:18px">Stripe Info</div>
+          <div class="stripe-info-grid">
+            <div class="si-row"><span class="si-key">Customer ID</span><span class="si-val">{{ subData.stripe_customer_id || '—' }}</span></div>
+            <div class="si-row"><span class="si-key">Subscription ID</span><span class="si-val">{{ subData.stripe_subscription_id || '—' }}</span></div>
           </div>
 
-          <p v-if="subError" class="text-xs text-destructive">{{ subError }}</p>
+          <p v-if="subError" class="form-error" style="margin-top:10px">{{ subError }}</p>
+        </div>
+        <div class="modal-body" v-else-if="subLoading">
+          <div class="history-loading">Loading subscription data…</div>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="subTenant = null">Close</button>
+          <button class="submit-btn" @click="saveSubscription" :disabled="savingSub">
+            {{ savingSub ? 'Saving…' : 'Save Changes' }}
+          </button>
         </div>
       </div>
-      <DialogFooter>
-        <Button variant="ghost" @click="subTenant = null">Close</Button>
-        <Button @click="saveSubscription" :disabled="savingSub">
-          <Loader2 v-if="savingSub" class="h-4 w-4 animate-spin" />
-          Save Changes
-        </Button>
-      </DialogFooter>
-    </Dialog>
+    </div>
 
-    <!-- Delete Confirm Dialog -->
-    <Dialog :open="!!deleteTenant" @close="deleteTenant = null">
-      <div class="p-6 text-center space-y-3">
-        <div class="text-3xl">⚠️</div>
-        <h3 class="text-base font-bold text-foreground">Delete Tenant</h3>
-        <p class="text-sm text-muted-foreground">This will permanently delete <strong>{{ deleteTenant?.username }}</strong> and all their data.</p>
+    <!-- Impersonate toast -->
+    <div v-if="impersonateToast" class="toast" :class="impersonateToast.type">
+      {{ impersonateToast.msg }}
+    </div>
+
+    <!-- Delete Confirm -->
+    <div v-if="deleteTenant" class="modal-overlay" @click.self="deleteTenant = null">
+      <div class="modal modal-sm">
+        <div class="modal-body" style="padding:28px;text-align:center">
+          <div class="del-icon">⚠️</div>
+          <h3 class="del-title">Delete Tenant</h3>
+          <p class="del-sub">This will permanently delete <strong>{{ deleteTenant.username }}</strong> and all their data.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="cancel-btn" @click="deleteTenant = null">Cancel</button>
+          <button class="danger-btn" @click="doDelete" :disabled="deleting">{{ deleting ? 'Deleting...' : 'Delete' }}</button>
+        </div>
       </div>
-      <DialogFooter>
-        <Button variant="ghost" @click="deleteTenant = null">Cancel</Button>
-        <Button variant="destructive" @click="doDelete" :disabled="deleting">
-          <Loader2 v-if="deleting" class="h-4 w-4 animate-spin" />
-          Delete
-        </Button>
-      </DialogFooter>
-    </Dialog>
-
+    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { Plus, Loader2, Users, Clock, Monitor } from 'lucide-vue-next'
 import { useAdminApi } from '../composables/useAdminApi'
-import Card from '@/components/ui/Card.vue'
-import Button from '@/components/ui/Button.vue'
-import Input from '@/components/ui/Input.vue'
-import Label from '@/components/ui/Label.vue'
-import Textarea from '@/components/ui/Textarea.vue'
-import Separator from '@/components/ui/Separator.vue'
-import Badge from '@/components/ui/Badge.vue'
-import Table from '@/components/ui/Table.vue'
-import TableHeader from '@/components/ui/TableHeader.vue'
-import TableBody from '@/components/ui/TableBody.vue'
-import TableRow from '@/components/ui/TableRow.vue'
-import TableHead from '@/components/ui/TableHead.vue'
-import TableCell from '@/components/ui/TableCell.vue'
-import Dialog from '@/components/ui/Dialog.vue'
-import DialogHeader from '@/components/ui/DialogHeader.vue'
-import DialogTitle from '@/components/ui/DialogTitle.vue'
-import DialogFooter from '@/components/ui/DialogFooter.vue'
 
 const api = useAdminApi()
 const tenants = ref([])
@@ -540,6 +595,7 @@ const planHistoryData = ref([])
 const planHistoryLoading = ref(false)
 
 const historyTenant = ref(null)
+
 const deleteTenant = ref(null)
 const deleting = ref(false)
 
@@ -558,6 +614,7 @@ const deletingOverride = ref(null)
 const overrideError = ref('')
 const newOverride = ref({ feature_name: '', enabled: true, expires_at: '', reason: '' })
 
+// ── Subscription modal ────────────────────────────────────────────────────────
 const subTenant = ref(null)
 const subData = ref(null)
 const subLoading = ref(false)
@@ -584,40 +641,108 @@ const addonRows = [
   { key: 'addon_voice',    label: 'Bonus voice cmds' },
 ]
 
-function stripeVariant(status) {
-  if (!status || status === 'none') return 'secondary'
-  if (status === 'active' || status === 'trialing') return 'success'
-  if (status === 'past_due') return 'warning'
-  return 'destructive'
+function subStatusClass(status) {
+  if (!status) return 'ss-none'
+  if (status === 'active' || status === 'trialing') return 'ss-active'
+  if (status === 'past_due') return 'ss-warn'
+  if (status === 'canceled') return 'ss-danger'
+  return 'ss-none'
 }
 
-function usagePct(used, max) {
-  if (!max || max < 0) return 0
-  return Math.min(Math.round((used / max) * 100), 100)
-}
-function usageBarClass(used, max) {
-  if (!max || max < 0) return 'bg-emerald-500'
-  const pct = (used / max) * 100
-  if (pct >= 85) return 'bg-red-500'
-  if (pct >= 60) return 'bg-amber-500'
-  return 'bg-emerald-500'
+async function openSubscription(t) {
+  subTenant.value = t
+  subData.value = null
+  subError.value = ''
+  subLoading.value = true
+  try {
+    const d = await api.getTenantSubscription(t.id)
+    subData.value = d
+    subForm.value = {
+      trial_ends_at: d.trial_ends_at ? d.trial_ends_at.slice(0, 16) : '',
+      billing_interval: d.billing_interval || 'monthly',
+      addon_messages: d.addon_messages || 0,
+      addon_images: d.addon_images || 0,
+      addon_voice: d.addon_voice || 0,
+    }
+  } catch (e) {
+    subError.value = e.message || 'Failed to load subscription.'
+  } finally {
+    subLoading.value = false
+  }
 }
 
-function fmtDate(iso) {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) +
-    ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+async function saveSubscription() {
+  savingSub.value = true
+  subError.value = ''
+  try {
+    const payload = {
+      billing_interval: subForm.value.billing_interval,
+      addon_messages: subForm.value.addon_messages,
+      addon_images: subForm.value.addon_images,
+      addon_voice: subForm.value.addon_voice,
+    }
+    if (subForm.value.trial_ends_at) {
+      payload.trial_ends_at = new Date(subForm.value.trial_ends_at).toISOString()
+    } else {
+      payload.trial_ends_at = null
+    }
+    await api.updateTenantSubscription(subTenant.value.id, payload)
+    // refresh tenant row
+    const idx = tenants.value.findIndex(x => x.id === subTenant.value.id)
+    if (idx >= 0) {
+      tenants.value[idx] = {
+        ...tenants.value[idx],
+        billing_interval: payload.billing_interval,
+        trial_ends_at: payload.trial_ends_at,
+        addon_messages: payload.addon_messages,
+        addon_images: payload.addon_images,
+        addon_voice: payload.addon_voice,
+      }
+    }
+    subTenant.value = null
+  } catch (e) {
+    subError.value = e.message || 'Failed to save.'
+  } finally {
+    savingSub.value = false
+  }
 }
 
+async function resetUsage(resetKey) {
+  resetting.value = true
+  try {
+    await api.updateTenantSubscription(subTenant.value.id, { [resetKey]: true })
+    // update local display
+    const map = { reset_messages: 'messages_this_month', reset_sessions: 'sessions_this_month', reset_images: 'images_this_month', reset_voice: 'voice_this_month' }
+    if (subData.value) subData.value[map[resetKey]] = 0
+  } catch (e) {
+    subError.value = e.message || 'Reset failed.'
+  } finally {
+    resetting.value = false
+  }
+}
+
+// ── Plan feature flags helper ─────────────────────────────────────────────────
 const FLAG_LABELS = [
-  { key: 'allow_whatsapp', label: 'WhatsApp' }, { key: 'allow_telegram', label: 'Telegram' },
-  { key: 'allow_byok', label: 'BYOK' }, { key: 'allow_hubspot', label: 'HubSpot' },
-  { key: 'allow_slack', label: 'Slack' }, { key: 'allow_webhooks', label: 'Webhooks' },
-  { key: 'allow_god_view', label: 'God View' }, { key: 'allow_csv_export', label: 'CSV Export' },
-  { key: 'allow_voice_input', label: 'Voice' }, { key: 'allow_image_input', label: 'Images' },
-  { key: 'allow_advanced_reports', label: 'Adv. Reports' }, { key: 'remove_branding', label: 'No Branding' },
-  { key: 'allow_custom_domain', label: 'Domain' }, { key: 'allow_api_access', label: 'API' },
-  { key: 'priority_support', label: 'Priority Sup.' },
+  { key: 'allow_whatsapp',          label: 'WhatsApp' },
+  { key: 'allow_telegram',          label: 'Telegram' },
+  { key: 'allow_messenger',         label: 'Messenger' },
+  { key: 'allow_byok',              label: 'BYOK' },
+  { key: 'allow_hubspot',           label: 'HubSpot' },
+  { key: 'allow_slack',             label: 'Slack' },
+  { key: 'allow_webhooks',          label: 'Webhooks' },
+  { key: 'allow_god_view',          label: 'God View' },
+  { key: 'allow_canned_responses',  label: 'Canned Resp.' },
+  { key: 'allow_conversation_tags', label: 'Tags' },
+  { key: 'allow_csv_export',        label: 'CSV Export' },
+  { key: 'allow_voice_input',       label: 'Voice' },
+  { key: 'allow_image_input',       label: 'Images' },
+  { key: 'allow_fomo_triggers',     label: 'FOMO' },
+  { key: 'allow_advanced_reports',  label: 'Adv. Reports' },
+  { key: 'remove_branding',         label: 'No Branding' },
+  { key: 'allow_custom_domain',     label: 'Custom Domain' },
+  { key: 'allow_api_access',        label: 'API Access' },
+  { key: 'allow_multi_language',    label: 'Multi-Lang' },
+  { key: 'priority_support',        label: 'Priority Sup.' },
 ]
 
 function planFlags(plan) {
@@ -625,17 +750,67 @@ function planFlags(plan) {
 }
 
 const allFeatures = [
-  { key: 'allow_whatsapp', label: 'WhatsApp Business' }, { key: 'allow_telegram', label: 'Telegram Bot' },
-  { key: 'allow_messenger', label: 'Facebook Messenger' }, { key: 'allow_byok', label: 'Custom AI (BYOK)' },
-  { key: 'allow_hubspot', label: 'HubSpot CRM' }, { key: 'allow_slack', label: 'Slack Notifications' },
-  { key: 'allow_webhooks', label: 'Outbound Webhooks' }, { key: 'allow_god_view', label: 'Live Takeover (God View)' },
-  { key: 'allow_canned_responses', label: 'Canned Responses' }, { key: 'allow_conversation_tags', label: 'Conversation Tags' },
-  { key: 'allow_csv_export', label: 'Analytics CSV Export' }, { key: 'allow_voice_input', label: 'Voice Input' },
-  { key: 'allow_image_input', label: 'Image Input' }, { key: 'allow_fomo_triggers', label: 'FOMO Triggers' },
-  { key: 'allow_advanced_reports', label: 'Advanced Analytics' }, { key: 'remove_branding', label: 'Remove Branding' },
-  { key: 'allow_custom_domain', label: 'Custom Domain' }, { key: 'allow_api_access', label: 'API Access' },
-  { key: 'allow_multi_language', label: 'Multi-Language' }, { key: 'priority_support', label: 'Priority Support' },
+  { key: 'allow_whatsapp',          label: 'WhatsApp Business' },
+  { key: 'allow_telegram',          label: 'Telegram Bot' },
+  { key: 'allow_messenger',         label: 'Facebook Messenger' },
+  { key: 'allow_byok',              label: 'Custom AI (BYOK)' },
+  { key: 'allow_hubspot',           label: 'HubSpot CRM' },
+  { key: 'allow_slack',             label: 'Slack Notifications' },
+  { key: 'allow_webhooks',          label: 'Outbound Webhooks' },
+  { key: 'allow_god_view',          label: 'Live Takeover (God View)' },
+  { key: 'allow_canned_responses',  label: 'Canned Responses' },
+  { key: 'allow_conversation_tags', label: 'Conversation Tags' },
+  { key: 'allow_csv_export',        label: 'Analytics CSV Export' },
+  { key: 'allow_voice_input',       label: 'Voice Input' },
+  { key: 'allow_image_input',       label: 'Image Input' },
+  { key: 'allow_fomo_triggers',        label: 'FOMO Triggers' },
+  { key: 'allow_real_time_inventory',  label: 'Real-Time Inventory' },
+  { key: 'allow_advanced_reports',     label: 'Advanced Analytics' },
+  { key: 'remove_branding',            label: 'Remove Branding' },
+  { key: 'allow_custom_domain',        label: 'Custom Domain' },
+  { key: 'allow_api_access',           label: 'API Access' },
+  { key: 'allow_multi_language',       label: 'Multi-Language' },
+  { key: 'priority_support',           label: 'Priority Support' },
 ]
+
+function openPlanManager() {
+  planPriceIds.value = {}
+  showPlanManager.value = true
+}
+
+async function savePlanPriceIds() {
+  savingPriceIds.value = true
+  try {
+    await Promise.all(
+      Object.entries(planPriceIds.value).map(([id, stripe_price_id]) =>
+        api.updatePlan(id, { stripe_price_id: stripe_price_id || null })
+      )
+    )
+    plans.value = await api.getPlans() || []
+    showPlanManager.value = false
+  } catch (e) {
+    alert(e.message || 'Failed to save price IDs.')
+  } finally {
+    savingPriceIds.value = false
+  }
+}
+
+function usagePct(used, max) {
+  if (!max) return 0
+  return Math.min(Math.round((used / max) * 100), 100)
+}
+function usageClass(used, max) {
+  if (!max) return 'bar-green'
+  const pct = (used / max) * 100
+  if (pct >= 85) return 'bar-red'
+  if (pct >= 60) return 'bar-amber'
+  return 'bar-green'
+}
+function fmtDate(iso) {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) +
+    ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+}
 
 async function load() {
   loading.value = true
@@ -644,19 +819,31 @@ async function load() {
     tenants.value = t || []
     plans.value = p || []
     allClients.value = c || []
-  } catch (e) { console.error(e) } finally { loading.value = false }
+  } catch (e) {
+    console.error(e)
+  } finally {
+    loading.value = false
+  }
 }
 
 async function loadPlanHistory(tenantId) {
   planHistoryLoading.value = true
   planHistoryData.value = []
-  try { planHistoryData.value = await api.getPlanHistory(tenantId) || [] }
-  catch (e) { console.error(e) } finally { planHistoryLoading.value = false }
+  try {
+    planHistoryData.value = await api.getPlanHistory(tenantId) || []
+  } catch (e) {
+    console.error(e)
+  } finally {
+    planHistoryLoading.value = false
+  }
 }
 
 async function createTenant() {
   createError.value = ''
-  if (!createForm.value.username || !createForm.value.password) { createError.value = 'Username and password are required.'; return }
+  if (!createForm.value.username || !createForm.value.password) {
+    createError.value = 'Username and password are required.'
+    return
+  }
   creating.value = true
   try {
     const t = await api.createTenant({ ...createForm.value })
@@ -664,7 +851,11 @@ async function createTenant() {
     allClients.value = await api.getClients() || []
     showCreate.value = false
     createForm.value = { username: '', password: '', email: '', company_name: '', plan_id: '', client_ids: [] }
-  } catch (e) { createError.value = e.message } finally { creating.value = false }
+  } catch (e) {
+    createError.value = e.message
+  } finally {
+    creating.value = false
+  }
 }
 
 function openEdit(t) {
@@ -682,7 +873,11 @@ async function saveTenant() {
     tenants.value = freshTenants || tenants.value
     allClients.value = freshClients || allClients.value
     editTenant.value = null
-  } catch (e) { editError.value = e.message } finally { saving.value = false }
+  } catch (e) {
+    editError.value = e.message
+  } finally {
+    saving.value = false
+  }
 }
 
 function openPlan(t) {
@@ -704,12 +899,25 @@ async function savePlan() {
     const result = await api.assignPlan(planTenant.value.id, selectedPlanId.value, planRemarks.value)
     const idx = tenants.value.findIndex(x => x.id === planTenant.value.id)
     if (idx >= 0) {
-      tenants.value[idx] = { ...tenants.value[idx], plan: result.plan, plan_id: result.plan_id, plan_max_sessions: result.plan_max_sessions, plan_max_clients: result.plan_max_clients }
+      tenants.value[idx] = {
+        ...tenants.value[idx],
+        plan: result.plan,
+        plan_id: result.plan_id,
+        plan_max_sessions: result.plan_max_sessions,
+        plan_max_clients: result.plan_max_clients,
+        plan_price: result.plan_price,
+      }
       planTenant.value = { ...tenants.value[idx] }
     }
     planRemarks.value = ''
+    selectedPlanId.value = tenants.value[idx]?.plan_id || selectedPlanId.value
+    // Reload history to show new entry
     await loadPlanHistory(planTenant.value.id)
-  } catch (e) { alert(e.message) } finally { savingPlan.value = false }
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    savingPlan.value = false
+  }
 }
 
 async function loginAsTenant(t) {
@@ -725,7 +933,11 @@ async function loginAsTenant(t) {
     localStorage.setItem('cf_impersonating', 'true')
     showToast(`Logged in as ${data.tenant.username} (${data.tenant.company_name})`, 'success')
     setTimeout(() => { window.location.href = '/admin/' }, 1200)
-  } catch (e) { showToast(e.message || 'Impersonation failed', 'error') } finally { impersonating.value = null }
+  } catch (e) {
+    showToast(e.message || 'Impersonation failed', 'error')
+  } finally {
+    impersonating.value = null
+  }
 }
 
 function showToast(msg, type = 'success') {
@@ -741,18 +953,11 @@ async function doDelete() {
     await api.deleteTenant(deleteTenant.value.id)
     tenants.value = tenants.value.filter(x => x.id !== deleteTenant.value.id)
     deleteTenant.value = null
-  } catch (e) { alert(e.message) } finally { deleting.value = false }
-}
-
-function openPlanManager() { planPriceIds.value = {}; showPlanManager.value = true }
-
-async function savePlanPriceIds() {
-  savingPriceIds.value = true
-  try {
-    await Promise.all(Object.entries(planPriceIds.value).map(([id, stripe_price_id]) => api.updatePlan(id, { stripe_price_id: stripe_price_id || null })))
-    plans.value = await api.getPlans() || []
-    showPlanManager.value = false
-  } catch (e) { alert(e.message || 'Failed to save price IDs.') } finally { savingPriceIds.value = false }
+  } catch (e) {
+    alert(e.message)
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function openOverrides(t) {
@@ -761,8 +966,13 @@ async function openOverrides(t) {
   overrideError.value = ''
   newOverride.value = { feature_name: '', enabled: true, expires_at: '', reason: '' }
   overridesLoading.value = true
-  try { tenantOverrides.value = await api.getTenantFeatureOverrides(t.id) || [] }
-  catch (e) { overrideError.value = e.message } finally { overridesLoading.value = false }
+  try {
+    tenantOverrides.value = await api.getTenantFeatureOverrides(t.id) || []
+  } catch (e) {
+    overrideError.value = e.message
+  } finally {
+    overridesLoading.value = false
+  }
 }
 
 async function addOverride() {
@@ -770,10 +980,20 @@ async function addOverride() {
   overrideError.value = ''
   addingOverride.value = true
   try {
-    const created = await api.createFeatureOverride(overrideTenant.value.id, { feature_name: newOverride.value.feature_name, enabled: newOverride.value.enabled, reason: newOverride.value.reason || '', expires_at: newOverride.value.expires_at || null })
+    const payload = {
+      feature_name: newOverride.value.feature_name,
+      enabled: newOverride.value.enabled,
+      reason: newOverride.value.reason || '',
+      expires_at: newOverride.value.expires_at || null,
+    }
+    const created = await api.createFeatureOverride(overrideTenant.value.id, payload)
     tenantOverrides.value.unshift(created)
     newOverride.value = { feature_name: '', enabled: true, expires_at: '', reason: '' }
-  } catch (e) { overrideError.value = e.message || 'Failed to add override.' } finally { addingOverride.value = false }
+  } catch (e) {
+    overrideError.value = e.message || 'Failed to add override.'
+  } finally {
+    addingOverride.value = false
+  }
 }
 
 async function deleteOverride(overrideId) {
@@ -781,39 +1001,250 @@ async function deleteOverride(overrideId) {
   try {
     await api.deleteFeatureOverride(overrideTenant.value.id, overrideId)
     tenantOverrides.value = tenantOverrides.value.filter(o => o.id !== overrideId)
-  } catch (e) { alert(e.message || 'Failed to delete override.') } finally { deletingOverride.value = null }
-}
-
-async function openSubscription(t) {
-  subTenant.value = t
-  subData.value = null
-  subError.value = ''
-  subLoading.value = true
-  try {
-    const d = await api.getTenantSubscription(t.id)
-    subData.value = d
-    subForm.value = { trial_ends_at: d.trial_ends_at ? d.trial_ends_at.slice(0, 16) : '', billing_interval: d.billing_interval || 'monthly', addon_messages: d.addon_messages || 0, addon_images: d.addon_images || 0, addon_voice: d.addon_voice || 0 }
-  } catch (e) { subError.value = e.message || 'Failed to load subscription.' } finally { subLoading.value = false }
-}
-
-async function saveSubscription() {
-  savingSub.value = true
-  subError.value = ''
-  try {
-    const payload = { billing_interval: subForm.value.billing_interval, addon_messages: subForm.value.addon_messages, addon_images: subForm.value.addon_images, addon_voice: subForm.value.addon_voice, trial_ends_at: subForm.value.trial_ends_at ? new Date(subForm.value.trial_ends_at).toISOString() : null }
-    await api.updateTenantSubscription(subTenant.value.id, payload)
-    subTenant.value = null
-  } catch (e) { subError.value = e.message || 'Failed to save.' } finally { savingSub.value = false }
-}
-
-async function resetUsage(resetKey) {
-  resetting.value = true
-  try {
-    await api.updateTenantSubscription(subTenant.value.id, { [resetKey]: true })
-    const map = { reset_messages: 'messages_this_month', reset_sessions: 'sessions_this_month', reset_images: 'images_this_month', reset_voice: 'voice_this_month' }
-    if (subData.value) subData.value[map[resetKey]] = 0
-  } catch (e) { subError.value = e.message || 'Reset failed.' } finally { resetting.value = false }
+  } catch (e) {
+    alert(e.message || 'Failed to delete override.')
+  } finally {
+    deletingOverride.value = null
+  }
 }
 
 onMounted(load)
 </script>
+
+<style scoped>
+.tenants-page { max-width: 1200px; }
+
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 28px; }
+.page-title { font-size: 24px; font-weight: 700; color: #0F172A; letter-spacing: -0.4px; }
+.page-sub { font-size: 14px; color: #64748B; margin-top: 4px; }
+
+.add-btn {
+  display: flex; align-items: center; gap: 7px;
+  background: #6366F1; color: white; border: none; border-radius: 9px;
+  padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: all 0.15s; font-family: inherit;
+}
+.add-btn:hover { background: #4F46E5; }
+
+.table-card { background: white; border: 1px solid #F1F5F9; border-radius: 14px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+
+.loading-center { display: flex; justify-content: center; padding: 48px; }
+.loader { width: 28px; height: 28px; border: 3px solid #E2E8F0; border-top-color: #6366F1; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 60px; color: #94A3B8; font-size: 14px; }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th { background: #F8FAFC; padding: 11px 16px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #94A3B8; }
+.table td { padding: 14px 16px; border-top: 1px solid #F8FAFC; font-size: 13px; color: #334155; vertical-align: middle; }
+.table tr:hover td { background: #FAFBFF; }
+
+.user-cell { display: flex; align-items: center; gap: 10px; }
+.avatar { width: 32px; height: 32px; border-radius: 8px; background: linear-gradient(135deg,#6366F1,#8B5CF6); color: white; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.user-name { font-size: 13px; font-weight: 600; color: #1E293B; }
+.user-email { font-size: 11px; color: #94A3B8; }
+
+/* Plan cell with usage bar */
+.plan-cell { display: flex; flex-direction: column; gap: 6px; min-width: 160px; }
+.plan-badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; width: fit-content; }
+.has-plan { background: rgba(99,102,241,0.1); color: #4F46E5; }
+.no-plan { background: #F1F5F9; color: #94A3B8; }
+
+.usage-row { display: flex; flex-direction: column; gap: 3px; }
+.usage-bar-wrap { height: 5px; background: #F1F5F9; border-radius: 99px; overflow: hidden; width: 100%; }
+.usage-bar-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+.bar-green { background: #22C55E; }
+.bar-amber { background: #F59E0B; }
+.bar-red { background: #EF4444; }
+.usage-label { font-size: 10px; color: #94A3B8; }
+
+.action-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.action-btn { padding: 5px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer; border: 1px solid; transition: all 0.15s; font-family: inherit; }
+.edit-btn { background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8; }
+.edit-btn:hover { background: #DBEAFE; }
+.plan-btn { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.25); color: #6366F1; }
+.plan-btn:hover { background: rgba(99,102,241,0.15); }
+.history-btn { background: #F8FAFC; border-color: #E2E8F0; color: #64748B; display: flex; align-items: center; gap: 4px; }
+.history-btn:hover { background: #F1F5F9; }
+.del-btn { background: #FEF2F2; border-color: #FECACA; color: #DC2626; }
+.del-btn:hover { background: #FEE2E2; }
+.impersonate-btn { background: #F0FDF4; border-color: #86EFAC; color: #16A34A; }
+.impersonate-btn:hover:not(:disabled) { background: #DCFCE7; }
+.impersonate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+  padding: 12px 22px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  z-index: 9999; box-shadow: 0 8px 24px rgba(0,0,0,0.12); animation: fadeIn 0.2s ease;
+}
+.toast.success { background: #16A34A; color: white; }
+.toast.error { background: #DC2626; color: white; }
+@keyframes fadeIn { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal { background: white; border-radius: 16px; width: 100%; max-width: 540px; box-shadow: 0 25px 50px rgba(0,0,0,0.15); max-height: 90vh; display: flex; flex-direction: column; }
+.modal-sm { max-width: 420px; }
+.modal-md { max-width: 480px; }
+.modal-lg { max-width: 640px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 20px 16px; border-bottom: 1px solid #F1F5F9; flex-shrink: 0; }
+.modal-header h3 { font-size: 16px; font-weight: 600; color: #0F172A; }
+.modal-body { padding: 20px; overflow-y: auto; flex: 1; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 20px; border-top: 1px solid #F1F5F9; flex-shrink: 0; }
+.modal-close { background: none; border: none; cursor: pointer; padding: 4px; color: #94A3B8; border-radius: 6px; transition: all 0.15s; }
+.modal-close:hover { background: #F1F5F9; color: #475569; }
+
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group.full { grid-column: 1 / -1; }
+.form-group label { font-size: 12px; font-weight: 600; color: #475569; }
+.form-input { border: 1px solid #E2E8F0; border-radius: 8px; padding: 9px 12px; font-size: 13px; font-family: inherit; outline: none; transition: border-color 0.15s; width: 100%; box-sizing: border-box; }
+.form-input:focus { border-color: #6366F1; }
+.form-error { color: #DC2626; font-size: 12px; margin-top: 8px; }
+
+.cancel-btn { background: #F1F5F9; border: 1px solid #E2E8F0; color: #475569; border-radius: 8px; padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; }
+.cancel-btn:hover { background: #E2E8F0; }
+.submit-btn { background: #6366F1; color: white; border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.submit-btn:hover:not(:disabled) { background: #4F46E5; }
+.submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.danger-btn { background: #DC2626; color: white; border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.danger-btn:hover:not(:disabled) { background: #B91C1C; }
+
+/* Plan modal */
+.plan-modal-body { display: flex; flex-direction: column; gap: 0; }
+.section-label { font-size: 11px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px; margin-top: 4px; }
+
+.usage-summary { background: #F8FAFC; border: 1px solid #F1F5F9; border-radius: 12px; padding: 14px 16px; margin-bottom: 18px; }
+.usage-title { font-size: 13px; font-weight: 700; color: #0F172A; margin-bottom: 12px; }
+.usage-stats { display: flex; flex-direction: column; gap: 10px; }
+.usage-stat { display: flex; flex-direction: column; gap: 4px; }
+.stat-label { font-size: 11px; color: #64748B; font-weight: 600; }
+.stat-bar-row { display: flex; align-items: center; gap: 10px; }
+.stat-bar-wrap { flex: 1; height: 8px; background: #E2E8F0; border-radius: 99px; overflow: hidden; }
+.stat-bar-fill { height: 100%; border-radius: 99px; transition: width 0.4s ease; }
+.stat-numbers { font-size: 11px; color: #475569; white-space: nowrap; font-weight: 600; min-width: 80px; text-align: right; }
+.no-plan-hint { background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #92400E; margin-bottom: 16px; }
+
+.plan-options { display: flex; flex-direction: column; gap: 8px; }
+.plan-option { padding: 12px 14px; border: 2px solid #E2E8F0; border-radius: 10px; cursor: pointer; transition: all 0.15s; position: relative; }
+.plan-option:hover { border-color: #A5B4FC; background: #FAFBFF; }
+.plan-option.selected { border-color: #6366F1; background: rgba(99,102,241,0.05); }
+.plan-option.current { border-color: #86EFAC; background: #F0FDF4; }
+.plan-option.current.selected { border-color: #6366F1; background: rgba(99,102,241,0.05); }
+.plan-option-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.plan-name { font-size: 14px; font-weight: 700; color: #0F172A; }
+.plan-limits { font-size: 11px; color: #94A3B8; margin-top: 2px; }
+.plan-price { font-size: 18px; font-weight: 700; color: #6366F1; }
+.plan-price span { font-size: 11px; color: #94A3B8; font-weight: 400; }
+.current-tag { position: absolute; top: 8px; right: 8px; font-size: 9px; font-weight: 700; background: #22C55E; color: white; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.remarks-input { resize: none; font-family: inherit; }
+
+/* Timeline */
+.plan-timeline { display: flex; flex-direction: column; gap: 0; border-left: 2px solid #E2E8F0; margin-left: 6px; padding-left: 16px; }
+.timeline-item { display: flex; gap: 12px; position: relative; padding-bottom: 16px; }
+.timeline-dot { position: absolute; left: -22px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: #6366F1; border: 2px solid white; box-shadow: 0 0 0 2px #E2E8F0; flex-shrink: 0; }
+.timeline-body { flex: 1; }
+.timeline-change { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-bottom: 3px; }
+.plan-from { color: #94A3B8; font-weight: 600; }
+.plan-to { color: #4F46E5; font-weight: 700; }
+.timeline-meta { font-size: 11px; color: #94A3B8; }
+.timeline-remark { display: block; font-style: italic; color: #64748B; margin-top: 3px; }
+.history-loading { font-size: 12px; color: #94A3B8; padding: 12px 0; text-align: center; }
+.no-history { font-size: 12px; color: #CBD5E1; padding: 12px 0; text-align: center; font-style: italic; }
+
+/* Plan Manager */
+.pm-hint { font-size: 13px; color: #64748b; margin: 0 0 16px; line-height: 1.6; }
+.pm-plan-list { display: flex; flex-direction: column; gap: 12px; }
+.pm-plan-row { display: flex; align-items: center; gap: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; }
+.pm-plan-info { flex: 1; }
+.pm-plan-name { font-size: 14px; font-weight: 600; color: #1e293b; display: block; }
+.pm-plan-price { font-size: 12px; color: #64748b; }
+.pm-price-field { flex: 1; }
+.pm-input { width: 100%; font-size: 12px; padding: 8px 10px; border-radius: 8px; }
+
+/* Client badges in table */
+.client-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.client-badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; border: 1px solid; white-space: nowrap; }
+.no-clients { font-size: 12px; color: #CBD5E1; font-style: italic; }
+
+/* Client checkboxes in modal */
+.client-checkboxes { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; padding: 2px; }
+.no-clients-hint { font-size: 12px; color: #94A3B8; padding: 8px 0; }
+.client-check-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #E2E8F0; border-radius: 9px; cursor: pointer; transition: all 0.15s; user-select: none; }
+
+/* Overrides button */
+.overrides-btn { background: #FFF7ED; border-color: #FED7AA; color: #C2410C; font-size: 13px; }
+.overrides-btn:hover { background: #FFEDD5; }
+
+/* Overrides modal */
+.or-hint { font-size: 12px; color: #64748b; margin: 0 0 14px; line-height: 1.6; }
+.or-list { display: flex; flex-direction: column; gap: 6px; }
+.or-row { display: flex; align-items: flex-start; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 9px; padding: 10px 12px; }
+.or-info { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+.or-feature { font-size: 12px; font-weight: 700; color: #1e293b; font-family: monospace; }
+.or-state { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.state-on { background: #dcfce7; color: #15803d; }
+.state-off { background: #fee2e2; color: #b91c1c; }
+.or-exp { font-size: 10px; color: #94a3b8; }
+.or-meta { flex: 1; }
+.or-reason { font-size: 11px; color: #64748b; font-style: italic; }
+.or-del-btn { background: #fee2e2; border: 1px solid #fecaca; color: #dc2626; border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; font-family: inherit; flex-shrink: 0; }
+.or-del-btn:hover:not(:disabled) { background: #fecaca; }
+.or-del-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.client-check-row:hover { border-color: #A5B4FC; background: #FAFBFF; }
+.client-check-row.checked { border-color: #6366F1; background: rgba(99,102,241,0.05); }
+.client-check-row input[type="checkbox"] { display: none; }
+.check-dot { width: 28px; height: 28px; border-radius: 7px; flex-shrink: 0; color: white; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.check-info { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.check-name { font-size: 13px; font-weight: 600; color: #0F172A; }
+.check-url { font-size: 11px; color: #94A3B8; }
+.already-assigned { font-size: 10px; color: #F59E0B; font-weight: 600; white-space: nowrap; }
+
+/* Delete */
+.del-icon { font-size: 32px; margin-bottom: 12px; }
+.del-title { font-size: 17px; font-weight: 700; color: #0F172A; margin-bottom: 8px; }
+.del-sub { font-size: 13px; color: #64748B; line-height: 1.5; }
+
+/* Subscription button */
+.sub-btn { background: #F0F9FF; border-color: #BAE6FD; color: #0369A1; }
+.sub-btn:hover { background: #E0F2FE; }
+
+/* Stripe status pills in table */
+.stripe-status-pill { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+.trial-pill { font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: rgba(167,139,250,0.15); color: #7C3AED; }
+.ss-active  { background: #DCFCE7; color: #15803D; }
+.ss-warn    { background: #FEF3C7; color: #92400E; }
+.ss-danger  { background: #FEE2E2; color: #B91C1C; }
+.ss-none    { background: #F1F5F9; color: #64748B; }
+
+/* Plan flags in plan picker */
+.plan-flags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.pf-pill { display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+.pf-on  { background: #DCFCE7; color: #15803D; }
+.pf-off { background: #F1F5F9; color: #CBD5E1; }
+
+/* Subscription modal */
+.sub-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sub-plan-name { font-size: 16px; font-weight: 700; color: #0F172A; }
+.sub-interval-badge { font-size: 10px; font-weight: 700; background: #F0F9FF; color: #0369A1; border: 1px solid #BAE6FD; padding: 2px 8px; border-radius: 5px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.sub-usage-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sub-usage-card { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.sub-usage-label { display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: #64748B; }
+.sub-usage-nums { color: #0F172A; font-weight: 700; }
+.reset-btn { align-self: flex-end; font-size: 10px; font-weight: 600; background: #FEF2F2; border: 1px solid #FECACA; color: #DC2626; border-radius: 5px; padding: 2px 8px; cursor: pointer; font-family: inherit; }
+.reset-btn:hover:not(:disabled) { background: #FEE2E2; }
+.reset-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.addon-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.addon-row { display: flex; flex-direction: column; gap: 4px; }
+.addon-label { font-size: 11px; font-weight: 600; color: #475569; }
+.addon-input { width: 100%; padding: 8px 10px !important; font-size: 13px; }
+
+.stripe-info-grid { display: flex; flex-direction: column; gap: 6px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px 14px; }
+.si-row { display: flex; gap: 12px; font-size: 12px; }
+.si-key { color: #64748B; font-weight: 600; min-width: 120px; }
+.si-val { color: #0F172A; font-family: monospace; word-break: break-all; }
+</style>

@@ -1,263 +1,357 @@
 <template>
-  <div class="flex flex-col gap-6 p-6 max-w-4xl">
-
-    <div v-if="loading" class="flex flex-col items-center gap-3 py-16 text-muted-foreground">
-      <Loader2 class="h-6 w-6 animate-spin" />
-      <p class="text-sm">Loading client…</p>
+  <div class="detail-page">
+    <div v-if="loading" class="loading-state">
+      <div class="loader"></div>
+      <p>Loading client...</p>
     </div>
 
     <template v-else-if="client">
-
       <!-- Header -->
-      <div class="flex items-start justify-between gap-4 shrink-0">
-        <div class="flex items-center gap-4">
-          <button class="flex items-center h-9 w-9 justify-center rounded-xl border border-border bg-background text-muted-foreground hover:bg-muted transition-colors" @click="$router.push('/admin/clients')">
-            <ArrowLeft class="h-4 w-4" />
+      <div class="page-header">
+        <div class="header-left">
+          <button class="back-btn" @click="$router.push('/admin/clients')">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M19 12H5M12 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
-          <div class="h-11 w-11 rounded-[11px] text-white text-sm font-bold flex items-center justify-center shrink-0" :style="{ background: client.chatbot_color || 'hsl(var(--primary))' }">
+          <div class="client-avatar" :style="{ background: client.chatbot_color || '#6366F1' }">
             {{ client.name.slice(0, 2).toUpperCase() }}
           </div>
           <div>
-            <h1 class="text-xl font-semibold text-foreground">{{ client.name }}</h1>
-            <a v-if="client.domain_url" :href="client.domain_url" target="_blank" class="text-xs text-primary hover:underline">{{ client.domain_url }}</a>
+            <h1 class="page-title">{{ client.name }}</h1>
+            <a v-if="client.domain_url" :href="client.domain_url" target="_blank" class="client-url">
+              {{ client.domain_url }}
+            </a>
           </div>
         </div>
-        <div class="flex items-center gap-2.5">
-          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wider" :class="ingestionBadgeClass(client.ingestion_status)">
+        <div class="header-actions">
+          <span class="ingestion-badge" :class="'ing-' + (client.ingestion_status || 'pending').toLowerCase()">
             {{ client.ingestion_status || 'PENDING' }}
           </span>
-          <Button size="sm" @click="triggerScrape" :disabled="scraping || !client.domain_url" class="gap-2">
-            <Loader2 v-if="scraping" class="h-3.5 w-3.5 animate-spin" />
-            <RefreshCw v-else class="h-3.5 w-3.5" />
-            {{ scraping ? 'Syncing…' : 'Sync Now' }}
-          </Button>
+          <button class="scrape-btn" @click="triggerScrape" :disabled="scraping || !client.domain_url">
+            <div v-if="scraping" class="mini-spinner white"></div>
+            <svg v-else width="15" height="15" fill="none" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            {{ scraping ? 'Syncing...' : 'Sync Now' }}
+          </button>
         </div>
       </div>
 
-      <!-- Scrape Progress -->
-      <div v-if="scrapeProgress" class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3.5">
-        <div class="flex items-center justify-between mb-2.5">
-          <span class="flex items-center gap-2 text-sm font-semibold text-blue-700">
-            <span class="h-2 w-2 rounded-full bg-blue-500 animate-pulse shrink-0"></span>
-            {{ scrapeProgress.phase === 'crawling' ? 'Crawling pages…' : 'Generating embeddings…' }}
+      <!-- Scrape Progress Bar -->
+      <div v-if="scrapeProgress" class="scrape-progress-wrap">
+        <div class="scrape-progress-header">
+          <span class="scrape-phase-label">
+            <span class="scrape-pulse-dot"></span>
+            {{ scrapeProgress.phase === 'crawling' ? 'Crawling pages...' : 'Generating embeddings...' }}
           </span>
-          <span v-if="scrapeProgress.total > 0" class="text-xs font-medium text-blue-600">{{ scrapeProgress.done }} / {{ scrapeProgress.total }} chunks</span>
-          <span v-else-if="scrapeProgress.phase === 'crawling'" class="text-xs font-medium text-blue-600">Discovering pages…</span>
+          <span v-if="scrapeProgress.total > 0" class="scrape-count-label">
+            {{ scrapeProgress.done }} / {{ scrapeProgress.total }} chunks
+          </span>
+          <span v-else-if="scrapeProgress.phase === 'crawling'" class="scrape-count-label">
+            Discovering pages...
+          </span>
         </div>
-        <div class="h-1.5 rounded-full bg-blue-200 overflow-hidden">
+        <div class="scrape-track">
           <div
-            class="h-full rounded-full transition-[width]"
-            :class="{ 'scrape-indeterminate': scrapeProgress.total === 0 }"
-            :style="{ width: scrapeProgress.total > 0 ? Math.round(scrapeProgress.done / scrapeProgress.total * 100) + '%' : '30%', background: 'linear-gradient(90deg,#3B82F6,#6366F1)' }"
+            class="scrape-fill"
+            :class="{ 'scrape-fill--indeterminate': scrapeProgress.total === 0 }"
+            :style="scrapeProgress.total > 0 ? { width: Math.round(scrapeProgress.done / scrapeProgress.total * 100) + '%' } : {}"
           ></div>
         </div>
-        <p class="text-[11px] text-blue-400 mt-2">This may take a few minutes depending on the size of your website.</p>
+        <p class="scrape-hint">This may take a few minutes depending on the size of your website.</p>
       </div>
 
       <!-- Tabs -->
-      <div class="flex border-b border-border gap-1">
-        <button
-          v-for="tab in tabs" :key="tab.id"
-          class="px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors"
-          :class="activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'"
-          @click="activeTab = tab.id"
-        >{{ tab.label }}</button>
+      <div class="tabs">
+        <button v-for="tab in tabs" :key="tab.id" class="tab" :class="{ active: activeTab === tab.id }" @click="activeTab = tab.id">
+          {{ tab.label }}
+        </button>
       </div>
 
-      <!-- ── OVERVIEW ── -->
-      <div v-if="activeTab === 'overview'" class="flex flex-col gap-5">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <Card v-for="stat in overviewStats" :key="stat.label">
-            <CardContent class="pt-4 pb-4">
-              <p class="text-xs text-muted-foreground mb-1">{{ stat.label }}</p>
-              <p class="text-2xl font-bold tracking-tight" :class="stat.color || 'text-foreground'">{{ stat.value }}</p>
-            </CardContent>
-          </Card>
+      <!-- Overview Tab -->
+      <div v-if="activeTab === 'overview'" class="tab-content">
+        <div class="overview-stats">
+          <div class="ov-stat">
+            <p class="ov-label">Total Sessions</p>
+            <p class="ov-value">{{ analytics?.total_sessions ?? '—' }}</p>
+          </div>
+          <div class="ov-stat">
+            <p class="ov-label">Hot Leads</p>
+            <p class="ov-value hot">{{ analytics?.hot_sessions ?? '—' }}</p>
+          </div>
+          <div class="ov-stat">
+            <p class="ov-label">Avg. Intent</p>
+            <p class="ov-value">{{ analytics?.avg_intent ?? '—' }}%</p>
+          </div>
+          <div class="ov-stat">
+            <p class="ov-label">Pages Ingested</p>
+            <p class="ov-value">{{ analytics?.pages_ingested ?? '—' }}</p>
+          </div>
         </div>
 
-        <Card v-if="analytics?.funnel">
-          <CardContent class="pt-5">
-            <h3 class="text-sm font-semibold text-foreground mb-4">Conversion Funnel</h3>
-            <div class="flex flex-col gap-3">
-              <div v-for="stage in funnelStages" :key="stage.key" class="flex items-center gap-3">
-                <span class="text-xs text-muted-foreground w-24 shrink-0">{{ stage.label }}</span>
-                <div class="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                  <div class="h-full rounded-full transition-[width]" :class="stage.barClass" :style="{ width: funnelWidth(stage.key) }"></div>
-                </div>
-                <span class="text-xs font-semibold text-foreground w-6 text-right">{{ analytics.funnel[stage.key] || 0 }}</span>
+        <!-- Funnel -->
+        <div v-if="analytics?.funnel" class="funnel-section">
+          <h3 class="section-title">Conversion Funnel</h3>
+          <div class="funnel">
+            <div v-for="stage in funnelStages" :key="stage.key" class="funnel-row">
+              <span class="funnel-label">{{ stage.label }}</span>
+              <div class="funnel-bar-wrap">
+                <div class="funnel-bar" :class="stage.color" :style="{ width: funnelWidth(stage.key) }"></div>
               </div>
+              <span class="funnel-count">{{ analytics.funnel[stage.key] || 0 }}</span>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
 
-        <Card>
-          <CardContent class="pt-5">
-            <div class="mb-4">
-              <h3 class="text-sm font-semibold text-foreground mb-0.5">WordPress Installation</h3>
-              <p class="text-xs text-muted-foreground">Choose the method that works best for your site.</p>
+        <!-- Embed Code -->
+        <div class="embed-section">
+          <div class="embed-header">
+            <div>
+              <h3 class="section-title" style="margin-bottom:4px;">WordPress Installation</h3>
+              <p class="embed-sub" style="margin-bottom:0;">Choose the method that works best for your site.</p>
             </div>
-            <div class="flex gap-2 mb-4">
-              <button class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors" :class="embedMethod === 'plugin' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'" @click="embedMethod = 'plugin'">
-                <Layers class="h-3.5 w-3.5" /> Plugin (Recommended)
+          </div>
+
+          <!-- Method tabs -->
+          <div class="method-tabs">
+            <button class="method-tab" :class="{ active: embedMethod === 'plugin' }" @click="embedMethod = 'plugin'">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Plugin (Recommended)
+            </button>
+            <button class="method-tab" :class="{ active: embedMethod === 'php' }" @click="embedMethod = 'php'">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="8 6 2 12 8 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              functions.php
+            </button>
+          </div>
+
+          <!-- Plugin method -->
+          <div v-if="embedMethod === 'plugin'" class="method-content">
+            <ol class="install-steps">
+              <li>In your WordPress dashboard, go to <strong>Plugins → Add New</strong> and search for <strong>"WPCode"</strong> (or "Insert Headers and Footers"). Install and activate it.</li>
+              <li>Go to <strong>Code Snippets → Header &amp; Footer</strong> in your WordPress menu.</li>
+              <li>Paste the snippet below into the <strong>Footer</strong> section and click <strong>Save Changes</strong>.</li>
+            </ol>
+            <div class="embed-code-wrap">
+              <code class="embed-code">{{ embedCode }}</code>
+              <button class="copy-btn" @click="copyCode(embedCode, 'plugin')">
+                <svg v-if="copiedKey !== 'plugin'" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>
+                <svg v-else width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round"/></svg>
+                {{ copiedKey === 'plugin' ? 'Copied!' : 'Copy' }}
               </button>
-              <button class="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors" :class="embedMethod === 'php' ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'" @click="embedMethod = 'php'">
-                <Code2 class="h-3.5 w-3.5" /> functions.php
+            </div>
+          </div>
+
+          <!-- functions.php method -->
+          <div v-if="embedMethod === 'php'" class="method-content">
+            <ol class="install-steps">
+              <li>In your WordPress dashboard, go to <strong>Appearance → Theme File Editor</strong>.</li>
+              <li>Select <strong>functions.php</strong> from the file list on the right.</li>
+              <li>Paste the snippet below at the bottom of the file and click <strong>Update File</strong>.</li>
+            </ol>
+            <div class="embed-code-wrap">
+              <code class="embed-code embed-code--php">{{ phpSnippet }}</code>
+              <button class="copy-btn" @click="copyCode(phpSnippet, 'php')">
+                <svg v-if="copiedKey !== 'php'" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>
+                <svg v-else width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" stroke="#22C55E" stroke-width="2.5" stroke-linecap="round"/></svg>
+                {{ copiedKey === 'php' ? 'Copied!' : 'Copy' }}
               </button>
             </div>
+          </div>
 
-            <div v-if="embedMethod === 'plugin'" class="flex flex-col gap-3">
-              <ol class="flex flex-col gap-2 pl-5 list-decimal">
-                <li class="text-xs text-muted-foreground leading-relaxed">In your WordPress dashboard, go to <strong class="text-foreground">Plugins → Add New</strong> and search for <strong class="text-foreground">"WPCode"</strong>. Install and activate it.</li>
-                <li class="text-xs text-muted-foreground leading-relaxed">Go to <strong class="text-foreground">Code Snippets → Header &amp; Footer</strong> in your WordPress menu.</li>
-                <li class="text-xs text-muted-foreground leading-relaxed">Paste the snippet below into the <strong class="text-foreground">Footer</strong> section and click <strong class="text-foreground">Save Changes</strong>.</li>
-              </ol>
-              <div class="flex items-start gap-3 rounded-lg bg-slate-900 px-4 py-3.5">
-                <code class="flex-1 text-xs text-indigo-300 font-mono leading-relaxed break-all">{{ embedCode }}</code>
-                <button class="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/10 text-slate-300 hover:bg-white/15 px-2.5 py-1.5 text-xs font-medium transition-colors shrink-0" @click="copyCode(embedCode, 'plugin')">
-                  <Check v-if="copiedKey === 'plugin'" class="h-3.5 w-3.5 text-emerald-400" />
-                  <Copy v-else class="h-3.5 w-3.5" />
-                  {{ copiedKey === 'plugin' ? 'Copied!' : 'Copy' }}
-                </button>
-              </div>
-            </div>
-
-            <div v-if="embedMethod === 'php'" class="flex flex-col gap-3">
-              <ol class="flex flex-col gap-2 pl-5 list-decimal">
-                <li class="text-xs text-muted-foreground leading-relaxed">In your WordPress dashboard, go to <strong class="text-foreground">Appearance → Theme File Editor</strong>.</li>
-                <li class="text-xs text-muted-foreground leading-relaxed">Select <strong class="text-foreground">functions.php</strong> from the file list on the right.</li>
-                <li class="text-xs text-muted-foreground leading-relaxed">Paste the snippet below at the bottom of the file and click <strong class="text-foreground">Update File</strong>.</li>
-              </ol>
-              <div class="flex items-start gap-3 rounded-lg bg-slate-900 px-4 py-3.5">
-                <code class="flex-1 text-xs text-indigo-300 font-mono leading-relaxed whitespace-pre break-all">{{ phpSnippet }}</code>
-                <button class="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/10 text-slate-300 hover:bg-white/15 px-2.5 py-1.5 text-xs font-medium transition-colors shrink-0" @click="copyCode(phpSnippet, 'php')">
-                  <Check v-if="copiedKey === 'php'" class="h-3.5 w-3.5 text-emerald-400" />
-                  <Copy v-else class="h-3.5 w-3.5" />
-                  {{ copiedKey === 'php' ? 'Copied!' : 'Copy' }}
-                </button>
-              </div>
-            </div>
-
-            <div class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3.5">
-              <p class="text-xs font-semibold text-emerald-700 mb-1.5">WordPress Webhook URL (WooCommerce auto-sync):</p>
-              <code class="block text-xs font-mono text-emerald-800 bg-black/5 rounded px-2.5 py-1.5 mb-2 break-all">{{ webhookUrl }}</code>
-              <p class="text-[11px] text-muted-foreground">In WooCommerce → Settings → Advanced → Webhooks — add a "Product Updated" webhook pointing to this URL to auto-sync content changes.</p>
-            </div>
-          </CardContent>
-        </Card>
+          <!-- Webhook -->
+          <div class="webhook-note">
+            <p class="note-title">WordPress Webhook URL (WooCommerce auto-sync):</p>
+            <code class="note-code">{{ webhookUrl }}</code>
+            <p class="note-sub">In WooCommerce → Settings → Advanced → Webhooks — add a "Product Updated" webhook pointing to this URL to auto-sync content changes.</p>
+          </div>
+        </div>
       </div>
 
-      <!-- ── ANALYTICS ── -->
-      <div v-if="activeTab === 'analytics'" class="flex flex-col gap-5">
-        <div v-if="!analytics" class="flex justify-center py-12">
-          <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
+      <!-- Analytics Tab -->
+      <div v-if="activeTab === 'analytics'" class="tab-content">
+        <div v-if="!analytics" class="loading-state"><div class="loader"></div></div>
         <template v-else>
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card v-for="stat in analyticsStats" :key="stat.label">
-              <CardContent class="pt-4 pb-4">
-                <p class="text-xs text-muted-foreground mb-1">{{ stat.label }}</p>
-                <p class="text-2xl font-bold tracking-tight" :class="stat.color || 'text-foreground'">{{ stat.value }}</p>
-              </CardContent>
-            </Card>
+
+          <!-- Top stat row -->
+          <div class="an-stats-row">
+            <div class="an-stat">
+              <p class="an-label">Total Sessions</p>
+              <p class="an-value">{{ analytics.total_sessions ?? 0 }}</p>
+            </div>
+            <div class="an-stat">
+              <p class="an-label">Avg Heat Score</p>
+              <p class="an-value" :class="analytics.avg_heat_score >= 70 ? 'hot' : analytics.avg_heat_score >= 40 ? 'warm' : ''">
+                {{ analytics.avg_heat_score ?? 0 }}%
+              </p>
+            </div>
+            <div class="an-stat">
+              <p class="an-label">Leads Captured</p>
+              <p class="an-value" style="color:#6366F1">{{ analytics.leads_captured ?? 0 }}</p>
+            </div>
+            <div class="an-stat">
+              <p class="an-label">Hot Sessions</p>
+              <p class="an-value hot">{{ analytics.hot_sessions ?? 0 }}</p>
+            </div>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <Card>
-              <CardContent class="pt-5">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Heat Distribution</h3>
-                <div class="flex h-3 rounded-full overflow-hidden gap-0.5 mb-3.5">
-                  <div class="rounded-full bg-blue-500 transition-all" :style="{ flex: analytics.heat_distribution?.cold || 0.01 }"></div>
-                  <div class="rounded-full bg-orange-500 transition-all" :style="{ flex: analytics.heat_distribution?.warm || 0.01 }"></div>
-                  <div class="rounded-full bg-red-500 transition-all" :style="{ flex: analytics.heat_distribution?.hot || 0.01 }"></div>
-                </div>
-                <div class="flex gap-4">
-                  <div v-for="item in heatLegend" :key="item.label" class="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <span class="h-2 w-2 rounded-full shrink-0" :class="item.dot"></span>
-                    {{ item.label }} <strong class="text-foreground ml-1">{{ item.count ?? 0 }}</strong>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <!-- Heat Distribution + Avg EMA Gauges -->
+          <div class="an-two-col">
+            <div class="an-card">
+              <h3 class="an-card-title">Heat Distribution</h3>
+              <div class="an-heat-bar">
+                <div class="an-hd-cold" :style="{ flex: analytics.heat_distribution?.cold || 0.01 }"></div>
+                <div class="an-hd-warm" :style="{ flex: analytics.heat_distribution?.warm || 0.01 }"></div>
+                <div class="an-hd-hot"  :style="{ flex: analytics.heat_distribution?.hot  || 0.01 }"></div>
+              </div>
+              <div class="an-heat-legend">
+                <div class="an-hl-item"><span class="an-dot cold"></span><span>Cold</span><strong>{{ analytics.heat_distribution?.cold ?? 0 }}</strong></div>
+                <div class="an-hl-item"><span class="an-dot warm"></span><span>Warm</span><strong>{{ analytics.heat_distribution?.warm ?? 0 }}</strong></div>
+                <div class="an-hl-item"><span class="an-dot hot"></span><span>Hot</span><strong>{{ analytics.heat_distribution?.hot ?? 0 }}</strong></div>
+              </div>
+            </div>
 
-            <Card>
-              <CardContent class="pt-5">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Avg Engagement Scores</h3>
-                <div class="flex flex-col gap-3.5">
-                  <div v-for="g in emaGauges" :key="g.label" class="flex items-center gap-3">
-                    <span class="text-xs text-muted-foreground w-12 shrink-0">{{ g.label }}</span>
-                    <div class="flex-1 h-2 rounded-full bg-muted overflow-hidden">
-                      <div class="h-full rounded-full transition-[width]" :style="{ width: (g.value || 0) + '%', background: g.gradient }"></div>
-                    </div>
-                    <span class="text-xs font-semibold text-foreground w-9 text-right">{{ g.value ?? 0 }}%</span>
-                  </div>
+            <div class="an-card">
+              <h3 class="an-card-title">Avg Engagement Scores</h3>
+              <div class="an-gauges">
+                <div class="an-gauge-row">
+                  <span class="an-gauge-label">Intent</span>
+                  <div class="an-gauge-bar"><div class="an-gauge-fill intent" :style="{ width: (analytics.avg_intent || 0) + '%' }"></div></div>
+                  <span class="an-gauge-val">{{ analytics.avg_intent ?? 0 }}%</span>
                 </div>
-              </CardContent>
-            </Card>
+                <div class="an-gauge-row">
+                  <span class="an-gauge-label">Budget</span>
+                  <div class="an-gauge-bar"><div class="an-gauge-fill budget" :style="{ width: (analytics.avg_budget || 0) + '%' }"></div></div>
+                  <span class="an-gauge-val">{{ analytics.avg_budget ?? 0 }}%</span>
+                </div>
+                <div class="an-gauge-row">
+                  <span class="an-gauge-label">Urgency</span>
+                  <div class="an-gauge-bar"><div class="an-gauge-fill urgency" :style="{ width: (analytics.avg_urgency || 0) + '%' }"></div></div>
+                  <span class="an-gauge-val">{{ analytics.avg_urgency ?? 0 }}%</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <Card>
-            <CardContent class="pt-5">
-              <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Sessions — Last 14 Days</h3>
-              <svg v-if="analytics.daily_trend?.length" class="w-full h-16 block" viewBox="0 0 340 60" preserveAspectRatio="none">
+          <!-- Daily Trend Sparkline -->
+          <div class="an-card an-full">
+            <h3 class="an-card-title">Sessions — Last 14 Days</h3>
+            <div class="an-spark-wrap">
+              <svg v-if="analytics.daily_trend?.length" class="an-spark" viewBox="0 0 340 60" preserveAspectRatio="none">
                 <defs>
                   <linearGradient id="anGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stop-color="hsl(var(--primary))" stop-opacity="0.25"/>
-                    <stop offset="100%" stop-color="hsl(var(--primary))" stop-opacity="0"/>
+                    <stop offset="0%" stop-color="#6366F1" stop-opacity="0.25"/>
+                    <stop offset="100%" stop-color="#6366F1" stop-opacity="0"/>
                   </linearGradient>
                 </defs>
                 <polyline :points="analyticsSparklineArea" fill="url(#anGrad)" stroke="none"/>
-                <polyline :points="analyticsSparklinePoints" fill="none" stroke="hsl(var(--primary))" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                <polyline :points="analyticsSparklinePoints" fill="none" stroke="#6366F1" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
               </svg>
-              <p v-else class="text-xs text-muted-foreground text-center py-5">No sessions in the last 14 days</p>
-              <div v-if="analytics.daily_trend?.length" class="flex justify-between text-[11px] text-muted-foreground mt-1">
-                <span>{{ analytics.daily_trend[0].date }}</span>
-                <span>{{ analytics.daily_trend[analytics.daily_trend.length - 1].date }}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <Card>
-              <CardContent class="pt-5">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Kanban Breakdown</h3>
-                <div class="flex flex-col gap-2.5">
-                  <div v-for="(col, key) in kanbanCols" :key="key" class="flex items-center gap-2.5">
-                    <span class="h-2.5 w-2.5 rounded-full shrink-0" :style="{ background: col.color }"></span>
-                    <span class="flex-1 text-xs text-muted-foreground">{{ col.label }}</span>
-                    <span class="text-xs font-bold text-foreground">{{ analytics.kanban_breakdown?.[key] ?? 0 }}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardContent class="pt-5">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">Behavioral Events</h3>
-                <div class="flex flex-col gap-3">
-                  <div v-for="ev in behavioralEvents" :key="ev.label" class="flex items-center gap-3">
-                    <div class="h-9 w-9 rounded-xl flex items-center justify-center shrink-0" :style="{ background: ev.bgColor, color: ev.iconColor }">
-                      <component :is="ev.icon" class="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p class="text-xs text-muted-foreground">{{ ev.label }}</p>
-                      <p class="text-lg font-bold text-foreground">{{ ev.value }}</p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              <p v-else class="an-no-data">No sessions in the last 14 days</p>
+            </div>
+            <div class="an-spark-labels" v-if="analytics.daily_trend?.length">
+              <span>{{ analytics.daily_trend[0].date }}</span>
+              <span>{{ analytics.daily_trend[analytics.daily_trend.length - 1].date }}</span>
+            </div>
           </div>
+
+          <!-- Kanban Breakdown + Analytics Events -->
+          <div class="an-two-col">
+            <div class="an-card">
+              <h3 class="an-card-title">Kanban Breakdown</h3>
+              <div class="an-kanban-list">
+                <div v-for="(col, key) in kanbanCols" :key="key" class="an-kanban-row">
+                  <span class="an-kanban-dot" :style="{ background: col.color }"></span>
+                  <span class="an-kanban-label">{{ col.label }}</span>
+                  <span class="an-kanban-count">{{ analytics.kanban_breakdown?.[key] ?? 0 }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="an-card">
+              <h3 class="an-card-title">Behavioral Events</h3>
+              <div class="an-events-list">
+                <div class="an-event-row">
+                  <div class="an-event-icon" style="background:rgba(99,102,241,0.1);color:#6366F1">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+                  </div>
+                  <div><p class="an-event-label">Page Views</p><p class="an-event-val">{{ analytics.analytics_events?.page_views ?? 0 }}</p></div>
+                </div>
+                <div class="an-event-row">
+                  <div class="an-event-icon" style="background:rgba(249,115,22,0.1);color:#F97316">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </div>
+                  <div><p class="an-event-label">Exit Intent Triggers</p><p class="an-event-val">{{ analytics.analytics_events?.exit_intent_count ?? 0 }}</p></div>
+                </div>
+                <div class="an-event-row">
+                  <div class="an-event-icon" style="background:rgba(34,197,94,0.1);color:#22C55E">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </div>
+                  <div><p class="an-event-label">Pricing Page Visits</p><p class="an-event-val">{{ analytics.analytics_events?.pricing_page_visits ?? 0 }}</p></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </template>
       </div>
 
-      <!-- ── SESSIONS ── -->
-      <div v-if="activeTab === 'sessions'" class="flex flex-col gap-4">
-        <div class="flex flex-wrap gap-2 items-center">
-          <div class="relative">
-            <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <input v-model="sessionFilters.q" class="pl-8 pr-3 h-8 rounded-lg border border-border bg-background text-xs focus:outline-none focus:ring-1 focus:ring-primary w-40" placeholder="Search email…" />
+      <!-- Settings Tab -->
+      <div v-if="activeTab === 'settings'" class="tab-content">
+        <div class="settings-card">
+          <h3 class="settings-section">Chatbot Branding</h3>
+          <div class="settings-grid">
+            <div class="field">
+              <label>Display Name</label>
+              <input v-model="settingsForm.chatbot_name" type="text" placeholder="AI Assistant" />
+            </div>
+            <div class="field">
+              <label>Theme Color</label>
+              <div class="color-field">
+                <input type="color" v-model="settingsForm.chatbot_color" class="color-picker" />
+                <input v-model="settingsForm.chatbot_color" type="text" class="color-text" />
+              </div>
+            </div>
+            <div class="field full">
+              <label>Logo URL (optional)</label>
+              <input v-model="settingsForm.chatbot_logo_url" type="url" placeholder="https://..." />
+            </div>
           </div>
-          <select v-model="sessionFilters.state" class="h-8 rounded-lg border border-border bg-background text-xs px-2.5 focus:outline-none focus:ring-1 focus:ring-primary">
+
+          <h3 class="settings-section" style="margin-top: 24px;">FOMO Engine</h3>
+          <div class="settings-grid">
+            <div class="field full">
+              <label>Discount Code</label>
+              <input v-model="settingsForm.discount_code" type="text" placeholder="SAVE20" />
+              <p class="field-hint">Sent to high-intent visitors (heat score ≥ 75)</p>
+            </div>
+            <div class="field full">
+              <label>CTA Message</label>
+              <input v-model="settingsForm.cta_message" type="text" />
+            </div>
+            <div class="field">
+              <label>Countdown (seconds)</label>
+              <input v-model="settingsForm.fomo_countdown_seconds" type="number" min="60" max="3600" />
+            </div>
+          </div>
+
+          <div v-if="saveError" class="form-error">{{ saveError }}</div>
+          <div v-if="saveSuccess" class="form-success">Settings saved!</div>
+
+          <button class="save-btn" @click="saveSettings" :disabled="saving">
+            <div v-if="saving" class="mini-spinner white"></div>
+            <span v-else>Save Changes</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Sessions Tab -->
+      <div v-if="activeTab === 'sessions'" class="tab-content">
+
+        <!-- Filter bar -->
+        <div class="session-filters">
+          <input
+            v-model="sessionFilters.q"
+            class="sf-input sf-search"
+            placeholder="Search email..."
+          />
+          <select v-model="sessionFilters.state" class="sf-select">
             <option value="">All states</option>
             <option value="RESEARCH">Research</option>
             <option value="EVALUATION">Evaluation</option>
@@ -265,153 +359,87 @@
             <option value="RECOVERY">Recovery</option>
             <option value="READY_TO_BUY">Ready to Buy</option>
           </select>
-          <input v-model="sessionFilters.date_from" type="date" class="h-8 rounded-lg border border-border bg-background text-xs px-2.5 w-32 focus:outline-none focus:ring-1 focus:ring-primary" />
-          <input v-model="sessionFilters.date_to" type="date" class="h-8 rounded-lg border border-border bg-background text-xs px-2.5 w-32 focus:outline-none focus:ring-1 focus:ring-primary" />
-          <input v-model="sessionFilters.min_heat" type="number" min="0" max="100" class="h-8 rounded-lg border border-border bg-background text-xs px-2.5 w-24 focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Min heat" />
-          <input v-model="sessionFilters.max_heat" type="number" min="0" max="100" class="h-8 rounded-lg border border-border bg-background text-xs px-2.5 w-24 focus:outline-none focus:ring-1 focus:ring-primary" placeholder="Max heat" />
-          <label class="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground select-none">
-            <input v-model="sessionFilters.has_lead" type="checkbox" class="accent-primary" /> Has lead
+          <input v-model="sessionFilters.date_from" type="date" class="sf-input sf-date" title="From date" />
+          <input v-model="sessionFilters.date_to"   type="date" class="sf-input sf-date" title="To date" />
+          <input v-model="sessionFilters.min_heat" type="number" min="0" max="100" class="sf-input sf-heat" placeholder="Min heat" />
+          <input v-model="sessionFilters.max_heat" type="number" min="0" max="100" class="sf-input sf-heat" placeholder="Max heat" />
+          <label class="sf-toggle">
+            <input v-model="sessionFilters.has_lead" type="checkbox" />
+            <span>Has lead</span>
           </label>
         </div>
 
-        <div v-if="loadingSessions" class="flex justify-center py-12">
-          <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
+        <div v-if="loadingSessions" class="loading-state">
+          <div class="loader"></div>
         </div>
-        <div v-else-if="!sessions.length" class="flex flex-col items-center gap-2 py-12 text-muted-foreground">
-          <MessageSquare class="h-8 w-8 opacity-30" />
-          <p class="text-sm">No sessions match the current filters.</p>
+        <div v-else-if="!sessions.length" class="empty-state">
+          <p>No sessions match the current filters.</p>
         </div>
-        <Card v-else>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b border-border">
-                  <th class="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Visitor</th>
-                  <th class="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Heat</th>
-                  <th class="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">State</th>
-                  <th class="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Msgs</th>
-                  <th class="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Last Active</th>
-                  <th class="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="s in sessions" :key="s.session_id" class="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                  <td class="px-4 py-3">
-                    <p class="text-xs font-mono text-muted-foreground">{{ s.visitor_id?.slice(0, 16) }}…</p>
-                    <p v-if="s.lead_email" class="text-[11px] text-primary">{{ s.lead_email }}</p>
-                  </td>
-                  <td class="px-4 py-3">
-                    <p class="text-sm font-bold mb-1" :class="heatTextClass(s.heat_score)">{{ s.heat_score }}%</p>
-                    <div class="h-1 w-14 rounded-full bg-muted overflow-hidden">
-                      <div class="h-full rounded-full" :style="{ width: s.heat_score + '%', background: heatColor(s.heat_score) }"></div>
+        <div v-else class="sessions-table-wrap">
+          <table class="sessions-table">
+            <thead>
+              <tr>
+                <th>Visitor</th>
+                <th>Heat</th>
+                <th>State</th>
+                <th>Messages</th>
+                <th>Last Active</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in sessions" :key="s.session_id">
+                <td class="visitor-cell">
+                  <span class="visitor-id">{{ s.visitor_id?.slice(0, 16) }}...</span>
+                  <span v-if="s.lead_email" class="lead-email">{{ s.lead_email }}</span>
+                </td>
+                <td>
+                  <div class="heat-cell">
+                    <span class="heat-val" :class="heatClass(s.heat_score)">{{ s.heat_score }}%</span>
+                    <div class="mini-heat-bar">
+                      <div :style="{ width: s.heat_score + '%', background: heatColor(s.heat_score) }"></div>
                     </div>
-                  </td>
-                  <td class="px-4 py-3">
-                    <span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider" :class="stateClass(s.conversation_state)">
-                      {{ s.conversation_state.replace('_', ' ') }}
-                    </span>
-                  </td>
-                  <td class="px-4 py-3 text-sm font-semibold text-foreground">{{ s.message_count }}</td>
-                  <td class="px-4 py-3 text-xs text-muted-foreground">{{ timeAgo(s.updated_at) }}</td>
-                  <td class="px-4 py-3">
-                    <button class="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" @click="viewSession(s)">View</button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      </div>
-
-      <!-- ── SETTINGS ── -->
-      <div v-if="activeTab === 'settings'">
-        <Card>
-          <CardContent class="pt-5 flex flex-col gap-6">
-            <div>
-              <h3 class="text-sm font-semibold text-foreground pb-3 border-b border-border mb-4">Chatbot Branding</h3>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-xs font-medium text-muted-foreground">Display Name</label>
-                  <input v-model="settingsForm.chatbot_name" type="text" placeholder="AI Assistant" class="h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-xs font-medium text-muted-foreground">Theme Color</label>
-                  <div class="flex gap-2 items-center">
-                    <input type="color" v-model="settingsForm.chatbot_color" class="h-9 w-9 rounded-lg border border-border p-0.5 cursor-pointer" />
-                    <input v-model="settingsForm.chatbot_color" type="text" class="flex-1 h-9 rounded-lg border border-border bg-background px-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
                   </div>
-                </div>
-                <div class="flex flex-col gap-1.5 sm:col-span-2">
-                  <label class="text-xs font-medium text-muted-foreground">Logo URL (optional)</label>
-                  <input v-model="settingsForm.chatbot_logo_url" type="url" placeholder="https://…" class="h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h3 class="text-sm font-semibold text-foreground pb-3 border-b border-border mb-4">FOMO Engine</h3>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div class="flex flex-col gap-1.5 sm:col-span-2">
-                  <label class="text-xs font-medium text-muted-foreground">Discount Code</label>
-                  <input v-model="settingsForm.discount_code" type="text" placeholder="SAVE20" class="h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-                  <p class="text-[11px] text-muted-foreground">Sent to high-intent visitors (heat score ≥ 75)</p>
-                </div>
-                <div class="flex flex-col gap-1.5 sm:col-span-2">
-                  <label class="text-xs font-medium text-muted-foreground">CTA Message</label>
-                  <input v-model="settingsForm.cta_message" type="text" class="h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-                </div>
-                <div class="flex flex-col gap-1.5">
-                  <label class="text-xs font-medium text-muted-foreground">Countdown (seconds)</label>
-                  <input v-model="settingsForm.fomo_countdown_seconds" type="number" min="60" max="3600" class="h-9 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary" />
-                </div>
-              </div>
-            </div>
-
-            <div v-if="saveError" class="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{{ saveError }}</div>
-            <div v-if="saveSuccess" class="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">Settings saved!</div>
-
-            <Button @click="saveSettings" :disabled="saving" class="w-fit gap-2">
-              <Loader2 v-if="saving" class="h-4 w-4 animate-spin" />
-              Save Changes
-            </Button>
-          </CardContent>
-        </Card>
+                </td>
+                <td>
+                  <span class="state-badge" :class="stateClass(s.conversation_state)">
+                    {{ s.conversation_state.replace('_', ' ') }}
+                  </span>
+                </td>
+                <td class="msgs-cell">{{ s.message_count }}</td>
+                <td class="time-cell">{{ timeAgo(s.updated_at) }}</td>
+                <td>
+                  <button class="view-session-btn" @click="viewSession(s)">View</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
-
     </template>
 
     <!-- Session Chat Modal -->
-    <div v-if="selectedSession" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" @click.self="selectedSession = null">
-      <div class="bg-background border border-border rounded-xl w-full max-w-lg max-h-[80vh] flex flex-col shadow-xl">
-        <div class="flex items-start justify-between px-5 py-4 border-b border-border">
+    <div v-if="selectedSession" class="modal-overlay" @click.self="selectedSession = null">
+      <div class="modal">
+        <div class="modal-header">
           <div>
-            <h3 class="text-base font-semibold text-foreground">Chat History</h3>
-            <p class="text-xs text-muted-foreground font-mono mt-0.5">{{ selectedSession.visitor_id }}</p>
+            <h3>Chat History</h3>
+            <p class="modal-sub">{{ selectedSession.visitor_id }}</p>
           </div>
-          <button class="rounded-md p-1 text-muted-foreground hover:bg-muted transition-colors" @click="selectedSession = null">
-            <X class="h-4 w-4" />
+          <button class="modal-close" @click="selectedSession = null">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           </button>
         </div>
-        <div v-if="loadingSession" class="flex justify-center items-center py-12">
-          <Loader2 class="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-        <div v-else class="flex flex-col gap-3 overflow-y-auto px-5 py-4">
-          <div
-            v-for="(msg, i) in sessionDetail?.chat_history || []"
-            :key="i"
-            class="flex flex-col max-w-[85%]"
-            :class="msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'"
-          >
-            <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{{ msg.role === 'user' ? 'Visitor' : 'AI' }}</span>
-            <p class="text-sm leading-relaxed px-3.5 py-2.5 rounded-xl m-0" :class="msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-sm' : 'bg-muted text-foreground rounded-bl-sm'">
-              {{ msg.message || msg.content }}
-            </p>
+        <div v-if="loadingSession" class="modal-loading"><div class="loader"></div></div>
+        <div v-else class="chat-history">
+          <div v-for="(msg, i) in sessionDetail?.chat_history || []" :key="i" class="chat-msg" :class="msg.role === 'user' ? 'user-msg' : 'ai-msg'">
+            <span class="msg-role">{{ msg.role === 'user' ? 'Visitor' : 'AI' }}</span>
+            <p class="msg-text">{{ msg.message || msg.content }}</p>
           </div>
-          <p v-if="!sessionDetail?.chat_history?.length" class="text-sm text-muted-foreground text-center py-6">No chat history.</p>
+          <p v-if="!sessionDetail?.chat_history?.length" class="no-history">No chat history.</p>
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -419,10 +447,6 @@
 import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
-import { ArrowLeft, RefreshCw, Loader2, Search, MessageSquare, X, Copy, Check, Layers, Code2, Eye, DoorOpen, Tag } from 'lucide-vue-next'
-import Card from '@/components/ui/Card.vue'
-import CardContent from '@/components/ui/CardContent.vue'
-import Button from '@/components/ui/Button.vue'
 
 const route = useRoute()
 const api = useAdminApi()
@@ -446,39 +470,51 @@ const scrapeProgress = ref(null)
 let _scrapePoller = null
 
 const sessionFilters = reactive({
-  state: '', date_from: '', date_to: '', min_heat: '', max_heat: '', has_lead: false, q: '',
+  state: '',
+  date_from: '',
+  date_to: '',
+  min_heat: '',
+  max_heat: '',
+  has_lead: false,
+  q: '',
 })
 
 const tabs = [
-  { id: 'overview',  label: 'Overview' },
+  { id: 'overview', label: 'Overview' },
   { id: 'analytics', label: 'Analytics' },
-  { id: 'sessions',  label: 'Sessions' },
-  { id: 'settings',  label: 'Settings' },
+  { id: 'sessions', label: 'Sessions' },
+  { id: 'settings', label: 'Settings' },
 ]
 
 const funnelStages = [
-  { key: 'RESEARCH',    label: 'Research',    barClass: 'bg-blue-500' },
-  { key: 'EVALUATION',  label: 'Evaluation',  barClass: 'bg-yellow-500' },
-  { key: 'OBJECTION',   label: 'Objection',   barClass: 'bg-red-500' },
-  { key: 'RECOVERY',    label: 'Recovery',    barClass: 'bg-orange-500' },
-  { key: 'READY_TO_BUY', label: 'Ready to Buy', barClass: 'bg-emerald-500' },
+  { key: 'RESEARCH', label: 'Research', color: 'bar-blue' },
+  { key: 'EVALUATION', label: 'Evaluation', color: 'bar-yellow' },
+  { key: 'OBJECTION', label: 'Objection', color: 'bar-red' },
+  { key: 'RECOVERY', label: 'Recovery', color: 'bar-orange' },
+  { key: 'READY_TO_BUY', label: 'Ready to Buy', color: 'bar-green' },
 ]
 
 const kanbanCols = {
-  NEW:       { label: 'New',       color: '#94A3B8' },
-  CONTACTED: { label: 'Contacted', color: '#3B82F6' },
-  QUALIFIED: { label: 'Qualified', color: '#F97316' },
-  CONVERTED: { label: 'Converted', color: '#22C55E' },
-  LOST:      { label: 'Lost',      color: '#EF4444' },
+  NEW:          { label: 'New',          color: '#94A3B8' },
+  CONTACTED:    { label: 'Contacted',    color: '#3B82F6' },
+  QUALIFIED:    { label: 'Qualified',    color: '#F97316' },
+  CONVERTED:    { label: 'Converted',    color: '#22C55E' },
+  LOST:         { label: 'Lost',         color: '#EF4444' },
 }
 
 const settingsForm = ref({
-  chatbot_name: '', chatbot_color: '#3B82F6', chatbot_logo_url: '',
-  discount_code: '', cta_message: '', fomo_countdown_seconds: 600,
+  chatbot_name: '',
+  chatbot_color: '#3B82F6',
+  chatbot_logo_url: '',
+  discount_code: '',
+  cta_message: '',
+  fomo_countdown_seconds: 600,
 })
 
 const embedCode = computed(() =>
-  client.value ? `<script src="${WIDGET_URL}?client_id=${client.value.id}"><\/script>` : ''
+  client.value
+    ? `<script src="${WIDGET_URL}?client_id=${client.value.id}"><\/script>`
+    : ''
 )
 
 const phpSnippet = computed(() =>
@@ -493,102 +529,10 @@ const webhookUrl = computed(() =>
     : ''
 )
 
-const overviewStats = computed(() => [
-  { label: 'Total Sessions', value: analytics.value?.total_sessions ?? '—' },
-  { label: 'Hot Leads',      value: analytics.value?.hot_sessions ?? '—', color: 'text-red-500' },
-  { label: 'Avg. Intent',    value: analytics.value?.avg_intent != null ? analytics.value.avg_intent + '%' : '—' },
-  { label: 'Pages Ingested', value: analytics.value?.pages_ingested ?? '—' },
-])
-
-const analyticsStats = computed(() => [
-  { label: 'Total Sessions', value: analytics.value?.total_sessions ?? 0 },
-  { label: 'Avg Heat Score', value: (analytics.value?.avg_heat_score ?? 0) + '%', color: (analytics.value?.avg_heat_score || 0) >= 70 ? 'text-red-500' : (analytics.value?.avg_heat_score || 0) >= 40 ? 'text-orange-500' : '' },
-  { label: 'Leads Captured', value: analytics.value?.leads_captured ?? 0, color: 'text-primary' },
-  { label: 'Hot Sessions',   value: analytics.value?.hot_sessions ?? 0, color: 'text-red-500' },
-])
-
-const heatLegend = computed(() => [
-  { label: 'Cold', dot: 'bg-blue-500',   count: analytics.value?.heat_distribution?.cold },
-  { label: 'Warm', dot: 'bg-orange-500', count: analytics.value?.heat_distribution?.warm },
-  { label: 'Hot',  dot: 'bg-red-500',    count: analytics.value?.heat_distribution?.hot },
-])
-
-const emaGauges = computed(() => [
-  { label: 'Intent', value: analytics.value?.avg_intent,  gradient: 'linear-gradient(90deg,#6366F1,#8B5CF6)' },
-  { label: 'Budget', value: analytics.value?.avg_budget,  gradient: 'linear-gradient(90deg,#22C55E,#16A34A)' },
-  { label: 'Urgency',value: analytics.value?.avg_urgency, gradient: 'linear-gradient(90deg,#F97316,#EF4444)' },
-])
-
-const behavioralEvents = computed(() => [
-  { label: 'Page Views',           value: analytics.value?.analytics_events?.page_views ?? 0,          icon: Eye,     bgColor: 'rgba(99,102,241,0.1)', iconColor: '#6366F1' },
-  { label: 'Exit Intent Triggers', value: analytics.value?.analytics_events?.exit_intent_count ?? 0,   icon: DoorOpen,bgColor: 'rgba(249,115,22,0.1)',  iconColor: '#F97316' },
-  { label: 'Pricing Page Visits',  value: analytics.value?.analytics_events?.pricing_page_visits ?? 0, icon: Tag,     bgColor: 'rgba(34,197,94,0.1)',   iconColor: '#22C55E' },
-])
-
-const analyticsSparklinePoints = computed(() => {
-  const trend = analytics.value?.daily_trend
-  if (!trend || trend.length < 2) return ''
-  const W = 340, H = 60, PAD = 4
-  const maxVal = Math.max(...trend.map(d => d.count), 1)
-  return trend.map((d, i) => {
-    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
-    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  }).join(' ')
-})
-
-const analyticsSparklineArea = computed(() => {
-  const trend = analytics.value?.daily_trend
-  if (!trend || trend.length < 2) return ''
-  const W = 340, H = 60, PAD = 4
-  const maxVal = Math.max(...trend.map(d => d.count), 1)
-  const pts = trend.map((d, i) => {
-    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
-    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
-    return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
-  return `${pts[0].split(',')[0]},${H} ${pts.join(' ')} ${pts[pts.length - 1].split(',')[0]},${H}`
-})
-
-function ingestionBadgeClass(status) {
-  const s = (status || 'pending').toLowerCase()
-  if (s === 'running') return 'bg-blue-50 text-blue-600'
-  if (s === 'done')    return 'bg-emerald-50 text-emerald-600'
-  if (s === 'failed')  return 'bg-red-50 text-red-600'
-  return 'bg-muted text-muted-foreground'
-}
-
-function heatTextClass(score) {
-  if ((score || 0) >= 70) return 'text-red-500'
-  if ((score || 0) >= 40) return 'text-orange-500'
-  return 'text-primary'
-}
-
-function heatColor(score) {
-  if ((score || 0) >= 70) return 'linear-gradient(90deg,#EF4444,#F97316)'
-  if ((score || 0) >= 40) return 'linear-gradient(90deg,#F97316,#EAB308)'
-  return 'linear-gradient(90deg,#3B82F6,#06B6D4)'
-}
-
-function stateClass(state) {
-  const map = { RESEARCH: 'bg-blue-50 text-blue-700', EVALUATION: 'bg-yellow-50 text-yellow-700', OBJECTION: 'bg-red-50 text-red-700', RECOVERY: 'bg-orange-50 text-orange-700', READY_TO_BUY: 'bg-emerald-50 text-emerald-700' }
-  return map[state] || 'bg-blue-50 text-blue-700'
-}
-
 function funnelWidth(key) {
   if (!analytics.value?.funnel) return '0%'
   const max = Math.max(...Object.values(analytics.value.funnel), 1)
   return ((analytics.value.funnel[key] || 0) / max * 100) + '%'
-}
-
-function timeAgo(iso) {
-  const diff = Date.now() - new Date(iso)
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m}m ago`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h ago`
-  return `${Math.floor(h / 24)}d ago`
 }
 
 async function loadClient() {
@@ -599,6 +543,8 @@ async function loadClient() {
       api.getClientAnalytics(route.params.id),
     ])
     client.value = clientData
+    // Flatten period-delta envelope {value, previous, delta} → plain numbers
+    // so all existing template bindings continue to work unchanged
     const flat = {}
     for (const [k, v] of Object.entries(analyticsData || {})) {
       flat[k] = (v && typeof v === 'object' && 'value' in v) ? v.value : v
@@ -623,13 +569,13 @@ async function loadSessions() {
   loadingSessions.value = true
   try {
     const params = {}
-    if (sessionFilters.state)     params.state     = sessionFilters.state
-    if (sessionFilters.date_from) params.date_from = sessionFilters.date_from
-    if (sessionFilters.date_to)   params.date_to   = sessionFilters.date_to
-    if (sessionFilters.min_heat)  params.min_heat  = sessionFilters.min_heat
-    if (sessionFilters.max_heat)  params.max_heat  = sessionFilters.max_heat
-    if (sessionFilters.has_lead)  params.has_lead  = 'true'
-    if (sessionFilters.q)         params.q         = sessionFilters.q
+    if (sessionFilters.state)     params.state      = sessionFilters.state
+    if (sessionFilters.date_from) params.date_from  = sessionFilters.date_from
+    if (sessionFilters.date_to)   params.date_to    = sessionFilters.date_to
+    if (sessionFilters.min_heat)  params.min_heat   = sessionFilters.min_heat
+    if (sessionFilters.max_heat)  params.max_heat   = sessionFilters.max_heat
+    if (sessionFilters.has_lead)  params.has_lead   = 'true'
+    if (sessionFilters.q)         params.q          = sessionFilters.q
     sessions.value = await api.getClientSessions(route.params.id, params) || []
   } catch {}
   loadingSessions.value = false
@@ -660,7 +606,9 @@ function _startProgressPolling() {
   _scrapePoller = setInterval(async () => {
     try {
       const data = await api.getScrapeProgress(route.params.id)
-      if (data.phase) scrapeProgress.value = { phase: data.phase, done: data.done, total: data.total }
+      if (data.phase) {
+        scrapeProgress.value = { phase: data.phase, done: data.done, total: data.total }
+      }
       client.value.ingestion_status = data.status
       if (data.status === 'DONE' || data.status === 'FAILED') {
         clearInterval(_scrapePoller)
@@ -711,15 +659,500 @@ async function copyCode(text, key) {
   } catch {}
 }
 
+function heatClass(score) {
+  if (score >= 70) return 'hot'
+  if (score >= 40) return 'warm'
+  return 'cool'
+}
+
+function heatColor(score) {
+  if (score >= 70) return 'linear-gradient(90deg, #EF4444, #F97316)'
+  if (score >= 40) return 'linear-gradient(90deg, #F97316, #EAB308)'
+  return 'linear-gradient(90deg, #3B82F6, #06B6D4)'
+}
+
+function stateClass(state) {
+  const map = { RESEARCH: 'state-blue', EVALUATION: 'state-yellow', OBJECTION: 'state-red', RECOVERY: 'state-orange', READY_TO_BUY: 'state-green' }
+  return map[state] || 'state-blue'
+}
+
+function timeAgo(iso) {
+  const diff = Date.now() - new Date(iso)
+  const m = Math.floor(diff / 60000)
+  if (m < 1) return 'just now'
+  if (m < 60) return `${m}m ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  return `${Math.floor(h / 24)}d ago`
+}
+
+// Sparkline computed properties for the analytics tab
+const analyticsSparklinePoints = computed(() => {
+  const trend = analytics.value?.daily_trend
+  if (!trend || trend.length < 2) return ''
+  const W = 340, H = 60, PAD = 4
+  const maxVal = Math.max(...trend.map(d => d.count), 1)
+  return trend.map((d, i) => {
+    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+})
+
+const analyticsSparklineArea = computed(() => {
+  const trend = analytics.value?.daily_trend
+  if (!trend || trend.length < 2) return ''
+  const W = 340, H = 60, PAD = 4
+  const maxVal = Math.max(...trend.map(d => d.count), 1)
+  const pts = trend.map((d, i) => {
+    const x = PAD + (i / (trend.length - 1)) * (W - PAD * 2)
+    const y = H - PAD - (d.count / maxVal) * (H - PAD * 2)
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  })
+  return `${pts[0].split(',')[0]},${H} ${pts.join(' ')} ${pts[pts.length - 1].split(',')[0]},${H}`
+})
+
 onMounted(loadClient)
 watch(activeTab, (tab) => { if (tab === 'sessions') loadSessions() })
 watch(sessionFilters, onFilterChange)
 </script>
 
 <style scoped>
+/* ── Session filter bar ──────────────────────────────────────────────── */
+.session-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sf-input, .sf-select {
+  height: 34px;
+  padding: 0 10px;
+  background: #1E293B;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  color: #CBD5E1;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.sf-input:focus, .sf-select:focus { border-color: #6366F1; }
+.sf-select { padding-right: 28px; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' viewBox='0 0 24 24'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%2364748B' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center; }
+.sf-search { width: 160px; }
+.sf-date   { width: 130px; color-scheme: dark; }
+.sf-heat   { width: 90px; }
+
+.sf-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #64748B;
+  user-select: none;
+}
+.sf-toggle input { accent-color: #6366F1; cursor: pointer; }
+.sf-toggle:hover span { color: #CBD5E1; }
+
+.detail-page { max-width: 1000px; }
+
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.header-left { display: flex; align-items: center; gap: 16px; }
+
+.back-btn {
+  background: white; border: 1px solid #E2E8F0; border-radius: 9px;
+  width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: #64748B; transition: all 0.15s;
+}
+.back-btn:hover { background: #F8FAFC; color: #0F172A; }
+
+.client-avatar {
+  width: 44px; height: 44px; border-radius: 11px;
+  color: white; font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.page-title { font-size: 22px; font-weight: 700; color: #0F172A; }
+.client-url { font-size: 13px; color: #6366F1; text-decoration: none; }
+.client-url:hover { text-decoration: underline; }
+
+.header-actions { display: flex; align-items: center; gap: 10px; }
+
+.ingestion-badge {
+  font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.ing-pending { background: #F1F5F9; color: #64748B; }
+.ing-running { background: #EFF6FF; color: #2563EB; }
+.ing-done { background: #F0FDF4; color: #15803D; }
+.ing-failed { background: #FEF2F2; color: #B91C1C; }
+
+.scrape-btn {
+  display: flex; align-items: center; gap: 7px;
+  background: #0F172A; color: white; border: none; border-radius: 9px;
+  padding: 9px 16px; font-size: 13px; font-weight: 600;
+  cursor: pointer; font-family: inherit; transition: opacity 0.15s;
+}
+.scrape-btn:hover:not(:disabled) { opacity: 0.85; }
+.scrape-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Tabs */
+.tabs { display: flex; gap: 0; border-bottom: 1px solid #F1F5F9; margin-bottom: 24px; }
+
+.tab {
+  background: none; border: none; cursor: pointer; font-family: inherit;
+  padding: 10px 18px; font-size: 14px; font-weight: 500; color: #64748B;
+  border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s;
+}
+.tab:hover { color: #0F172A; }
+.tab.active { color: #6366F1; border-bottom-color: #6366F1; }
+
+.tab-content { padding-top: 4px; }
+
+/* Overview */
+.overview-stats {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px;
+}
+
+.ov-stat {
+  background: white; border: 1px solid #F1F5F9; border-radius: 12px; padding: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.ov-label { font-size: 12px; color: #94A3B8; font-weight: 500; margin-bottom: 4px; }
+.ov-value { font-size: 28px; font-weight: 700; color: #0F172A; letter-spacing: -0.5px; }
+.ov-value.hot { color: #EF4444; }
+
+/* Funnel */
+.funnel-section, .embed-section {
+  background: white; border: 1px solid #F1F5F9; border-radius: 14px; padding: 20px;
+  margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.section-title { font-size: 15px; font-weight: 600; color: #0F172A; margin-bottom: 16px; }
+
+.funnel { display: flex; flex-direction: column; gap: 12px; }
+.funnel-row { display: flex; align-items: center; gap: 12px; }
+.funnel-label { font-size: 13px; color: #475569; width: 110px; flex-shrink: 0; }
+.funnel-bar-wrap { flex: 1; background: #F1F5F9; border-radius: 4px; height: 8px; overflow: hidden; }
+.funnel-bar { height: 100%; border-radius: 4px; transition: width 0.6s; min-width: 4px; }
+.bar-blue { background: #3B82F6; }
+.bar-yellow { background: #EAB308; }
+.bar-red { background: #EF4444; }
+.bar-orange { background: #F97316; }
+.bar-green { background: #22C55E; }
+.funnel-count { font-size: 13px; font-weight: 600; color: #0F172A; width: 30px; text-align: right; }
+
+/* Embed */
+.embed-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px; }
+.embed-sub { font-size: 13px; color: #64748B; margin-bottom: 12px; }
+.embed-sub code { background: #F1F5F9; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+.method-tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.method-tab {
+  display: flex; align-items: center; gap: 6px;
+  background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px;
+  padding: 7px 14px; font-size: 13px; font-weight: 500; color: #64748B;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.method-tab:hover { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
+.method-tab.active { background: #EEF2FF; border-color: #6366F1; color: #4338CA; font-weight: 600; }
+
+.method-content { margin-bottom: 16px; }
+
+.install-steps {
+  margin: 0 0 14px 0; padding-left: 20px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.install-steps li { font-size: 13px; color: #475569; line-height: 1.6; }
+.install-steps li strong { color: #0F172A; }
+
+.embed-code--php { white-space: pre; }
+
+.embed-code-wrap {
+  background: #0F172A; border-radius: 10px; padding: 14px 16px;
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  margin-bottom: 16px;
+}
+.embed-code { font-size: 12px; color: #A5B4FC; font-family: monospace; line-height: 1.5; flex: 1; word-break: break-all; }
+
+.copy-btn {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1);
+  color: #CBD5E1; border-radius: 7px; padding: 5px 10px;
+  font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.copy-btn:hover { background: rgba(255,255,255,0.15); }
+
+.webhook-note {
+  background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 14px;
+}
+.note-title { font-size: 12px; font-weight: 600; color: #15803D; margin-bottom: 6px; }
+.note-code { display: block; font-family: monospace; font-size: 12px; color: #065F46; background: rgba(0,0,0,0.05); padding: 6px 10px; border-radius: 6px; margin-bottom: 8px; word-break: break-all; }
+.note-sub { font-size: 11px; color: #94A3B8; }
+
+/* Settings */
+.settings-card {
+  background: white; border: 1px solid #F1F5F9; border-radius: 14px; padding: 24px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+
+.settings-section { font-size: 15px; font-weight: 600; color: #0F172A; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #F1F5F9; }
+
+.settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.field.full { grid-column: 1 / -1; }
+
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; font-weight: 500; color: #475569; }
+.field input {
+  border: 1px solid #E2E8F0; border-radius: 9px; padding: 10px 12px;
+  font-size: 14px; color: #0F172A; outline: none; font-family: inherit;
+  transition: border-color 0.15s;
+}
+.field input:focus { border-color: #6366F1; box-shadow: 0 0 0 3px rgba(99,102,241,0.08); }
+.field-hint { font-size: 12px; color: #94A3B8; }
+
+.color-field { display: flex; gap: 8px; align-items: center; }
+.color-picker { width: 38px; height: 38px; border-radius: 8px; border: 1px solid #E2E8F0; padding: 2px; cursor: pointer; }
+.color-text { flex: 1; border: 1px solid #E2E8F0; border-radius: 9px; padding: 10px 12px; font-size: 14px; font-family: monospace; outline: none; }
+
+.form-error { background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #B91C1C; }
+.form-success { background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #15803D; }
+
+.save-btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: linear-gradient(135deg, #6366F1, #8B5CF6); color: white;
+  border: none; border-radius: 9px; padding: 10px 24px;
+  font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
+  margin-top: 20px; min-width: 130px; transition: opacity 0.15s;
+}
+.save-btn:hover:not(:disabled) { opacity: 0.9; }
+.save-btn:disabled { opacity: 0.6; }
+
+/* Sessions Table */
+.sessions-table-wrap {
+  background: white; border-radius: 14px; border: 1px solid #F1F5F9;
+  overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.sessions-table { width: 100%; border-collapse: collapse; }
+.sessions-table th {
+  padding: 11px 14px; text-align: left;
+  font-size: 12px; font-weight: 600; color: #64748B;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  background: #F8FAFC; border-bottom: 1px solid #F1F5F9;
+}
+.sessions-table td { padding: 13px 14px; border-bottom: 1px solid #F8FAFC; vertical-align: middle; }
+.sessions-table tbody tr:last-child td { border-bottom: none; }
+.sessions-table tbody tr:hover { background: #FAFAFA; }
+
+.visitor-cell { display: flex; flex-direction: column; gap: 2px; }
+.visitor-id { font-size: 12px; font-family: monospace; color: #475569; }
+.lead-email { font-size: 11px; color: #6366F1; }
+
+.heat-cell { display: flex; flex-direction: column; gap: 4px; }
+.heat-val { font-size: 13px; font-weight: 700; }
+.heat-val.hot { color: #DC2626; }
+.heat-val.warm { color: #EA580C; }
+.heat-val.cool { color: #2563EB; }
+.mini-heat-bar { height: 4px; width: 60px; background: #F1F5F9; border-radius: 2px; overflow: hidden; }
+.mini-heat-bar div { height: 100%; border-radius: 2px; }
+
+.state-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.state-blue { background: #EFF6FF; color: #1D4ED8; }
+.state-yellow { background: #FFFBEB; color: #B45309; }
+.state-red { background: #FEF2F2; color: #B91C1C; }
+.state-orange { background: #FFF7ED; color: #C2410C; }
+.state-green { background: #F0FDF4; color: #15803D; }
+
+.msgs-cell { font-size: 13px; font-weight: 600; color: #0F172A; }
+.time-cell { font-size: 12px; color: #94A3B8; }
+
+.view-session-btn {
+  background: white; border: 1px solid #E2E8F0; border-radius: 7px;
+  padding: 5px 12px; font-size: 12px; font-weight: 500; color: #475569;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.view-session-btn:hover { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
+
+/* Loading / Empty */
+.loading-state, .empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 60px; color: #94A3B8; font-size: 14px;
+}
+.loader { width: 32px; height: 32px; border: 3px solid #E2E8F0; border-top-color: #6366F1; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Modal */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal { background: white; border-radius: 16px; width: 100%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(0,0,0,0.15); }
+.modal-header { display: flex; justify-content: space-between; align-items: flex-start; padding: 20px 20px 16px; border-bottom: 1px solid #F1F5F9; }
+.modal-header h3 { font-size: 16px; font-weight: 600; color: #0F172A; }
+.modal-sub { font-size: 12px; color: #94A3B8; font-family: monospace; margin-top: 2px; }
+.modal-close { background: none; border: none; cursor: pointer; padding: 4px; color: #94A3B8; border-radius: 6px; transition: all 0.15s; }
+.modal-close:hover { background: #F1F5F9; color: #475569; }
+.modal-loading { display: flex; justify-content: center; padding: 40px; }
+.chat-history { overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.chat-msg { max-width: 85%; }
+.user-msg { align-self: flex-end; }
+.ai-msg { align-self: flex-start; }
+.msg-role { font-size: 11px; font-weight: 600; color: #94A3B8; margin-bottom: 4px; display: block; }
+.user-msg .msg-role { text-align: right; }
+.msg-text { font-size: 13px; line-height: 1.5; padding: 10px 14px; border-radius: 12px; }
+.user-msg .msg-text { background: #EFF6FF; color: #1E3A8A; border-bottom-right-radius: 4px; }
+.ai-msg .msg-text { background: #F8FAFC; color: #334155; border: 1px solid #E2E8F0; border-bottom-left-radius: 4px; }
+.no-history { color: #94A3B8; font-size: 13px; text-align: center; padding: 20px; }
+.mini-spinner { width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.1); border-top-color: currentColor; border-radius: 50%; animation: spin 0.7s linear infinite; }
+.mini-spinner.white { border-color: rgba(255,255,255,0.3); border-top-color: white; }
+
+/* ── Analytics Tab ─────────────────────────────────────────────── */
+.an-stats-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px;
+}
+.an-stat {
+  background: white; border: 1px solid #F1F5F9; border-radius: 12px;
+  padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.an-label { font-size: 12px; color: #94A3B8; font-weight: 500; margin-bottom: 4px; }
+.an-value { font-size: 26px; font-weight: 700; color: #0F172A; letter-spacing: -0.5px; }
+.an-value.hot  { color: #EF4444; }
+.an-value.warm { color: #F97316; }
+
+.an-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+.an-card {
+  background: white; border: 1px solid #F1F5F9; border-radius: 14px;
+  padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.an-card.an-full { margin-bottom: 16px; }
+
+.an-card-title { font-size: 12px; font-weight: 600; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+
+/* Heat distribution */
+.an-heat-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; margin-bottom: 14px; }
+.an-hd-cold { background: #3B82F6; border-radius: 6px; transition: flex 0.4s; }
+.an-hd-warm { background: #F97316; border-radius: 6px; transition: flex 0.4s; }
+.an-hd-hot  { background: #EF4444; border-radius: 6px; transition: flex 0.4s; }
+.an-heat-legend { display: flex; gap: 16px; }
+.an-hl-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #64748B; }
+.an-hl-item strong { color: #0F172A; margin-left: 2px; }
+.an-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.an-dot.cold { background: #3B82F6; }
+.an-dot.warm { background: #F97316; }
+.an-dot.hot  { background: #EF4444; }
+
+/* EMA Gauges */
+.an-gauges { display: flex; flex-direction: column; gap: 14px; }
+.an-gauge-row { display: flex; align-items: center; gap: 10px; }
+.an-gauge-label { font-size: 12px; color: #94A3B8; width: 48px; flex-shrink: 0; }
+.an-gauge-bar { flex: 1; background: #F1F5F9; border-radius: 4px; height: 8px; overflow: hidden; }
+.an-gauge-fill { height: 100%; border-radius: 4px; transition: width 0.6s; }
+.an-gauge-fill.intent  { background: linear-gradient(90deg, #6366F1, #8B5CF6); }
+.an-gauge-fill.budget  { background: linear-gradient(90deg, #22C55E, #16A34A); }
+.an-gauge-fill.urgency { background: linear-gradient(90deg, #F97316, #EF4444); }
+.an-gauge-val { font-size: 12px; font-weight: 600; color: #475569; width: 34px; text-align: right; }
+
+/* Sparkline */
+.an-spark-wrap { min-height: 64px; }
+.an-spark { width: 100%; height: 64px; display: block; }
+.an-spark-labels { display: flex; justify-content: space-between; font-size: 11px; color: #94A3B8; margin-top: 4px; }
+.an-no-data { font-size: 13px; color: #CBD5E1; text-align: center; padding: 20px; }
+
+/* Kanban breakdown */
+.an-kanban-list { display: flex; flex-direction: column; gap: 10px; }
+.an-kanban-row { display: flex; align-items: center; gap: 10px; }
+.an-kanban-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.an-kanban-label { flex: 1; font-size: 13px; color: #475569; }
+.an-kanban-count { font-size: 13px; font-weight: 700; color: #0F172A; }
+
+/* Behavioral events */
+.an-events-list { display: flex; flex-direction: column; gap: 12px; }
+.an-event-row { display: flex; align-items: center; gap: 12px; }
+.an-event-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.an-event-label { font-size: 12px; color: #94A3B8; }
+.an-event-val { font-size: 18px; font-weight: 700; color: #0F172A; }
+
+/* ── Scrape progress bar ─────────────────────────────────────────────── */
+.scrape-progress-wrap {
+  margin-bottom: 20px;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.scrape-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.scrape-phase-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1D4ED8;
+}
+
+.scrape-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3B82F6;
+  animation: pulseDot 1.2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+.scrape-count-label {
+  font-size: 12px;
+  color: #2563EB;
+  font-weight: 500;
+}
+
+.scrape-track {
+  height: 6px;
+  background: #DBEAFE;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.scrape-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3B82F6, #6366F1);
+  border-radius: 99px;
+  transition: width 0.5s ease;
+  min-width: 4%;
+}
+
+.scrape-fill--indeterminate {
+  width: 30% !important;
+  animation: indeterminate 1.6s ease-in-out infinite;
+}
+
 @keyframes indeterminate {
   0%   { transform: translateX(-120%); }
   100% { transform: translateX(400%); }
 }
-.scrape-indeterminate { animation: indeterminate 1.6s ease-in-out infinite; }
+
+.scrape-hint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: #60A5FA;
+}
 </style>

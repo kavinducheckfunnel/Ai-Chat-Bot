@@ -1,470 +1,557 @@
 <template>
-  <div class="flex flex-col gap-0 p-6 max-w-3xl">
-
-    <!-- Header -->
-    <div class="mb-6">
-      <h1 class="text-2xl font-semibold tracking-tight">Settings</h1>
+  <div class="settings-page">
+    <div class="page-header">
+      <h1 class="page-title">Settings</h1>
     </div>
 
-    <!-- Tab navigation -->
-    <div class="border-b border-border mb-6">
-      <div class="flex gap-1">
-        <button
-          v-for="t in settingsTabs" :key="t"
-          class="px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px"
-          :class="activeTab === t.key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'"
-          @click="activeTab = t.key"
-        >{{ t.label }}</button>
+    <!-- Tabs -->
+    <div class="tabs">
+      <button class="tab" :class="{ active: activeTab === 'channels' }" @click="activeTab = 'channels'">Channels & embed</button>
+      <button class="tab" :class="{ active: activeTab === 'chatbot' }" @click="activeTab = 'chatbot'">Chatbot</button>
+      <button class="tab" :class="{ active: activeTab === 'knowledge' }" @click="activeTab = 'knowledge'">Knowledge base</button>
+      <button class="tab" :class="{ active: activeTab === 'integrations' }" @click="activeTab = 'integrations'">Integrations</button>
+    </div>
+
+    <!-- ── Channels & embed ────────────────────────────────────────────────── -->
+    <div v-if="activeTab === 'channels'" class="tab-content">
+      <div class="section-card">
+        <div class="section-header">
+          <div class="section-title-row">
+            <div class="channel-icon web-icon">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div>
+              <h2 class="section-title">Website</h2>
+              <p class="section-sub">Add the chatbot to any website with a single code snippet.</p>
+            </div>
+            <div class="status-badge active">Active</div>
+          </div>
+        </div>
+
+        <div class="embed-box">
+          <h3 class="embed-title">Choose how to add the widget code</h3>
+
+          <!-- Format tabs -->
+          <div class="format-tabs">
+            <button v-for="f in formats" :key="f.id" class="format-tab" :class="{ active: embedFormat === f.id }" @click="embedFormat = f.id">
+              <span class="format-icon" v-html="f.icon"></span>
+              {{ f.label }}
+            </button>
+          </div>
+
+          <p class="embed-instruction" v-if="embedFormat === 'wordpress'">Paste into your theme's <code>functions.php</code>, or use the "Insert Headers and Footers" plugin → Footer section.</p>
+          <p class="embed-instruction" v-else-if="embedFormat === 'react'">Drop this component anywhere in your React app tree.</p>
+          <p class="embed-instruction" v-else>Paste before the <code>&lt;/body&gt;</code> tag on every page.</p>
+
+          <!-- Code block -->
+          <div class="code-block" v-if="props.client">
+            <pre class="code-pre"><code>{{ embedCode }}</code></pre>
+            <button class="copy-btn" @click="copyCode" :class="{ copied }">
+              <svg v-if="!copied" width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <svg v-else width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              {{ copied ? 'Copied!' : 'Copy code' }}
+            </button>
+          </div>
+          <div class="code-block skeleton" v-else>
+            <div class="skeleton-line"></div>
+            <div class="skeleton-line short"></div>
+            <div class="skeleton-line"></div>
+          </div>
+        </div>
       </div>
-    </div>
-
-    <!-- ═══ CHANNELS & EMBED TAB ═══ -->
-    <div v-if="activeTab === 'channels'" class="flex flex-col gap-4">
-
-      <!-- Website embed -->
-      <Card>
-        <CardContent class="pt-5 pb-5 flex flex-col gap-5">
-          <div class="flex items-center gap-3">
-            <div class="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <Globe class="h-4 w-4" />
-            </div>
-            <div class="flex-1">
-              <h2 class="text-sm font-semibold text-foreground">Website</h2>
-              <p class="text-xs text-muted-foreground mt-0.5">Add the chatbot to any website with a single code snippet.</p>
-            </div>
-            <span class="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-600">Active</span>
-          </div>
-
-          <div class="rounded-lg border border-border bg-muted/30 p-4 flex flex-col gap-4">
-            <p class="text-sm font-semibold text-foreground">Choose how to add the widget code</p>
-
-            <!-- Format tabs -->
-            <div class="flex gap-2">
-              <button
-                v-for="f in formats" :key="f.id"
-                class="flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors"
-                :class="embedFormat === f.id ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'"
-                @click="embedFormat = f.id"
-              >
-                <span v-html="f.icon"></span>{{ f.label }}
-              </button>
-            </div>
-
-            <p class="text-xs text-muted-foreground" v-if="embedFormat === 'wordpress'">
-              Paste into your theme's <code class="rounded bg-muted px-1 font-mono text-foreground">functions.php</code>, or use the "Insert Headers and Footers" plugin → Footer section.
-            </p>
-            <p class="text-xs text-muted-foreground" v-else-if="embedFormat === 'react'">Drop this component anywhere in your React app tree.</p>
-            <p class="text-xs text-muted-foreground" v-else>Paste before the <code class="rounded bg-muted px-1 font-mono text-foreground">&lt;/body&gt;</code> tag on every page.</p>
-
-            <!-- Code block -->
-            <div v-if="props.client" class="relative rounded-lg border border-border bg-background">
-              <pre class="overflow-x-auto p-4 text-xs font-mono text-muted-foreground leading-relaxed whitespace-pre"><code>{{ embedCode }}</code></pre>
-              <button
-                class="mt-0 flex items-center gap-2 rounded-b-lg border-t border-border px-4 py-2.5 text-xs font-semibold transition-colors w-full"
-                :class="copied ? 'text-emerald-600 bg-emerald-50' : 'text-muted-foreground hover:bg-muted'"
-                @click="copyCode"
-              >
-                <Check v-if="copied" class="h-3.5 w-3.5 text-emerald-600" />
-                <Copy v-else class="h-3.5 w-3.5" />
-                {{ copied ? 'Copied!' : 'Copy code' }}
-              </button>
-            </div>
-            <div v-else class="rounded-lg border border-border bg-background p-4 animate-pulse space-y-2">
-              <div class="h-3 w-full rounded bg-muted"></div>
-              <div class="h-3 w-3/5 rounded bg-muted"></div>
-              <div class="h-3 w-full rounded bg-muted"></div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <!-- Other channels (off) -->
-      <div class="flex flex-col gap-2">
-        <div v-for="ch in offChannels" :key="ch.name" class="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3">
-          <div class="h-8 w-8 rounded-lg flex items-center justify-center shrink-0" :class="ch.iconBg">
-            <span v-html="ch.icon"></span>
+      <div class="channels-list">
+        <div class="channel-item">
+          <div class="channel-icon messenger-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z" fill="#0084FF"/></svg>
           </div>
-          <div class="flex-1">
-            <span class="text-sm font-medium text-foreground">{{ ch.name }}</span>
+          <div class="channel-meta">
+            <span class="channel-name">Messenger</span>
+            <span class="channel-status off">OFF</span>
           </div>
-          <span class="inline-flex rounded px-2 py-0.5 text-[10px] font-bold uppercase bg-muted text-muted-foreground">OFF</span>
-          <Button variant="outline" size="sm" disabled>Configure</Button>
+          <button class="btn-configure" disabled>Configure</button>
+        </div>
+        <div class="channel-item">
+          <div class="channel-icon twilio-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#F22F46"/><circle cx="8.5" cy="8.5" r="1.5" fill="white"/><circle cx="15.5" cy="8.5" r="1.5" fill="white"/><circle cx="8.5" cy="15.5" r="1.5" fill="white"/><circle cx="15.5" cy="15.5" r="1.5" fill="white"/></svg>
+          </div>
+          <div class="channel-meta">
+            <span class="channel-name">Twilio SMS</span>
+            <span class="channel-status off">OFF</span>
+          </div>
+          <button class="btn-configure" disabled>Configure</button>
         </div>
       </div>
     </div>
 
-    <!-- ═══ CHATBOT TAB ═══ -->
-    <div v-if="activeTab === 'chatbot'" class="flex flex-col gap-4">
-
-      <!-- Appearance -->
-      <Card>
-        <CardContent class="pt-5 pb-5 flex flex-col gap-5">
-          <h2 class="text-sm font-semibold">Chatbot appearance</h2>
-          <div class="grid grid-cols-2 gap-4">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chatbot name</label>
-              <input v-model="form.chatbot_name" type="text" class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" placeholder="AI Assistant" maxlength="60" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notification email</label>
-              <input v-model="form.notification_email" type="email" class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" placeholder="you@company.com" />
-            </div>
+    <!-- ── Chatbot config ──────────────────────────────────────────────────── -->
+    <div v-if="activeTab === 'chatbot'" class="tab-content">
+      <div class="section-card">
+        <h2 class="section-title">Chatbot appearance</h2>
+        <div class="form-grid">
+          <div class="field">
+            <label>Chatbot name</label>
+            <input v-model="form.chatbot_name" type="text" class="input" placeholder="AI Assistant" maxlength="60" />
           </div>
-
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Theme</label>
-            <div class="flex gap-2">
-              <button
-                v-for="t in ['dark', 'light']" :key="t"
-                class="flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors"
-                :class="form.chatbot_theme === t ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'"
-                @click="form.chatbot_theme = t"
-              >
-                <span class="h-3 w-3 rounded-full" :class="t === 'dark' ? 'bg-slate-900 border border-slate-600' : 'bg-slate-100 border border-slate-300'"></span>
-                {{ t.charAt(0).toUpperCase() + t.slice(1) }}
-              </button>
-            </div>
+          <div class="field">
+            <label>Notification email</label>
+            <input v-model="form.notification_email" type="email" class="input" placeholder="you@company.com" />
           </div>
+        </div>
 
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Accent color</label>
-            <div class="flex items-center gap-2 flex-wrap">
-              <button
-                v-for="c in presetColors" :key="c"
-                class="h-6 w-6 rounded-full border-2 transition-all"
-                :class="form.chatbot_color === c ? 'border-foreground ring-2 ring-primary ring-offset-1' : 'border-transparent'"
-                :style="{ background: c }"
-                @click="form.chatbot_color = c"
-              ></button>
-              <div class="flex items-center gap-2">
-                <input type="color" v-model="form.chatbot_color" class="h-6 w-6 rounded-full border-none cursor-pointer p-0 bg-transparent" />
-                <span class="text-xs font-mono text-muted-foreground">{{ form.chatbot_color }}</span>
-              </div>
+        <div class="field">
+          <label>Theme</label>
+          <div class="theme-row">
+            <button class="theme-btn" :class="{ selected: form.chatbot_theme === 'dark' }" @click="form.chatbot_theme = 'dark'">
+              <span class="theme-dot dark-dot"></span> Dark
+            </button>
+            <button class="theme-btn" :class="{ selected: form.chatbot_theme === 'light' }" @click="form.chatbot_theme = 'light'">
+              <span class="theme-dot light-dot"></span> Light
+            </button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Accent color</label>
+          <div class="color-row">
+            <button v-for="c in presetColors" :key="c" class="color-swatch" :class="{ selected: form.chatbot_color === c }" :style="{ background: c }" @click="form.chatbot_color = c"></button>
+            <div class="color-custom">
+              <input type="color" v-model="form.chatbot_color" class="color-picker" />
+              <span class="color-hex">{{ form.chatbot_color }}</span>
             </div>
           </div>
+        </div>
 
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">CTA message</label>
-            <input v-model="form.cta_message" type="text" class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" placeholder="You're clearly ready — grab your exclusive discount:" />
-          </div>
+        <div class="field">
+          <label>CTA message</label>
+          <input v-model="form.cta_message" type="text" class="input" placeholder="You're clearly ready — grab your exclusive discount:" />
+        </div>
 
-          <div class="flex items-center gap-3">
-            <Button @click="saveConfig" :disabled="saving" class="gap-2">
-              <Loader2 v-if="saving" class="h-4 w-4 animate-spin" />
-              Save changes
-            </Button>
-            <span v-if="saved" class="text-sm text-emerald-600 font-medium">Changes saved.</span>
-          </div>
-        </CardContent>
-      </Card>
+        <button class="btn-save" :disabled="saving" @click="saveConfig">
+          <span v-if="saving" class="mini-spinner"></span>
+          <span v-else>Save changes</span>
+        </button>
+        <p v-if="saved" class="save-success">Changes saved.</p>
+      </div>
 
       <!-- Widget feature toggles -->
-      <Card>
-        <CardContent class="pt-5 pb-5 flex flex-col gap-0">
-          <h2 class="text-sm font-semibold mb-1">Widget features</h2>
-          <p class="text-xs text-muted-foreground mb-4">Enable or disable interactive features in the chat widget.</p>
-          <div class="flex flex-col divide-y divide-border">
-            <div class="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
-              <div>
-                <p class="text-sm font-medium text-foreground">Voice input</p>
-                <p class="text-xs text-muted-foreground mt-0.5">Visitors can dictate messages using their microphone (Web Speech API)</p>
-              </div>
-              <button
-                class="relative h-6 w-11 rounded-full border transition-colors shrink-0"
-                :class="form.voice_input_enabled ? 'bg-primary border-primary' : 'bg-muted border-border'"
-                @click="form.voice_input_enabled = !form.voice_input_enabled; saveConfig()"
-              >
-                <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform" :class="form.voice_input_enabled ? 'translate-x-5' : 'translate-x-0.5'"></span>
-              </button>
-            </div>
-            <div class="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
-              <div>
-                <p class="text-sm font-medium text-foreground">Image input</p>
-                <p class="text-xs text-muted-foreground mt-0.5">Visitors can attach and send images in the chat</p>
-              </div>
-              <button
-                class="relative h-6 w-11 rounded-full border transition-colors shrink-0"
-                :class="form.image_input_enabled ? 'bg-primary border-primary' : 'bg-muted border-border'"
-                @click="form.image_input_enabled = !form.image_input_enabled; saveConfig()"
-              >
-                <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform" :class="form.image_input_enabled ? 'translate-x-5' : 'translate-x-0.5'"></span>
-              </button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div class="section-card">
+        <h2 class="section-title">Widget features</h2>
+        <p class="section-sub">Enable or disable interactive features in the chat widget.</p>
 
-      <!-- Canned responses (gated) -->
-      <div class="relative">
-        <div v-if="features.allow_canned_responses === false" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-background/90 backdrop-blur-sm border border-border text-center px-6">
-          <Lock class="h-6 w-6 text-muted-foreground" />
-          <div>
-            <p class="text-sm font-semibold text-foreground">Canned Responses require Starter plan</p>
-            <RouterLink to="/portal/billing" class="mt-1 inline-block text-xs font-medium text-primary underline">Upgrade to Starter →</RouterLink>
+        <div class="feature-row">
+          <div class="feature-info">
+            <span class="feature-name">Voice input</span>
+            <span class="feature-desc">Visitors can dictate messages using their microphone (Web Speech API)</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" v-model="form.voice_input_enabled" @change="saveConfig">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="feature-row">
+          <div class="feature-info">
+            <span class="feature-name">Image input</span>
+            <span class="feature-desc">Visitors can attach and send images in the chat</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" v-model="form.image_input_enabled" @change="saveConfig">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Canned responses -->
+      <div class="gate-wrap">
+        <div v-if="features.allow_canned_responses === false" class="gate-overlay">
+          <div class="gate-lock">🔒</div>
+          <div class="gate-msg">Canned Responses require the <strong>Starter</strong> plan or higher.</div>
+          <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Starter →</a>
+        </div>
+      <div class="section-card">
+        <h2 class="section-title">Canned responses</h2>
+        <p class="section-sub">Quick-reply shortcuts available during live takeover. Click to insert into the message box.</p>
+        <div class="canned-list">
+          <div v-for="(cr, idx) in cannedResponses" :key="cr.id" class="canned-row">
+            <div class="canned-fields">
+              <input class="input" type="text" v-model="cr.title" placeholder="Title (e.g. Greeting)" maxlength="60" />
+              <textarea class="input canned-body" v-model="cr.body" placeholder="Response text…" rows="2" maxlength="500" />
+            </div>
+            <button class="canned-del" @click="removeCanned(idx)" title="Remove">✕</button>
+          </div>
+          <button class="btn-add-canned" @click="addCanned">+ Add response</button>
+        </div>
+        <div class="save-row">
+          <button class="btn-save" @click="saveCanned" :disabled="cannedSaving">{{ cannedSaving ? 'Saving…' : cannedSaved ? '✓ Saved' : 'Save canned responses' }}</button>
+        </div>
+      </div>
+      </div><!-- end gate-wrap -->
+    </div>
+
+    <!-- ── Knowledge base ──────────────────────────────────────────────────── -->
+    <div v-if="activeTab === 'knowledge'" class="tab-content">
+      <div class="section-card">
+        <h2 class="section-title">Knowledge base</h2>
+        <p class="section-sub">Your chatbot learns from your website content. Add your URL below to train it.</p>
+
+        <div class="field">
+          <label>Website URL</label>
+          <div class="url-row">
+            <input v-model="form.domain_url" type="url" class="input" placeholder="https://yoursite.com/" />
+            <button class="btn-train" @click="triggerScrape" :disabled="scraping">
+              <span v-if="scraping" class="mini-spinner"></span>
+              <span v-else>Re-train</span>
+            </button>
           </div>
         </div>
-        <Card>
-          <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-            <div>
-              <h2 class="text-sm font-semibold">Canned responses</h2>
-              <p class="text-xs text-muted-foreground mt-0.5">Quick-reply shortcuts available during live takeover.</p>
-            </div>
-            <div class="flex flex-col gap-2.5">
-              <div v-for="(cr, idx) in cannedResponses" :key="cr.id" class="flex gap-2 items-start">
-                <div class="flex-1 flex flex-col gap-2">
-                  <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="cr.title" placeholder="Title (e.g. Greeting)" maxlength="60" />
-                  <textarea class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-y min-h-14" v-model="cr.body" placeholder="Response text…" rows="2" maxlength="500" />
-                </div>
-                <button class="mt-1 h-8 w-8 shrink-0 rounded-md border border-red-200 bg-red-50 text-red-500 hover:bg-red-100 transition-colors flex items-center justify-center" @click="removeCanned(idx)">
-                  <X class="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <button class="rounded-md border border-dashed border-primary/40 px-4 py-2 text-sm text-primary hover:bg-primary/5 transition-colors" @click="addCanned">
-                + Add response
-              </button>
-            </div>
-            <div class="flex justify-end">
-              <Button @click="saveCanned" :disabled="cannedSaving" variant="outline" class="gap-2">
-                <Loader2 v-if="cannedSaving" class="h-4 w-4 animate-spin" />
-                {{ cannedSaved ? '✓ Saved' : 'Save canned responses' }}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+
+        <!-- Status -->
+        <div v-if="props.client" class="scrape-status-row">
+          <div class="status-indicator" :class="scrapeStatusClass">
+            <span class="indicator-dot"></span>
+            {{ scrapeStatusLabel }}
+          </div>
+          <span class="pages-count" v-if="props.client.total_pages_ingested > 0">
+            {{ props.client.total_pages_ingested }} pages indexed
+          </span>
+        </div>
+
+        <!-- Progress bar -->
+        <div v-if="scraping" class="progress-wrap">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: progressPct + '%' }"></div>
+          </div>
+          <span class="progress-text">Scanning pages…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Integrations tab ─────────────────────────────────────────────────── -->
+  <div v-if="activeTab === 'integrations'" class="tab-content">
+
+    <!-- BYOK -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_byok === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Custom AI (BYOK) requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(168,85,247,0.12);color:#c084fc">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M21 2H3v16h5v4l4-4h9V2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">AI Model (BYOK)</h2>
+            <p class="section-sub">Use your own OpenAI, Anthropic or OpenRouter API key instead of the platform default.</p>
+          </div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Provider</label>
+          <div class="theme-row">
+            <button v-for="p in aiProviders" :key="p.val" class="theme-btn" :class="{ selected: intForm.ai_provider === p.val }" @click="intForm.ai_provider = p.val">{{ p.label }}</button>
+          </div>
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>API Key</label>
+          <input class="input" type="password" v-model="intForm.ai_api_key" placeholder="sk-… or your OpenRouter key" autocomplete="off" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Model ID</label>
+          <input class="input" type="text" v-model="intForm.ai_model" placeholder="e.g. gpt-4o  /  claude-opus-4-6  /  google/gemini-3.1-pro-preview" />
+          <span class="field-hint">Leave blank to use the platform default (Gemini 3.1 Pro).</span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save AI settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
+    <!-- WhatsApp -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_whatsapp === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">WhatsApp Business requires the <strong>Starter</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Starter →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(37,211,102,0.1);color:#25d366">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">WhatsApp Business</h2>
+            <p class="section-sub">Connect your Meta WhatsApp Business number to route chats through the AI.</p>
+          </div>
+          <div class="status-badge" :class="intForm.whatsapp_enabled ? 'active' : 'inactive'">{{ intForm.whatsapp_enabled ? 'Active' : 'Inactive' }}</div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Webhook URL (paste this in Meta → Webhooks)</label>
+          <div class="code-block" style="padding:10px 14px">
+            <code style="font-family:monospace;font-size:12px;color:#a5b4fc">{{ whatsappWebhookUrl }}</code>
+          </div>
+        </div>
+        <div class="field">
+          <label>Phone Number ID</label>
+          <input class="input" type="text" v-model="intForm.whatsapp_phone_number_id" placeholder="123456789012345" />
+        </div>
+        <div class="field">
+          <label>Verify Token (you choose)</label>
+          <input class="input" type="text" v-model="intForm.whatsapp_verify_token" placeholder="my_secure_verify_token" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Access Token</label>
+          <input class="input" type="password" v-model="intForm.whatsapp_access_token" placeholder="EAAxxxxxxxxxxxxxxxx" autocomplete="off" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Enable WhatsApp</label>
+          <div class="toggle-row">
+            <button class="toggle-btn" :class="{ on: intForm.whatsapp_enabled }" @click="intForm.whatsapp_enabled = !intForm.whatsapp_enabled">
+              <span class="toggle-knob"></span>
+            </button>
+            <span class="toggle-lbl">{{ intForm.whatsapp_enabled ? 'Enabled — AI will reply to WhatsApp messages' : 'Disabled' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save WhatsApp settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
+    <!-- Messenger -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_messenger === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Facebook Messenger requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon messenger-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z" fill="#0084FF"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">Facebook Messenger</h2>
+            <p class="section-sub">Connect your Facebook Page to receive and reply to Messenger conversations via AI.</p>
+          </div>
+          <div class="status-badge" :class="intForm.messenger_enabled ? 'active' : 'inactive'">{{ intForm.messenger_enabled ? 'Active' : 'Inactive' }}</div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Webhook URL (paste this in Meta → Webhooks)</label>
+          <div class="code-block" style="padding:10px 14px">
+            <code style="font-family:monospace;font-size:12px;color:#a5b4fc">{{ messengerWebhookUrl }}</code>
+          </div>
+        </div>
+        <div class="field">
+          <label>Page ID</label>
+          <input class="input" type="text" v-model="intForm.messenger_page_id" placeholder="123456789" />
+        </div>
+        <div class="field">
+          <label>Verify Token (you choose)</label>
+          <input class="input" type="text" v-model="intForm.messenger_verify_token" placeholder="my_secure_verify_token" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Page Access Token</label>
+          <input class="input" type="password" v-model="intForm.messenger_page_access_token" placeholder="EAAxxxxxxxxxxxxxxxx" autocomplete="off" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Enable Messenger</label>
+          <div class="toggle-row">
+            <button class="toggle-btn" :class="{ on: intForm.messenger_enabled }" @click="intForm.messenger_enabled = !intForm.messenger_enabled">
+              <span class="toggle-knob"></span>
+            </button>
+            <span class="toggle-lbl">{{ intForm.messenger_enabled ? 'Enabled — AI will reply to Messenger messages' : 'Disabled' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Messenger settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
+    <!-- HubSpot CRM -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_hubspot === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">HubSpot CRM integration requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(255,122,0,0.1);color:#ff7a00">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">HubSpot CRM</h2>
+            <p class="section-sub">Automatically sync captured leads (email + phone) to HubSpot as Contacts and Deals.</p>
+          </div>
+          <div class="status-badge" :class="intForm.hubspot_api_key ? 'active' : 'inactive'">{{ intForm.hubspot_api_key ? 'Connected' : 'Not connected' }}</div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>HubSpot Private App Token</label>
+          <input class="input" type="password" v-model="intForm.hubspot_api_key" placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
+          <span class="field-hint">Create a Private App in HubSpot → Settings → Integrations → Private Apps. Requires CRM (contacts + deals) scopes.</span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save HubSpot settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
+    <!-- Telegram Bot -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_telegram === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Telegram Bot requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-icon" style="background:#0088cc20">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0088cc" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+        </div>
+        <div>
+          <h2 class="section-title">Telegram Bot</h2>
+          <p class="section-sub">Connect a Telegram bot so visitors can chat via Telegram.</p>
+        </div>
+        <div class="status-badge" :class="intForm.telegram_enabled ? 'active' : 'inactive'">{{ intForm.telegram_enabled ? 'Enabled' : 'Disabled' }}</div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Bot Token</label>
+          <input class="input" type="password" v-model="intForm.telegram_bot_token" placeholder="123456:ABCdef..." autocomplete="off" />
+          <span class="field-hint">Obtain from @BotFather on Telegram. Set the webhook URL to: <code>{{ telegramWebhookUrl }}</code></span>
+        </div>
+        <div class="field toggle-field" style="grid-column:1/-1">
+          <label class="toggle-label">
+            <input type="checkbox" v-model="intForm.telegram_enabled" class="toggle-input" />
+            <span class="toggle-slider"></span>
+            Enable Telegram channel
+          </label>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Telegram settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
+    <!-- Slack notifications -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_slack === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Slack Notifications require the <strong>Starter</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Starter →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-icon" style="background:#4a154b20">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a154b" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="2"/><rect x="14" y="2" width="8" height="8" rx="2"/><rect x="2" y="14" width="8" height="8" rx="2"/><rect x="14" y="14" width="8" height="8" rx="2"/></svg>
+        </div>
+        <div>
+          <h2 class="section-title">Slack Notifications</h2>
+          <p class="section-sub">Get notified in Slack when a hot lead or new lead is captured.</p>
+        </div>
+        <div class="status-badge" :class="intForm.slack_webhook_url ? 'active' : 'inactive'">{{ intForm.slack_webhook_url ? 'Connected' : 'Not connected' }}</div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Incoming Webhook URL</label>
+          <input class="input" type="password" v-model="intForm.slack_webhook_url" placeholder="https://hooks.slack.com/services/..." autocomplete="off" />
+          <span class="field-hint">Create an Incoming Webhook in your Slack workspace → Apps → Incoming Webhooks.</span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Slack settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
+    <!-- Outbound Webhooks (Zapier / n8n) -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_webhooks === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Outbound Webhooks require the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-icon" style="background:#ff620020">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6200" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        </div>
+        <div>
+          <h2 class="section-title">Outbound Webhook (Zapier / n8n)</h2>
+          <p class="section-sub">POST event data to an external URL when key events occur.</p>
+        </div>
+        <div class="status-badge" :class="intForm.outbound_webhook_url ? 'active' : 'inactive'">{{ intForm.outbound_webhook_url ? 'Active' : 'Not set' }}</div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Webhook URL</label>
+          <input class="input" type="text" v-model="intForm.outbound_webhook_url" placeholder="https://hooks.zapier.com/hooks/catch/..." />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Events to send (comma-separated)</label>
+          <input class="input" type="text" v-model="intForm.outbound_webhook_events" placeholder="hot_lead,lead_captured,new_session" />
+          <span class="field-hint">Available events: <code>hot_lead</code>, <code>lead_captured</code>, <code>new_session</code></span>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save webhook settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
+    <!-- ── Security: Change password ─────────────────────────────────────────── -->
+    <div class="section-card" style="margin-top:16px">
+      <h2 class="section-title">Change password</h2>
+      <p class="section-sub">Update the password for your Checkfunnel account.</p>
+      <div class="form-grid">
+        <div class="field">
+          <label>Current password</label>
+          <input class="input" type="password" v-model="pwForm.current" placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <div class="field">
+          <label>New password</label>
+          <input class="input" type="password" v-model="pwForm.next" placeholder="Min. 8 characters" autocomplete="new-password" />
+        </div>
+        <div class="field">
+          <label>Confirm new password</label>
+          <input class="input" type="password" v-model="pwForm.confirm" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+      </div>
+      <div v-if="pwError" class="pw-error">{{ pwError }}</div>
+      <div class="save-row">
+        <button class="btn-save" @click="changePassword" :disabled="pwSaving">{{ pwSaving ? 'Saving…' : pwSaved ? '✓ Password updated' : 'Change password' }}</button>
       </div>
     </div>
 
-    <!-- ═══ KNOWLEDGE BASE TAB ═══ -->
-    <div v-if="activeTab === 'knowledge'" class="flex flex-col gap-4">
-      <Card>
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <div>
-            <h2 class="text-sm font-semibold">Knowledge base</h2>
-            <p class="text-xs text-muted-foreground mt-0.5">Your chatbot learns from your website content. Add your URL below to train it.</p>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Website URL</label>
-            <div class="flex gap-2">
-              <input v-model="form.domain_url" type="url" class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" placeholder="https://yoursite.com/" />
-              <Button @click="triggerScrape" :disabled="scraping" class="gap-2 whitespace-nowrap">
-                <Loader2 v-if="scraping" class="h-4 w-4 animate-spin" />
-                Re-train
-              </Button>
-            </div>
-          </div>
-          <div v-if="props.client" class="flex items-center gap-4">
-            <div class="flex items-center gap-2">
-              <div class="h-2 w-2 rounded-full" :class="scrapeStatusDot"></div>
-              <span class="text-sm font-medium" :class="scrapeStatusColor">{{ scrapeStatusLabel }}</span>
-            </div>
-            <span v-if="props.client.total_pages_ingested > 0" class="text-xs text-muted-foreground">
-              {{ props.client.total_pages_ingested }} pages indexed
-            </span>
-          </div>
-          <div v-if="scraping" class="space-y-1.5">
-            <div class="h-1.5 rounded-full bg-muted overflow-hidden">
-              <div class="h-full rounded-full bg-primary transition-all" :style="{ width: progressPct + '%' }"></div>
-            </div>
-            <p class="text-xs text-muted-foreground">Scanning pages…</p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-
-    <!-- ═══ INTEGRATIONS TAB ═══ -->
-    <div v-if="activeTab === 'integrations'" class="flex flex-col gap-4">
-
-      <!-- AI Model (BYOK) -->
-      <GatedCard :locked="features.allow_byok === false" plan="Growth">
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <div class="flex items-center gap-3">
-            <div class="h-9 w-9 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">
-              <Bot class="h-4 w-4" />
-            </div>
-            <div class="flex-1">
-              <h2 class="text-sm font-semibold">AI Model (BYOK)</h2>
-              <p class="text-xs text-muted-foreground mt-0.5">Use your own OpenAI, Anthropic or OpenRouter API key.</p>
-            </div>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Provider</label>
-            <div class="flex gap-2">
-              <button v-for="p in aiProviders" :key="p.val" class="flex items-center rounded-md border px-3 py-1.5 text-sm font-medium transition-colors" :class="intForm.ai_provider === p.val ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:bg-muted'" @click="intForm.ai_provider = p.val">{{ p.label }}</button>
-            </div>
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">API Key</label>
-            <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="intForm.ai_api_key" placeholder="sk-… or your OpenRouter key" autocomplete="off" />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Model ID</label>
-            <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="intForm.ai_model" placeholder="e.g. gpt-4o / claude-opus-4-6 / google/gemini-3.1-pro-preview" />
-            <span class="text-xs text-muted-foreground">Leave blank to use the platform default (Gemini 3.1 Pro).</span>
-          </div>
-          <IntSaveButton :saving="intSaving" :saved="intSaved" @save="saveIntegrations" label="Save AI settings" />
-        </CardContent>
-      </GatedCard>
-
-      <!-- WhatsApp -->
-      <GatedCard :locked="features.allow_whatsapp === false" plan="Starter">
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <IntegrationHeader name="WhatsApp Business" desc="Connect your Meta WhatsApp Business number." :active="intForm.whatsapp_enabled" bg="bg-emerald-100" color="text-emerald-600">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-          </IntegrationHeader>
-          <WebhookField label="Webhook URL (paste in Meta → Webhooks)" :url="whatsappWebhookUrl" />
-          <div class="grid grid-cols-2 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Phone Number ID</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="intForm.whatsapp_phone_number_id" placeholder="123456789012345" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verify Token</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="intForm.whatsapp_verify_token" placeholder="my_secure_verify_token" />
-            </div>
-            <div class="flex flex-col gap-1.5 col-span-2">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Access Token</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="intForm.whatsapp_access_token" placeholder="EAAxxxxxxxxxxxxxxxx" autocomplete="off" />
-            </div>
-          </div>
-          <ToggleRow label="Enable WhatsApp" :desc="intForm.whatsapp_enabled ? 'AI will reply to WhatsApp messages' : 'Disabled'" v-model="intForm.whatsapp_enabled" />
-          <IntSaveButton :saving="intSaving" :saved="intSaved" @save="saveIntegrations" label="Save WhatsApp settings" />
-        </CardContent>
-      </GatedCard>
-
-      <!-- Facebook Messenger -->
-      <GatedCard :locked="features.allow_messenger === false" plan="Growth">
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <IntegrationHeader name="Facebook Messenger" desc="Connect your Facebook Page to receive Messenger conversations." :active="intForm.messenger_enabled" bg="bg-blue-100" color="text-blue-600">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z"/></svg>
-          </IntegrationHeader>
-          <WebhookField label="Webhook URL (paste in Meta → Webhooks)" :url="messengerWebhookUrl" />
-          <div class="grid grid-cols-2 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Page ID</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="intForm.messenger_page_id" placeholder="123456789" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Verify Token</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="intForm.messenger_verify_token" placeholder="my_secure_verify_token" />
-            </div>
-            <div class="flex flex-col gap-1.5 col-span-2">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Page Access Token</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="intForm.messenger_page_access_token" placeholder="EAAxxxxxxxxxxxxxxxx" autocomplete="off" />
-            </div>
-          </div>
-          <ToggleRow label="Enable Messenger" :desc="intForm.messenger_enabled ? 'AI will reply to Messenger messages' : 'Disabled'" v-model="intForm.messenger_enabled" />
-          <IntSaveButton :saving="intSaving" :saved="intSaved" @save="saveIntegrations" label="Save Messenger settings" />
-        </CardContent>
-      </GatedCard>
-
-      <!-- HubSpot CRM -->
-      <GatedCard :locked="features.allow_hubspot === false" plan="Growth">
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <IntegrationHeader name="HubSpot CRM" desc="Automatically sync captured leads to HubSpot as Contacts and Deals." :active="!!intForm.hubspot_api_key" bg="bg-orange-100" color="text-orange-600">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M16 8a6 6 0 016 6v7h-4v-7a2 2 0 00-2-2 2 2 0 00-2 2v7h-4v-7a6 6 0 016-6zM2 9h4v12H2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4" cy="4" r="2" stroke="currentColor" stroke-width="2"/></svg>
-          </IntegrationHeader>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">HubSpot Private App Token</label>
-            <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="intForm.hubspot_api_key" placeholder="pat-na1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" />
-            <span class="text-xs text-muted-foreground">Create a Private App in HubSpot → Settings → Integrations → Private Apps. Requires CRM (contacts + deals) scopes.</span>
-          </div>
-          <IntSaveButton :saving="intSaving" :saved="intSaved" @save="saveIntegrations" label="Save HubSpot settings" />
-        </CardContent>
-      </GatedCard>
-
-      <!-- Telegram Bot -->
-      <GatedCard :locked="features.allow_telegram === false" plan="Growth">
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <IntegrationHeader name="Telegram Bot" desc="Connect a Telegram bot so visitors can chat via Telegram." :active="intForm.telegram_enabled" bg="bg-sky-100" color="text-sky-600">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
-          </IntegrationHeader>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bot Token</label>
-            <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="intForm.telegram_bot_token" placeholder="123456:ABCdef..." autocomplete="off" />
-            <span class="text-xs text-muted-foreground">Obtain from @BotFather on Telegram. Webhook URL: <code class="font-mono text-xs bg-muted px-1 rounded">{{ telegramWebhookUrl }}</code></span>
-          </div>
-          <ToggleRow label="Enable Telegram" :desc="intForm.telegram_enabled ? 'Enabled' : 'Disabled'" v-model="intForm.telegram_enabled" />
-          <IntSaveButton :saving="intSaving" :saved="intSaved" @save="saveIntegrations" label="Save Telegram settings" />
-        </CardContent>
-      </GatedCard>
-
-      <!-- Slack -->
-      <GatedCard :locked="features.allow_slack === false" plan="Starter">
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <IntegrationHeader name="Slack Notifications" desc="Get notified in Slack when a hot lead or new lead is captured." :active="!!intForm.slack_webhook_url" bg="bg-purple-100" color="text-purple-600">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="2"/><rect x="14" y="2" width="8" height="8" rx="2"/><rect x="2" y="14" width="8" height="8" rx="2"/><rect x="14" y="14" width="8" height="8" rx="2"/></svg>
-          </IntegrationHeader>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Incoming Webhook URL</label>
-            <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="intForm.slack_webhook_url" placeholder="https://hooks.slack.com/services/..." autocomplete="off" />
-            <span class="text-xs text-muted-foreground">Create an Incoming Webhook in your Slack workspace → Apps → Incoming Webhooks.</span>
-          </div>
-          <IntSaveButton :saving="intSaving" :saved="intSaved" @save="saveIntegrations" label="Save Slack settings" />
-        </CardContent>
-      </GatedCard>
-
-      <!-- Outbound Webhook -->
-      <GatedCard :locked="features.allow_webhooks === false" plan="Growth">
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <IntegrationHeader name="Outbound Webhook (Zapier / n8n)" desc="POST event data to an external URL when key events occur." :active="!!intForm.outbound_webhook_url" bg="bg-orange-100" color="text-orange-600">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          </IntegrationHeader>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Webhook URL</label>
-            <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="intForm.outbound_webhook_url" placeholder="https://hooks.zapier.com/hooks/catch/..." />
-          </div>
-          <div class="flex flex-col gap-1.5">
-            <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Events (comma-separated)</label>
-            <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="text" v-model="intForm.outbound_webhook_events" placeholder="hot_lead,lead_captured,new_session" />
-            <span class="text-xs text-muted-foreground">Available: <code class="font-mono text-xs bg-muted px-1 rounded">hot_lead</code>, <code class="font-mono text-xs bg-muted px-1 rounded">lead_captured</code>, <code class="font-mono text-xs bg-muted px-1 rounded">new_session</code></span>
-          </div>
-          <IntSaveButton :saving="intSaving" :saved="intSaved" @save="saveIntegrations" label="Save webhook settings" />
-        </CardContent>
-      </GatedCard>
-
-      <!-- Change password -->
-      <Card>
-        <CardContent class="pt-5 pb-5 flex flex-col gap-4">
-          <div>
-            <h2 class="text-sm font-semibold">Change password</h2>
-            <p class="text-xs text-muted-foreground mt-0.5">Update the password for your Checkfunnel account.</p>
-          </div>
-          <div class="grid grid-cols-3 gap-3">
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Current password</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="pwForm.current" placeholder="••••••••" autocomplete="current-password" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">New password</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="pwForm.next" placeholder="Min. 8 characters" autocomplete="new-password" />
-            </div>
-            <div class="flex flex-col gap-1.5">
-              <label class="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Confirm password</label>
-              <input class="rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" type="password" v-model="pwForm.confirm" placeholder="••••••••" autocomplete="new-password" />
-            </div>
-          </div>
-          <div v-if="pwError" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{{ pwError }}</div>
-          <div class="flex justify-end">
-            <Button @click="changePassword" :disabled="pwSaving" variant="outline" class="gap-2">
-              <Loader2 v-if="pwSaving" class="h-4 w-4 animate-spin" />
-              {{ pwSaved ? '✓ Password updated' : 'Change password' }}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, defineComponent, h } from 'vue'
-import { Globe, Check, Copy, Loader2, Lock, Bot, X } from 'lucide-vue-next'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 import { generateEmbedCode } from './embedCodeGenerator'
-import Card from '@/components/ui/Card.vue'
-import CardContent from '@/components/ui/CardContent.vue'
-import Button from '@/components/ui/Button.vue'
 
 const props = defineProps({ client: Object })
 const emit = defineEmits(['client-updated'])
@@ -479,6 +566,7 @@ const scraping = ref(false)
 const scrapePages = ref(0)
 let scrapeTimer = null
 
+// Feature flags (gating)
 const features = ref({})
 onMounted(async () => {
   try {
@@ -489,113 +577,27 @@ onMounted(async () => {
 
 const backendUrl = WIDGET_URL.replace('/widget/widget.js', '')
 
-const settingsTabs = [
-  { key: 'channels', label: 'Channels & embed' },
-  { key: 'chatbot', label: 'Chatbot' },
-  { key: 'knowledge', label: 'Knowledge base' },
-  { key: 'integrations', label: 'Integrations' },
-]
-
-const offChannels = [
-  { name: 'Messenger', iconBg: 'bg-blue-50', icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="#0084FF"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z"/></svg>' },
-  { name: 'Twilio SMS',  iconBg: 'bg-red-50',  icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#F22F46"/><circle cx="8.5" cy="8.5" r="1.5" fill="white"/><circle cx="15.5" cy="8.5" r="1.5" fill="white"/><circle cx="8.5" cy="15.5" r="1.5" fill="white"/><circle cx="15.5" cy="15.5" r="1.5" fill="white"/></svg>' },
-]
-
-// ── Inline sub-components ──────────────────────────────────────────────────────
-const GatedCard = defineComponent({
-  props: { locked: Boolean, plan: String },
-  setup(props, { slots }) {
-    return () => h('div', { class: 'relative' }, [
-      props.locked && h('div', {
-        class: 'absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 rounded-xl bg-background/90 backdrop-blur-sm border border-border text-center px-6'
-      }, [
-        h(Lock, { class: 'h-6 w-6 text-muted-foreground' }),
-        h('div', {}, [
-          h('p', { class: 'text-sm font-semibold text-foreground' }, `Requires ${props.plan} plan`),
-          h('a', { href: '/portal/billing', class: 'mt-1 inline-block text-xs font-medium text-primary underline' }, `Upgrade to ${props.plan} →`),
-        ]),
-      ]),
-      h(Card, {}, slots),
-    ])
-  },
-})
-
-const IntegrationHeader = defineComponent({
-  props: { name: String, desc: String, active: Boolean, bg: String, color: String },
-  setup(props, { slots }) {
-    return () => h('div', { class: 'flex items-center gap-3' }, [
-      h('div', { class: `h-9 w-9 rounded-lg ${props.bg} ${props.color} flex items-center justify-center shrink-0` }, slots.default?.()),
-      h('div', { class: 'flex-1' }, [
-        h('h2', { class: 'text-sm font-semibold' }, props.name),
-        h('p', { class: 'text-xs text-muted-foreground mt-0.5' }, props.desc),
-      ]),
-      props.active
-        ? h('span', { class: 'inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-600' }, 'Active')
-        : h('span', { class: 'inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground' }, 'Inactive'),
-    ])
-  },
-})
-
-const WebhookField = defineComponent({
-  props: { label: String, url: String },
-  setup(props) {
-    return () => h('div', { class: 'flex flex-col gap-1.5' }, [
-      h('label', { class: 'text-xs font-semibold uppercase tracking-wide text-muted-foreground' }, props.label),
-      h('div', { class: 'rounded-md border border-border bg-muted/30 px-3 py-2' }, [
-        h('code', { class: 'text-xs font-mono text-primary break-all' }, props.url),
-      ]),
-    ])
-  },
-})
-
-const ToggleRow = defineComponent({
-  props: { label: String, desc: String, modelValue: Boolean },
-  emits: ['update:modelValue'],
-  setup(props, { emit }) {
-    return () => h('div', { class: 'flex items-center justify-between gap-4' }, [
-      h('div', {}, [
-        h('p', { class: 'text-sm font-medium text-foreground' }, props.label),
-        h('p', { class: 'text-xs text-muted-foreground mt-0.5' }, props.desc),
-      ]),
-      h('button', {
-        class: `relative h-6 w-11 rounded-full border transition-colors shrink-0 ${props.modelValue ? 'bg-primary border-primary' : 'bg-muted border-border'}`,
-        onClick: () => emit('update:modelValue', !props.modelValue),
-      }, [
-        h('span', { class: `absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${props.modelValue ? 'translate-x-5' : 'translate-x-0.5'}` }),
-      ]),
-    ])
-  },
-})
-
-const IntSaveButton = defineComponent({
-  props: { saving: Boolean, saved: Boolean, label: String },
-  emits: ['save'],
-  setup(props, { emit }) {
-    return () => h('div', { class: 'flex justify-end' }, [
-      h(Button, {
-        variant: 'outline',
-        disabled: props.saving,
-        class: 'gap-2',
-        onClick: () => emit('save'),
-      }, () => [
-        props.saving && h(Loader2, { class: 'h-4 w-4 animate-spin' }),
-        props.saved ? '✓ Saved' : props.label,
-      ]),
-    ])
-  },
-})
-
-// ── Integrations form ──────────────────────────────────────────────────────────
+// ── Integrations form ─────────────────────────────────────────────────────────
 const intSaving = ref(false)
 const intSaved = ref(false)
 const intForm = ref({
-  ai_api_key: '', ai_model: '', ai_provider: 'openrouter',
-  whatsapp_phone_number_id: '', whatsapp_access_token: '', whatsapp_verify_token: '', whatsapp_enabled: false,
-  messenger_page_id: '', messenger_page_access_token: '', messenger_verify_token: '', messenger_enabled: false,
+  ai_api_key: '',
+  ai_model: '',
+  ai_provider: 'openrouter',
+  whatsapp_phone_number_id: '',
+  whatsapp_access_token: '',
+  whatsapp_verify_token: '',
+  whatsapp_enabled: false,
+  messenger_page_id: '',
+  messenger_page_access_token: '',
+  messenger_verify_token: '',
+  messenger_enabled: false,
   hubspot_api_key: '',
-  telegram_bot_token: '', telegram_enabled: false,
+  telegram_bot_token: '',
+  telegram_enabled: false,
   slack_webhook_url: '',
-  outbound_webhook_url: '', outbound_webhook_events: 'hot_lead,lead_captured,new_session',
+  outbound_webhook_url: '',
+  outbound_webhook_events: 'hot_lead,lead_captured,new_session',
 })
 
 const aiProviders = [
@@ -604,30 +606,48 @@ const aiProviders = [
   { val: 'anthropic', label: 'Anthropic' },
 ]
 
-const whatsappWebhookUrl = computed(() => props.client ? `${backendUrl}/api/chat/webhooks/whatsapp/${props.client.id}/` : '')
-const messengerWebhookUrl = computed(() => props.client ? `${backendUrl}/api/chat/webhooks/messenger/${props.client.id}/` : '')
-const telegramWebhookUrl = computed(() => props.client ? `${backendUrl}/api/chat/webhooks/telegram/${props.client.id}/` : '')
+const whatsappWebhookUrl = computed(() =>
+  props.client ? `${backendUrl}/api/chat/webhooks/whatsapp/${props.client.id}/` : ''
+)
+const messengerWebhookUrl = computed(() =>
+  props.client ? `${backendUrl}/api/chat/webhooks/messenger/${props.client.id}/` : ''
+)
+const telegramWebhookUrl = computed(() =>
+  props.client ? `${backendUrl}/api/chat/webhooks/telegram/${props.client.id}/` : ''
+)
 
-// ── Main form ──────────────────────────────────────────────────────────────────
 const form = ref({
-  chatbot_name: '', chatbot_color: '#6366F1', chatbot_theme: 'dark',
-  notification_email: '', cta_message: '', domain_url: '',
-  voice_input_enabled: false, image_input_enabled: false,
+  chatbot_name: '',
+  chatbot_color: '#6366F1',
+  chatbot_theme: 'dark',
+  notification_email: '',
+  cta_message: '',
+  domain_url: '',
+  voice_input_enabled: false,
+  image_input_enabled: false,
 })
 
 const presetColors = ['#ffffff', '#3B82F6', '#22c55e', '#ef4444', '#6366f1', '#f59e0b']
 
 const formats = [
-  { id: 'html',      label: 'HTML',      icon: '<span style="color:#e34c26;font-weight:700;font-size:11px">HTML</span>' },
-  { id: 'wordpress', label: 'WordPress', icon: '<span style="color:#21759b;font-weight:700;font-size:11px">WP</span>' },
-  { id: 'react',     label: 'React',     icon: '<span style="font-size:11px">⚛</span>' },
+  { id: 'html',      label: 'HTML',      icon: '<span style="color:#e34c26;font-weight:700;font-size:12px">HTML</span>' },
+  { id: 'wordpress', label: 'WordPress', icon: '<span style="color:#21759b;font-weight:700;font-size:12px">WP</span>' },
+  { id: 'react',     label: 'React',     icon: '<span style="color:#61dafb;font-weight:700;font-size:12px">⚛</span>' },
 ]
 
 const embedCode = computed(() => {
   if (!props.client) return ''
-  return generateEmbedCode(props.client.id, backendUrl, form.value.chatbot_color || '#6366f1', form.value.chatbot_name || 'AI Assistant', embedFormat.value)
+  return generateEmbedCode(
+    props.client.id,
+    backendUrl,
+    form.value.chatbot_color || '#6366f1',
+    form.value.chatbot_name || 'AI Assistant',
+    embedFormat.value,
+  )
 })
 
+
+// Sync form with client prop
 watch(() => props.client, (c) => {
   if (!c) return
   form.value.chatbot_name = c.chatbot_name || ''
@@ -639,6 +659,8 @@ watch(() => props.client, (c) => {
   form.value.voice_input_enabled = c.voice_input_enabled || false
   form.value.image_input_enabled = c.image_input_enabled || false
   scrapePages.value = c.total_pages_ingested || 0
+
+  // Integrations
   intForm.value.ai_api_key = c.ai_api_key || ''
   intForm.value.ai_model = c.ai_model || ''
   intForm.value.ai_provider = c.ai_provider || 'openrouter'
@@ -659,13 +681,17 @@ watch(() => props.client, (c) => {
   cannedResponses.value = (c.canned_responses || []).map(cr => ({ ...cr }))
 }, { immediate: true })
 
-// ── Canned responses ───────────────────────────────────────────────────────────
+// ── Canned responses ─────────────────────────────────────────────────────────
 const cannedResponses = ref([])
 const cannedSaving = ref(false)
 const cannedSaved = ref(false)
 
-function addCanned() { cannedResponses.value.push({ id: crypto.randomUUID(), title: '', body: '' }) }
-function removeCanned(idx) { cannedResponses.value.splice(idx, 1) }
+function addCanned() {
+  cannedResponses.value.push({ id: crypto.randomUUID(), title: '', body: '' })
+}
+function removeCanned(idx) {
+  cannedResponses.value.splice(idx, 1)
+}
 async function saveCanned() {
   if (!props.client) return
   cannedSaving.value = true
@@ -674,10 +700,12 @@ async function saveCanned() {
     emit('client-updated', updated)
     cannedSaved.value = true
     setTimeout(() => { cannedSaved.value = false }, 3000)
-  } catch {} finally { cannedSaving.value = false }
+  } catch {} finally {
+    cannedSaving.value = false
+  }
 }
 
-// ── Password change ────────────────────────────────────────────────────────────
+// ── Change password ───────────────────────────────────────────────────────────
 const pwForm = ref({ current: '', next: '', confirm: '' })
 const pwSaving = ref(false)
 const pwSaved = ref(false)
@@ -696,7 +724,9 @@ async function changePassword() {
     setTimeout(() => { pwSaved.value = false }, 4000)
   } catch (e) {
     pwError.value = e.message || 'Failed to update password.'
-  } finally { pwSaving.value = false }
+  } finally {
+    pwSaving.value = false
+  }
 }
 
 async function saveIntegrations() {
@@ -707,7 +737,9 @@ async function saveIntegrations() {
     emit('client-updated', updated)
     intSaved.value = true
     setTimeout(() => { intSaved.value = false }, 3000)
-  } catch {} finally { intSaving.value = false }
+  } catch {} finally {
+    intSaving.value = false
+  }
 }
 
 async function copyCode() {
@@ -726,7 +758,9 @@ async function saveConfig() {
     emit('client-updated', updated)
     saved.value = true
     setTimeout(() => { saved.value = false }, 3000)
-  } catch {} finally { saving.value = false }
+  } catch {} finally {
+    saving.value = false
+  }
 }
 
 async function triggerScrape() {
@@ -746,25 +780,19 @@ async function triggerScrape() {
         }
       } catch {}
     }, 1500)
-  } catch { scraping.value = false }
+  } catch {
+    scraping.value = false
+  }
 }
 
 const progressPct = computed(() => Math.min(90, scrapePages.value * 5 + 15))
 
-const scrapeStatusDot = computed(() => {
+const scrapeStatusClass = computed(() => {
   const s = props.client?.ingestion_status
-  if (s === 'DONE') return 'bg-emerald-500'
-  if (s === 'RUNNING') return 'bg-primary animate-pulse'
-  if (s === 'FAILED') return 'bg-red-500'
-  return 'bg-muted-foreground'
-})
-
-const scrapeStatusColor = computed(() => {
-  const s = props.client?.ingestion_status
-  if (s === 'DONE') return 'text-emerald-600'
-  if (s === 'RUNNING') return 'text-primary'
-  if (s === 'FAILED') return 'text-red-500'
-  return 'text-muted-foreground'
+  if (s === 'DONE') return 'status-done'
+  if (s === 'RUNNING') return 'status-running'
+  if (s === 'FAILED') return 'status-failed'
+  return 'status-pending'
 })
 
 const scrapeStatusLabel = computed(() => {
@@ -775,3 +803,401 @@ const scrapeStatusLabel = computed(() => {
   return 'Not trained yet'
 })
 </script>
+
+<style scoped>
+* { box-sizing: border-box; }
+
+.settings-page {
+  padding: 32px 36px;
+  max-width: 860px;
+  font-family: 'Inter', -apple-system, sans-serif;
+}
+
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
+
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 28px;
+}
+
+.tab {
+  padding: 10px 18px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: -1px;
+}
+.tab:hover { color: #94a3b8; }
+.tab.active { color: #a5b4fc; border-bottom-color: #6366f1; }
+
+.tab-content { display: flex; flex-direction: column; gap: 16px; }
+
+/* Section cards */
+.section-card {
+  background: #161616;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.section-header { }
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.channel-icon {
+  width: 36px; height: 36px;
+  border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.web-icon { background: rgba(99,102,241,0.12); color: #a5b4fc; }
+.messenger-icon { background: rgba(0,132,255,0.1); }
+.twilio-icon { background: rgba(242,47,70,0.1); }
+
+.section-title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
+.section-sub { font-size: 12px; color: #475569; margin-top: 3px; }
+
+.status-badge {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-badge.active { background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); }
+
+/* Embed box */
+.embed-box {
+  background: #0d0d0d;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.embed-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+
+.format-tabs { display: flex; gap: 6px; }
+.format-tab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.format-tab:hover { background: rgba(255,255,255,0.07); color: #94a3b8; }
+.format-tab.active { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); color: #a5b4fc; }
+.format-icon { display: flex; align-items: center; }
+
+.embed-instruction { font-size: 12px; color: #475569; }
+.embed-instruction code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: #94a3b8; }
+
+.code-block {
+  background: #0a0a0a;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 10px;
+  padding: 16px;
+  position: relative;
+}
+
+.code-pre {
+  margin: 0;
+  font-family: 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #94a3b8;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.code-block code { color: #a5b4fc; }
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 8px 16px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.copy-btn:hover { background: rgba(255,255,255,0.1); color: #f1f5f9; }
+.copy-btn.copied { color: #22c55e; border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.08); }
+
+.skeleton { min-height: 120px; }
+.skeleton-line { height: 12px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 10px; }
+.skeleton-line.short { width: 60%; }
+
+/* Channels list */
+.channels-list { display: flex; flex-direction: column; gap: 10px; }
+
+.channel-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #161616;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+}
+
+.channel-meta { flex: 1; display: flex; align-items: center; gap: 10px; }
+.channel-name { font-size: 14px; font-weight: 500; color: #94a3b8; }
+.channel-status { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+.channel-status.off { background: rgba(255,255,255,0.05); color: #475569; }
+
+.btn-configure {
+  padding: 6px 14px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  cursor: not-allowed;
+}
+
+/* Form fields */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+.field { display: flex; flex-direction: column; gap: 7px; }
+.field label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.input {
+  padding: 10px 13px;
+  background: #0d0d0d;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 9px;
+  font-size: 14px;
+  color: #f1f5f9;
+  outline: none;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+.input:focus { border-color: #6366f1; }
+.input::placeholder { color: #334155; }
+
+/* Theme */
+.theme-row { display: flex; gap: 10px; }
+.theme-btn {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 18px;
+  background: #0d0d0d;
+  border: 1.5px solid rgba(255,255,255,0.09);
+  border-radius: 9px;
+  font-size: 13px; font-weight: 500; color: #64748b;
+  cursor: pointer; transition: all 0.12s;
+}
+.theme-btn:hover { border-color: #334155; color: #94a3b8; }
+.theme-btn.selected { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.08); }
+.theme-dot { width: 12px; height: 12px; border-radius: 50%; }
+.dark-dot { background: #0f172a; border: 1px solid #334155; }
+.light-dot { background: #f8fafc; border: 1px solid #cbd5e1; }
+
+/* Colors */
+.color-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.color-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 0.12s; outline: 2px solid transparent; }
+.color-swatch.selected { outline: 2px solid #6366f1; outline-offset: 2px; }
+.color-custom { display: flex; align-items: center; gap: 7px; }
+.color-picker { width: 26px; height: 26px; border: none; border-radius: 50%; cursor: pointer; padding: 0; background: none; }
+.color-hex { font-size: 11px; color: #475569; font-family: monospace; }
+
+/* Save */
+.btn-save {
+  align-self: flex-start;
+  padding: 10px 24px;
+  background: #6366f1;
+  border: none;
+  border-radius: 9px;
+  font-size: 14px; font-weight: 600; color: white;
+  cursor: pointer; transition: opacity 0.15s;
+  display: flex; align-items: center; gap: 8px;
+}
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-save:hover:not(:disabled) { opacity: 0.9; }
+
+.save-success { font-size: 13px; color: #22c55e; margin-top: -8px; }
+
+/* Knowledge base */
+.url-row { display: flex; gap: 10px; }
+.btn-train {
+  padding: 10px 20px;
+  background: #6366f1;
+  border: none; border-radius: 9px;
+  font-size: 13px; font-weight: 600; color: white;
+  cursor: pointer; transition: opacity 0.15s;
+  white-space: nowrap; display: flex; align-items: center; gap: 6px;
+}
+.btn-train:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.scrape-status-row { display: flex; align-items: center; gap: 16px; }
+.status-indicator { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; }
+.indicator-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-done .indicator-dot { background: #22c55e; }
+.status-running .indicator-dot { background: #6366f1; animation: pulse 1s infinite; }
+.status-failed .indicator-dot { background: #ef4444; }
+.status-pending .indicator-dot { background: #475569; }
+.status-done { color: #22c55e; }
+.status-running { color: #a5b4fc; }
+.status-failed { color: #ef4444; }
+.status-pending { color: #475569; }
+
+.pages-count { font-size: 12px; color: #475569; }
+
+.progress-wrap { display: flex; flex-direction: column; gap: 6px; }
+.progress-bar { height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: #6366f1; border-radius: 2px; transition: width 0.5s; }
+.progress-text { font-size: 12px; color: #475569; }
+
+.mini-spinner {
+  width: 13px; height: 13px;
+  border: 2px solid rgba(255,255,255,0.25);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Widget feature toggles */
+.feature-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.feature-row:last-child { border-bottom: none; padding-bottom: 0; }
+.feature-info { display: flex; flex-direction: column; gap: 3px; }
+.feature-name { font-size: 14px; font-weight: 500; color: #e2e8f0; }
+.feature-desc { font-size: 12px; color: #475569; }
+
+.toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-slider {
+  position: absolute; inset: 0;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  transition: all 0.2s;
+}
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #475569;
+  transition: all 0.2s;
+}
+.toggle input:checked + .toggle-slider { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(20px); background: #6366f1; }
+
+/* Integrations */
+.status-badge.inactive { background: rgba(71,85,105,0.2); color: #475569; border: 1px solid rgba(71,85,105,0.3); }
+.field-hint { font-size: 11px; color: #334155; line-height: 1.5; }
+.save-row { display: flex; justify-content: flex-end; }
+.pw-error { font-size: 13px; color: #fca5a5; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+.btn-save {
+  padding: 9px 22px;
+  background: rgba(99,102,241,0.15);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #a5b4fc;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-save:hover:not(:disabled) { background: rgba(99,102,241,0.25); }
+.btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.toggle-row { display: flex; align-items: center; gap: 12px; }
+.toggle-btn {
+  position: relative;
+  width: 44px; height: 24px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.toggle-btn.on { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
+.toggle-knob {
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: #475569;
+  transition: all 0.2s;
+}
+.toggle-btn.on .toggle-knob { transform: translateX(20px); background: #6366f1; }
+.toggle-lbl { font-size: 13px; color: #64748b; }
+/* Canned responses */
+.canned-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.canned-row { display: flex; gap: 10px; align-items: flex-start; }
+.canned-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+.canned-body { resize: vertical; min-height: 56px; font-family: inherit; }
+.canned-del { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); color: #fca5a5; border-radius: 7px; width: 32px; height: 32px; cursor: pointer; flex-shrink: 0; font-size: 13px; margin-top: 4px; }
+.canned-del:hover { background: rgba(239,68,68,0.2); }
+.btn-add-canned { background: rgba(99,102,241,0.08); border: 1px dashed rgba(99,102,241,0.3); color: #818cf8; border-radius: 9px; padding: 8px 16px; font-size: 13px; cursor: pointer; }
+.btn-add-canned:hover { background: rgba(99,102,241,0.15); }
+/* Toggle label in form */
+.toggle-field { display: flex; align-items: center; }
+.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: #94a3b8; }
+.toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+/* Feature gate overlay */
+.gate-wrap { position: relative; }
+.gate-overlay {
+  position: absolute; inset: 0; z-index: 10;
+  background: rgba(10,10,10,0.82);
+  backdrop-filter: blur(3px);
+  border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; text-align: center;
+}
+.gate-lock { font-size: 28px; line-height: 1; }
+.gate-msg { font-size: 13px; color: #cbd5e1; line-height: 1.6; max-width: 280px; }
+.gate-msg strong { color: #a5b4fc; }
+.gate-upgrade-btn {
+  display: inline-block; background: #6366f1; color: white;
+  padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  text-decoration: none; transition: background 0.15s; margin-top: 4px;
+}
+.gate-upgrade-btn:hover { background: #4f46e5; }
+</style>
