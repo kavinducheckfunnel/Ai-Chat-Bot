@@ -54,15 +54,15 @@ onMounted(loadClient)
 .portal-shell {
   display: flex;
   height: 100vh;
-  background: #0a0a0a;
-  color: #e2e8f0;
+  background: var(--cf-bg);
+  color: var(--cf-text);
   font-family: 'Inter', -apple-system, sans-serif;
 }
 
 .portal-main {
   flex: 1;
   overflow-y: auto;
-  background: #0f0f0f;
+  background: var(--cf-bg);
 }
 
 .portal-loading {
@@ -70,7 +70,7 @@ onMounted(loadClient)
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0a0a0a;
+  background: var(--cf-bg);
 }
 
 .loading-spinner {

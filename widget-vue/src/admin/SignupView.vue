@@ -272,7 +272,7 @@ async function handleSignup() {
   width: 100%;
   margin: 40px 24px;
   gap: 0;
-  background: #1E293B;
+  background: var(--cf-surface-2);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 24px;
   overflow: hidden;
@@ -317,7 +317,7 @@ async function handleSignup() {
 .brand-name {
   font-size: 17px;
   font-weight: 700;
-  color: #F1F5F9;
+  color: var(--cf-text);
   letter-spacing: -0.3px;
 }
 
@@ -372,7 +372,7 @@ async function handleSignup() {
 .proof-title {
   font-size: 14px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--cf-text);
   margin-bottom: 3px;
 }
 
@@ -393,21 +393,21 @@ async function handleSignup() {
 /* Right panel: form */
 .signup-card {
   padding: 48px 40px;
-  background: #1E293B;
+  background: var(--cf-surface-2);
   border-left: 1px solid rgba(255,255,255,0.06);
 }
 
 .signup-title {
   font-size: 24px;
   font-weight: 700;
-  color: #F1F5F9;
+  color: var(--cf-text);
   margin-bottom: 6px;
   letter-spacing: -0.4px;
 }
 
 .signup-sub {
   font-size: 14px;
-  color: #64748B;
+  color: var(--cf-text-3);
   margin-bottom: 28px;
 }
 
@@ -426,7 +426,7 @@ async function handleSignup() {
 .field label {
   font-size: 13px;
   font-weight: 500;
-  color: #94A3B8;
+  color: var(--cf-text-2);
 }
 
 .field input {
@@ -435,7 +435,7 @@ async function handleSignup() {
   border-radius: 10px;
   padding: 11px 14px;
   font-size: 14px;
-  color: #F1F5F9;
+  color: var(--cf-text);
   font-family: inherit;
   outline: none;
   transition: border-color 0.2s, box-shadow 0.2s;
@@ -447,7 +447,7 @@ async function handleSignup() {
   box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
 }
 
-.field input::placeholder { color: #334155; }
+.field input::placeholder { color: var(--cf-text-3); }
 
 .password-wrap { position: relative; }
 .password-wrap input { padding-right: 40px; }
@@ -507,7 +507,7 @@ async function handleSignup() {
 
 .terms-label {
   font-size: 12px;
-  color: #64748B;
+  color: var(--cf-text-3);
   line-height: 1.5;
   cursor: pointer;
 }
@@ -565,7 +565,7 @@ async function handleSignup() {
   margin-top: 20px;
   text-align: center;
   font-size: 13px;
-  color: #475569;
+  color: var(--cf-text-3);
 }
 
 .login-link a {

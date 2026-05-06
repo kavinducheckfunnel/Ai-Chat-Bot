@@ -316,8 +316,8 @@ onMounted(load)
 }
 
 .page-header { margin-bottom: 28px; }
-.page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; margin: 0 0 4px; }
-.page-sub { font-size: 13px; color: #475569; margin: 0; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--cf-text); margin: 0 0 4px; }
+.page-sub { font-size: 13px; color: var(--cf-text-3); margin: 0; }
 
 /* Skeleton */
 .skeleton-wrap { display: flex; flex-direction: column; gap: 12px; }
@@ -358,9 +358,9 @@ onMounted(load)
 .cp-badge.warn { background: rgba(245,158,11,0.1); color: #f59e0b; border-color: rgba(245,158,11,0.2); }
 .cp-badge.danger { background: rgba(239,68,68,0.1); color: #ef4444; border-color: rgba(239,68,68,0.2); }
 
-.cp-plan-name { font-size: 20px; font-weight: 700; color: #f1f5f9; margin: 0 0 4px; }
-.cp-price { font-size: 28px; font-weight: 800; color: #f1f5f9; margin: 0 0 6px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.cp-price span:first-child { font-size: 14px; font-weight: 400; color: #64748b; }
+.cp-plan-name { font-size: 20px; font-weight: 700; color: var(--cf-text); margin: 0 0 4px; }
+.cp-price { font-size: 28px; font-weight: 800; color: var(--cf-text); margin: 0 0 6px; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.cp-price span:first-child { font-size: 14px; font-weight: 400; color: var(--cf-text-3); }
 .annual-tag { font-size: 11px; font-weight: 600; color: #a78bfa; background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2); border-radius: 6px; padding: 2px 8px; }
 
 .trial-notice {
@@ -395,11 +395,11 @@ onMounted(load)
   justify-content: space-between;
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--cf-text-2);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.usage-nums { color: #f1f5f9; font-weight: 700; text-transform: none; letter-spacing: 0; }
+.usage-nums { color: var(--cf-text); font-weight: 700; text-transform: none; letter-spacing: 0; }
 .usage-bar { height: 6px; background: rgba(255,255,255,0.06); border-radius: 6px; overflow: hidden; }
 .usage-fill { height: 100%; border-radius: 6px; transition: width 0.4s; }
 .usage-warn { font-size: 11px; color: #f59e0b; }
@@ -458,7 +458,7 @@ onMounted(load)
   padding: 6px 16px;
   font-size: 13px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--cf-text-3);
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
@@ -476,7 +476,7 @@ onMounted(load)
 }
 
 /* Plan grid */
-.section-heading { font-size: 14px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 16px; }
+.section-heading { font-size: 14px; font-weight: 600; color: var(--cf-text-3); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 16px; }
 
 .plans-grid {
   display: grid;
@@ -517,14 +517,14 @@ onMounted(load)
 }
 
 .plan-header { display: flex; flex-direction: column; gap: 4px; }
-.plan-name { font-size: 13px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; }
+.plan-name { font-size: 13px; font-weight: 600; color: var(--cf-text-2); text-transform: uppercase; letter-spacing: 0.06em; }
 .plan-price { display: flex; align-items: baseline; gap: 2px; }
-.plan-amount { font-size: 32px; font-weight: 800; color: #f1f5f9; }
-.plan-period { font-size: 13px; color: #475569; }
-.plan-annual-note { font-size: 11px; color: #64748b; margin-top: 2px; }
+.plan-amount { font-size: 32px; font-weight: 800; color: var(--cf-text); }
+.plan-period { font-size: 13px; color: var(--cf-text-3); }
+.plan-annual-note { font-size: 11px; color: var(--cf-text-3); margin-top: 2px; }
 
 .plan-features { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.plan-features li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: #94a3b8; line-height: 1.4; }
+.plan-features li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--cf-text-2); line-height: 1.4; }
 .plan-features li svg { flex-shrink: 0; margin-top: 2px; }
 
 .plan-btn {
@@ -565,6 +565,6 @@ onMounted(load)
   cursor: pointer;
   margin-bottom: 6px;
 }
-.faq-q { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #cbd5e1; font-weight: 500; }
-.faq-a { font-size: 13px; color: #64748b; margin-top: 10px; line-height: 1.6; }
+.faq-q { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: var(--cf-text); font-weight: 500; }
+.faq-a { font-size: 13px; color: var(--cf-text-3); margin-top: 10px; line-height: 1.6; }
 </style>

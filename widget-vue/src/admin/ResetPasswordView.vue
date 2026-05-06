@@ -171,7 +171,7 @@ async function handleSubmit() {
 
 .auth-card {
   position: relative;
-  background: #1E293B;
+  background: var(--cf-surface-2);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
   padding: 40px;
@@ -181,20 +181,20 @@ async function handleSubmit() {
 
 .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
 .brand-icon { width: 36px; height: 36px; background: linear-gradient(135deg, #1e1b4b, #312e81); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-.brand-name { font-weight: 700; font-size: 18px; color: #f1f5f9; }
+.brand-name { font-weight: 700; font-size: 18px; color: var(--cf-text); }
 
-.auth-title { font-size: 22px; font-weight: 700; color: #f1f5f9; margin: 0 0 6px; }
-.auth-sub { font-size: 14px; color: #64748b; margin: 0 0 28px; line-height: 1.5; }
+.auth-title { font-size: 22px; font-weight: 700; color: var(--cf-text); margin: 0 0 6px; }
+.auth-sub { font-size: 14px; color: var(--cf-text-3); margin: 0 0 28px; line-height: 1.5; }
 
 .auth-form { display: flex; flex-direction: column; gap: 16px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field label { font-size: 13px; font-weight: 500; color: #94a3b8; }
+.field label { font-size: 13px; font-weight: 500; color: var(--cf-text-2); }
 .field input {
   background: #0F172A;
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 10px;
   padding: 11px 14px;
-  color: #f1f5f9;
+  color: var(--cf-text);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
@@ -224,5 +224,5 @@ async function handleSubmit() {
 .invalid-state, .success-state { text-align: center; }
 .invalid-state svg, .success-state svg { display: block; margin: 0 auto 16px; }
 
-.footer-note { text-align: center; color: #334155; font-size: 12px; margin-top: 28px; }
+.footer-note { text-align: center; color: var(--cf-text-3); font-size: 12px; margin-top: 28px; }
 </style>

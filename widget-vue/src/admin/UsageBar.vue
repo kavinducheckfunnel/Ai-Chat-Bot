@@ -79,7 +79,7 @@ const clientColour  = computed(() => colour(clientPct.value))
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: #475569;
+  color: var(--cf-text-2);
   margin: 0 0 8px 0;
 }
 
@@ -97,12 +97,12 @@ const clientColour  = computed(() => colour(clientPct.value))
 
 .usage-label {
   font-size: 11px;
-  color: #64748B;
+  color: var(--cf-text-2);
 }
 
 .usage-count {
   font-size: 10px;
-  color: #94A3B8;
+  color: var(--cf-text-3);
   font-variant-numeric: tabular-nums;
 }
 

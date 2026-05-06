@@ -814,7 +814,7 @@ const scrapeStatusLabel = computed(() => {
 }
 
 .page-header { margin-bottom: 24px; }
-.page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--cf-text); letter-spacing: -0.4px; }
 
 /* Tabs */
 .tabs {
@@ -831,19 +831,19 @@ const scrapeStatusLabel = computed(() => {
   border-bottom: 2px solid transparent;
   font-size: 13px;
   font-weight: 500;
-  color: #475569;
+  color: var(--cf-text-3);
   cursor: pointer;
   transition: all 0.15s;
   margin-bottom: -1px;
 }
-.tab:hover { color: #94a3b8; }
+.tab:hover { color: var(--cf-text-2); }
 .tab.active { color: #a5b4fc; border-bottom-color: #6366f1; }
 
 .tab-content { display: flex; flex-direction: column; gap: 16px; }
 
 /* Section cards */
 .section-card {
-  background: #161616;
+  background: var(--cf-surface);
   border: 1px solid rgba(255,255,255,0.07);
   border-radius: 14px;
   padding: 24px;
@@ -871,8 +871,8 @@ const scrapeStatusLabel = computed(() => {
 .messenger-icon { background: rgba(0,132,255,0.1); }
 .twilio-icon { background: rgba(242,47,70,0.1); }
 
-.section-title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
-.section-sub { font-size: 12px; color: #475569; margin-top: 3px; }
+.section-title { font-size: 15px; font-weight: 600; color: var(--cf-text); }
+.section-sub { font-size: 12px; color: var(--cf-text-3); margin-top: 3px; }
 
 .status-badge {
   margin-left: auto;
@@ -894,7 +894,7 @@ const scrapeStatusLabel = computed(() => {
   gap: 16px;
 }
 
-.embed-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+.embed-title { font-size: 14px; font-weight: 600; color: var(--cf-text); }
 
 .format-tabs { display: flex; gap: 6px; }
 .format-tab {
@@ -907,19 +907,19 @@ const scrapeStatusLabel = computed(() => {
   border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
-  color: #64748b;
+  color: var(--cf-text-3);
   cursor: pointer;
   transition: all 0.12s;
 }
-.format-tab:hover { background: rgba(255,255,255,0.07); color: #94a3b8; }
+.format-tab:hover { background: rgba(255,255,255,0.07); color: var(--cf-text-2); }
 .format-tab.active { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); color: #a5b4fc; }
 .format-icon { display: flex; align-items: center; }
 
-.embed-instruction { font-size: 12px; color: #475569; }
-.embed-instruction code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: #94a3b8; }
+.embed-instruction { font-size: 12px; color: var(--cf-text-3); }
+.embed-instruction code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: var(--cf-text-2); }
 
 .code-block {
-  background: #0a0a0a;
+  background: var(--cf-bg);
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 10px;
   padding: 16px;
@@ -931,7 +931,7 @@ const scrapeStatusLabel = computed(() => {
   font-family: 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.7;
-  color: #94a3b8;
+  color: var(--cf-text-2);
   white-space: pre;
   overflow-x: auto;
 }
@@ -949,11 +949,11 @@ const scrapeStatusLabel = computed(() => {
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--cf-text-2);
   cursor: pointer;
   transition: all 0.15s;
 }
-.copy-btn:hover { background: rgba(255,255,255,0.1); color: #f1f5f9; }
+.copy-btn:hover { background: rgba(255,255,255,0.1); color: var(--cf-text); }
 .copy-btn.copied { color: #22c55e; border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.08); }
 
 .skeleton { min-height: 120px; }
@@ -968,15 +968,15 @@ const scrapeStatusLabel = computed(() => {
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
-  background: #161616;
+  background: var(--cf-surface);
   border: 1px solid rgba(255,255,255,0.06);
   border-radius: 12px;
 }
 
 .channel-meta { flex: 1; display: flex; align-items: center; gap: 10px; }
-.channel-name { font-size: 14px; font-weight: 500; color: #94a3b8; }
+.channel-name { font-size: 14px; font-weight: 500; color: var(--cf-text-2); }
 .channel-status { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
-.channel-status.off { background: rgba(255,255,255,0.05); color: #475569; }
+.channel-status.off { background: rgba(255,255,255,0.05); color: var(--cf-text-3); }
 
 .btn-configure {
   padding: 6px 14px;
@@ -985,7 +985,7 @@ const scrapeStatusLabel = computed(() => {
   border-radius: 7px;
   font-size: 12px;
   font-weight: 500;
-  color: #475569;
+  color: var(--cf-text-3);
   cursor: not-allowed;
 }
 
@@ -993,7 +993,7 @@ const scrapeStatusLabel = computed(() => {
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
 .field { display: flex; flex-direction: column; gap: 7px; }
-.field label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+.field label { font-size: 12px; font-weight: 600; color: var(--cf-text-3); text-transform: uppercase; letter-spacing: 0.06em; }
 
 .input {
   padding: 10px 13px;
@@ -1001,13 +1001,13 @@ const scrapeStatusLabel = computed(() => {
   border: 1px solid rgba(255,255,255,0.09);
   border-radius: 9px;
   font-size: 14px;
-  color: #f1f5f9;
+  color: var(--cf-text);
   outline: none;
   transition: border-color 0.15s;
   width: 100%;
 }
 .input:focus { border-color: #6366f1; }
-.input::placeholder { color: #334155; }
+.input::placeholder { color: var(--cf-text-3); }
 
 /* Theme */
 .theme-row { display: flex; gap: 10px; }
@@ -1017,14 +1017,14 @@ const scrapeStatusLabel = computed(() => {
   background: #0d0d0d;
   border: 1.5px solid rgba(255,255,255,0.09);
   border-radius: 9px;
-  font-size: 13px; font-weight: 500; color: #64748b;
+  font-size: 13px; font-weight: 500; color: var(--cf-text-3);
   cursor: pointer; transition: all 0.12s;
 }
-.theme-btn:hover { border-color: #334155; color: #94a3b8; }
+.theme-btn:hover { border-color: var(--cf-text-3); color: var(--cf-text-2); }
 .theme-btn.selected { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.08); }
 .theme-dot { width: 12px; height: 12px; border-radius: 50%; }
-.dark-dot { background: #0f172a; border: 1px solid #334155; }
-.light-dot { background: #f8fafc; border: 1px solid #cbd5e1; }
+.dark-dot { background: #0f172a; border: 1px solid var(--cf-text-3); }
+.light-dot { background: var(--cf-text); border: 1px solid var(--cf-text); }
 
 /* Colors */
 .color-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1032,7 +1032,7 @@ const scrapeStatusLabel = computed(() => {
 .color-swatch.selected { outline: 2px solid #6366f1; outline-offset: 2px; }
 .color-custom { display: flex; align-items: center; gap: 7px; }
 .color-picker { width: 26px; height: 26px; border: none; border-radius: 50%; cursor: pointer; padding: 0; background: none; }
-.color-hex { font-size: 11px; color: #475569; font-family: monospace; }
+.color-hex { font-size: 11px; color: var(--cf-text-3); font-family: monospace; }
 
 /* Save */
 .btn-save {
@@ -1068,18 +1068,18 @@ const scrapeStatusLabel = computed(() => {
 .status-done .indicator-dot { background: #22c55e; }
 .status-running .indicator-dot { background: #6366f1; animation: pulse 1s infinite; }
 .status-failed .indicator-dot { background: #ef4444; }
-.status-pending .indicator-dot { background: #475569; }
+.status-pending .indicator-dot { background: var(--cf-text-3); }
 .status-done { color: #22c55e; }
 .status-running { color: #a5b4fc; }
 .status-failed { color: #ef4444; }
-.status-pending { color: #475569; }
+.status-pending { color: var(--cf-text-3); }
 
-.pages-count { font-size: 12px; color: #475569; }
+.pages-count { font-size: 12px; color: var(--cf-text-3); }
 
 .progress-wrap { display: flex; flex-direction: column; gap: 6px; }
-.progress-bar { height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; }
+.progress-bar { height: 4px; background: var(--cf-surface-2); border-radius: 2px; overflow: hidden; }
 .progress-fill { height: 100%; background: #6366f1; border-radius: 2px; transition: width 0.5s; }
-.progress-text { font-size: 12px; color: #475569; }
+.progress-text { font-size: 12px; color: var(--cf-text-3); }
 
 .mini-spinner {
   width: 13px; height: 13px;
@@ -1103,8 +1103,8 @@ const scrapeStatusLabel = computed(() => {
 }
 .feature-row:last-child { border-bottom: none; padding-bottom: 0; }
 .feature-info { display: flex; flex-direction: column; gap: 3px; }
-.feature-name { font-size: 14px; font-weight: 500; color: #e2e8f0; }
-.feature-desc { font-size: 12px; color: #475569; }
+.feature-name { font-size: 14px; font-weight: 500; color: var(--cf-text); }
+.feature-desc { font-size: 12px; color: var(--cf-text-3); }
 
 .toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; cursor: pointer; }
 .toggle input { opacity: 0; width: 0; height: 0; }
@@ -1121,15 +1121,15 @@ const scrapeStatusLabel = computed(() => {
   left: 3px; top: 3px;
   width: 16px; height: 16px;
   border-radius: 50%;
-  background: #475569;
+  background: var(--cf-text-3);
   transition: all 0.2s;
 }
 .toggle input:checked + .toggle-slider { background: rgba(99,102,241,0.3); border-color: rgba(99,102,241,0.5); }
 .toggle input:checked + .toggle-slider::before { transform: translateX(20px); background: #6366f1; }
 
 /* Integrations */
-.status-badge.inactive { background: rgba(71,85,105,0.2); color: #475569; border: 1px solid rgba(71,85,105,0.3); }
-.field-hint { font-size: 11px; color: #334155; line-height: 1.5; }
+.status-badge.inactive { background: rgba(71,85,105,0.2); color: var(--cf-text-3); border: 1px solid rgba(71,85,105,0.3); }
+.field-hint { font-size: 11px; color: var(--cf-text-3); line-height: 1.5; }
 .save-row { display: flex; justify-content: flex-end; }
 .pw-error { font-size: 13px; color: #fca5a5; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
 .btn-save {
@@ -1162,11 +1162,11 @@ const scrapeStatusLabel = computed(() => {
   left: 3px; top: 3px;
   width: 16px; height: 16px;
   border-radius: 50%;
-  background: #475569;
+  background: var(--cf-text-3);
   transition: all 0.2s;
 }
 .toggle-btn.on .toggle-knob { transform: translateX(20px); background: #6366f1; }
-.toggle-lbl { font-size: 13px; color: #64748b; }
+.toggle-lbl { font-size: 13px; color: var(--cf-text-3); }
 /* Canned responses */
 .canned-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
 .canned-row { display: flex; gap: 10px; align-items: flex-start; }
@@ -1178,7 +1178,7 @@ const scrapeStatusLabel = computed(() => {
 .btn-add-canned:hover { background: rgba(99,102,241,0.15); }
 /* Toggle label in form */
 .toggle-field { display: flex; align-items: center; }
-.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: #94a3b8; }
+.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: var(--cf-text-2); }
 .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
 
 /* Feature gate overlay */
@@ -1192,7 +1192,7 @@ const scrapeStatusLabel = computed(() => {
   gap: 10px; padding: 24px; text-align: center;
 }
 .gate-lock { font-size: 28px; line-height: 1; }
-.gate-msg { font-size: 13px; color: #cbd5e1; line-height: 1.6; max-width: 280px; }
+.gate-msg { font-size: 13px; color: var(--cf-text); line-height: 1.6; max-width: 280px; }
 .gate-msg strong { color: #a5b4fc; }
 .gate-upgrade-btn {
   display: inline-block; background: #6366f1; color: white;
