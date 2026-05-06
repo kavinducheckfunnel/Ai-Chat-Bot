@@ -1,3 +1,4 @@
+import './assets/admin.css'
 import { createApp, defineComponent, h } from 'vue'
 import { createRouter, createWebHistory, RouterView } from 'vue-router'
 
