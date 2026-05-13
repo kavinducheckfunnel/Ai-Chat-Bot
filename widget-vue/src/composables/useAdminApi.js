@@ -85,17 +85,31 @@ export function useAdminApi() {
 
     getMe: () => apiFetch('/api/admin/auth/me/'),
 
-    forgotPassword: (email) => fetch(`${API_BASE}/api/admin/auth/forgot-password/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    }).then(r => r.json()),
+    async forgotPassword(email) {
+      const res = await fetch(`${API_BASE}/api/admin/auth/forgot-password/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail || 'Something went wrong. Please try again.')
+      }
+      return res.json()
+    },
 
-    resetPassword: (uid, token, new_password) => fetch(`${API_BASE}/api/admin/auth/reset-password/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ uid, token, new_password }),
-    }).then(r => r.json()),
+    async resetPassword(uid, token, new_password) {
+      const res = await fetch(`${API_BASE}/api/admin/auth/reset-password/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, token, new_password }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        throw new Error(err.detail || 'Something went wrong. Please try again.')
+      }
+      return res.json()
+    },
 
     changePassword: (current_password, new_password) => apiFetch('/api/admin/auth/change-password/', {
       method: 'POST',
