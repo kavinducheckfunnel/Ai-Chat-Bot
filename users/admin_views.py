@@ -113,9 +113,8 @@ def forgot_password(request):
     # Always return 200 — never reveal whether an account exists
     response_msg = 'If an account with that email exists, a reset link has been sent.'
 
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
+    user = User.objects.filter(email=email).order_by('-date_joined').first()
+    if not user:
         return Response({'detail': response_msg})
 
     uid = urlsafe_base64_encode(force_bytes(user.pk))
