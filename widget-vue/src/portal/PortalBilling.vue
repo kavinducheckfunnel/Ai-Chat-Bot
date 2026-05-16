@@ -567,4 +567,9 @@ onMounted(load)
 }
 .faq-q { display: flex; justify-content: space-between; align-items: center; font-size: 14px; color: #cbd5e1; font-weight: 500; }
 .faq-a { font-size: 13px; color: #64748b; margin-top: 10px; line-height: 1.6; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .current-plan-card { flex-direction: column; }
+}
 </style>

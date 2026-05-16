@@ -1,6 +1,23 @@
 <template>
   <div class="portal-shell" v-if="ready">
-    <PortalSidebar :client="client" />
+    <!-- Mobile top bar -->
+    <div class="mobile-topbar">
+      <button class="hamburger" @click="sidebarOpen = true" aria-label="Open menu">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+          <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <span class="mobile-brand">Checkfunnel</span>
+    </div>
+
+    <!-- Overlay -->
+    <transition name="fade">
+      <div v-if="sidebarOpen" class="overlay" @click="sidebarOpen = false" />
+    </transition>
+
+    <!-- Sidebar -->
+    <PortalSidebar :client="client" :class="{ 'sidebar-open': sidebarOpen }" @close="sidebarOpen = false" />
+
     <main class="portal-main">
       <router-view :client="client" @client-updated="onClientUpdated" />
     </main>
@@ -22,6 +39,7 @@ const api = useAdminApi()
 
 const client = ref(null)
 const ready = ref(false)
+const sidebarOpen = ref(false)
 
 provide('portalClient', client)
 
@@ -29,11 +47,9 @@ async function loadClient() {
   try {
     const c = await api.getPortalClient()
     client.value = c
-    // Redirect to onboarding wizard if not yet complete
     if (c && !c.onboarding_complete && route.path !== '/portal/setup') {
       router.push('/portal/setup')
     } else if (!c && route.path !== '/portal/setup') {
-      // No client assigned yet — stay on setup
       router.push('/portal/setup')
     }
   } catch {
@@ -84,15 +100,78 @@ onMounted(loadClient)
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Mobile: stack sidebar above main content */
+.mobile-topbar { display: none; }
+.overlay { display: none; }
+
 @media (max-width: 768px) {
   .portal-shell {
     flex-direction: column;
-    height: auto;
-    min-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
   }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: #111111;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    flex-shrink: 0;
+  }
+
+  .hamburger {
+    background: none;
+    border: none;
+    color: #cbd5e1;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+  .hamburger:hover { background: rgba(255,255,255,0.08); }
+
+  .mobile-brand {
+    font-size: 15px;
+    font-weight: 700;
+    color: #f1f5f9;
+    letter-spacing: -0.3px;
+  }
+
+  .overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 99;
+  }
+
   .portal-main {
-    overflow-y: visible;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  :deep(.sidebar) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+
+  :deep(.sidebar.sidebar-open) {
+    transform: translateX(0);
   }
 }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

@@ -433,4 +433,10 @@ watch(() => props.client, loadLeads)
 }
 
 .no-history { color: #334155; font-size: 13px; text-align: center; padding: 24px; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .modal { min-width: unset; width: calc(100vw - 32px); margin: 0 16px; }
+}
 </style>

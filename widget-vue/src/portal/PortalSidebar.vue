@@ -25,7 +25,7 @@
     <nav class="nav">
       <!-- INBOX -->
       <p class="nav-section">Inbox</p>
-      <router-link to="/portal/inbox" class="nav-item" :class="{ active: $route.path === '/portal/inbox' }">
+      <router-link to="/portal/inbox" class="nav-item" :class="{ active: $route.path === '/portal/inbox' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         All chats
         <span class="badge" v-if="liveBadge > 0">{{ liveBadge }}</span>
@@ -33,42 +33,42 @@
 
       <!-- CUSTOMERS -->
       <p class="nav-section">Customers</p>
-      <router-link to="/portal/customers" class="nav-item" :class="{ active: $route.path === '/portal/customers' }">
+      <router-link to="/portal/customers" class="nav-item" :class="{ active: $route.path === '/portal/customers' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/></svg>
         All leads
       </router-link>
 
       <!-- REPORTS -->
       <p class="nav-section">Reports</p>
-      <router-link to="/portal/reports" class="nav-item" :class="{ active: $route.path === '/portal/reports' }">
+      <router-link to="/portal/reports" class="nav-item" :class="{ active: $route.path === '/portal/reports' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
         Overview
       </router-link>
 
       <!-- LIVE VIEW -->
       <p class="nav-section">Live</p>
-      <router-link to="/portal/live" class="nav-item" :class="{ active: $route.path === '/portal/live' }">
+      <router-link to="/portal/live" class="nav-item" :class="{ active: $route.path === '/portal/live' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
         Live View
       </router-link>
 
       <!-- PIPELINE -->
       <p class="nav-section">Pipeline</p>
-      <router-link to="/portal/pipeline" class="nav-item" :class="{ active: $route.path === '/portal/pipeline' }">
+      <router-link to="/portal/pipeline" class="nav-item" :class="{ active: $route.path === '/portal/pipeline' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="4" height="18" rx="1" stroke="currentColor" stroke-width="2"/><rect x="10" y="3" width="4" height="13" rx="1" stroke="currentColor" stroke-width="2"/><rect x="17" y="3" width="4" height="8" rx="1" stroke="currentColor" stroke-width="2"/></svg>
         Pipeline
       </router-link>
 
       <!-- BILLING -->
       <p class="nav-section">Account</p>
-      <router-link to="/portal/billing" class="nav-item" :class="{ active: $route.path === '/portal/billing' }">
+      <router-link to="/portal/billing" class="nav-item" :class="{ active: $route.path === '/portal/billing' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="1" y1="10" x2="23" y2="10" stroke="currentColor" stroke-width="2"/></svg>
         Billing
       </router-link>
 
       <!-- SETTINGS -->
       <p class="nav-section">Settings</p>
-      <router-link to="/portal/settings" class="nav-item" :class="{ active: $route.path.startsWith('/portal/settings') }">
+      <router-link to="/portal/settings" class="nav-item" :class="{ active: $route.path.startsWith('/portal/settings') }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Channels & embed
       </router-link>
@@ -109,6 +109,7 @@ import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const props = defineProps({ client: Object })
+defineEmits(['close'])
 const api = useAdminApi()
 const user = computed(() => api.getUser())
 const isImpersonating = computed(() => api.isImpersonating())
@@ -295,21 +296,15 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
 }
 .logout-btn:hover { background: rgba(239,68,68,0.1); color: #fca5a5; }
 
-/* Mobile responsive sidebar */
+/* Mobile: full-height drawer, controlled by parent via transform */
 @media (max-width: 768px) {
   .sidebar {
-    width: 100%;
-    flex-direction: row;
-    height: auto;
-    padding: 8px 12px;
-    flex-wrap: wrap;
-    gap: 0;
+    width: 240px;
+    min-width: 240px;
+    height: 100vh;
+    overflow-y: auto;
+    flex-direction: column;
+    padding: 20px 12px;
   }
-  .brand { margin-bottom: 0; }
-  .client-badge { display: none; }
-  .nav { flex-direction: row; flex-wrap: wrap; gap: 0; width: 100%; margin-top: 6px; }
-  .nav-section { display: none; }
-  .nav-item { padding: 8px 10px; font-size: 12px; }
-  .sidebar-bottom { width: 100%; }
 }
 </style>

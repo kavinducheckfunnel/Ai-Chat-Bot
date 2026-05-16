@@ -367,4 +367,9 @@ watch(() => props.client, loadData)
 .msg-text { font-size: 12px; line-height: 1.5; padding: 8px 12px; border-radius: 10px; margin: 0; }
 .user-msg .msg-text { background: rgba(99,102,241,0.15); color: #c7d2fe; border-bottom-right-radius: 3px; }
 .ai-msg  .msg-text { background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.05); border-bottom-left-radius: 3px; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .kanban-board { -webkit-overflow-scrolling: touch; }
+}
 </style>

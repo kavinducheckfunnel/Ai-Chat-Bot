@@ -1200,4 +1200,9 @@ const scrapeStatusLabel = computed(() => {
   text-decoration: none; transition: background 0.15s; margin-top: 4px;
 }
 .gate-upgrade-btn:hover { background: #4f46e5; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .form-grid { grid-template-columns: 1fr !important; }
+}
 </style>

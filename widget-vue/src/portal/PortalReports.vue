@@ -919,4 +919,13 @@ watch(() => props.client, load)
 .sk-lbl  { height: 12px; width: 45%; background: #1e293b; border-radius: 4px; }
 .secondary-card.skeleton { display: flex; flex-direction: column; gap: 8px; }
 .breakdown-card.skeleton { display: flex; flex-direction: column; gap: 10px; padding: 20px; background: #161616; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .secondary-row { grid-template-columns: repeat(2, 1fr); }
+  .section-row { grid-template-columns: 1fr; }
+  .breakdown-grid { grid-template-columns: 1fr; }
+  .events-grid { grid-template-columns: repeat(2, 1fr); }
+}
 </style>

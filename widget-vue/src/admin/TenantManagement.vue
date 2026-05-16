@@ -1250,6 +1250,7 @@ onMounted(load)
 
 @media (max-width: 768px) {
   .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .table-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .form-grid { grid-template-columns: 1fr !important; }
   .sub-usage-grid { grid-template-columns: 1fr; }
   .addon-grid { grid-template-columns: 1fr 1fr; }

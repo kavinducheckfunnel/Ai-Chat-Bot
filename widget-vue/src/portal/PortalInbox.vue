@@ -39,7 +39,7 @@
 
     <div class="inbox-layout">
       <!-- ── Session list ─────────────────────────────────────────────── -->
-      <div class="session-list">
+      <div class="session-list" :class="{ 'mobile-hidden': mobileView !== 'list' }">
         <div v-if="loading" class="loading-state">
           <div class="skeleton-session" v-for="n in 4" :key="n">
             <div class="sk-avatar"></div>
@@ -73,6 +73,7 @@
             <div class="session-tags">
               <span class="tag" :class="kanbanClass(s.kanban_state)">{{ s.kanban_state }}</span>
               <span class="channel-badge" :class="'ch-' + (s.channel || 'website')">{{ channelLabel(s.channel) }}</span>
+              <span v-if="s.takeover_active" class="takeover-dot" title="You are controlling this chat">⚡</span>
               <span class="heat-bar" :style="{ background: heatColor(s.heat_score), width: (s.heat_score / 100 * 60 + 20) + 'px' }"></span>
             </div>
           </div>
@@ -80,8 +81,12 @@
       </div>
 
       <!-- ── Chat panel ──────────────────────────────────────────────── -->
-      <div class="chat-panel" v-if="selected">
+      <div class="chat-panel" :class="{ 'mobile-hidden': mobileView !== 'chat' }" v-if="selected">
         <div class="chat-panel-header">
+          <!-- Mobile back button -->
+          <button class="mobile-back-btn" @click="mobileView = 'list'" aria-label="Back to sessions">
+            <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
           <div class="chat-user-info">
             <div class="chat-avatar" :style="{ background: heatColor(selected.heat_score) }">{{ initials(selected) }}</div>
             <div>
@@ -89,7 +94,30 @@
               <p class="chat-sub">{{ selected.conversation_state }} · Heat {{ Math.round(selected.heat_score || 0) }}%</p>
             </div>
           </div>
-          <span class="kanban-badge" :class="kanbanClass(selected.kanban_state)">{{ selected.kanban_state }}</span>
+          <div class="header-right-actions">
+            <!-- Takeover controls -->
+            <template v-if="selected.takeover_active">
+              <span class="takeover-status-badge">⚡ In control</span>
+              <button class="release-btn" @click="releaseTakeover" :disabled="releasingTakeover">
+                {{ releasingTakeover ? '…' : 'Release to AI' }}
+              </button>
+            </template>
+            <template v-else>
+              <button class="takeover-btn" @click="takeover" :disabled="takingOver">
+                {{ takingOver ? '…' : 'Take Over' }}
+              </button>
+            </template>
+            <span class="kanban-badge" :class="kanbanClass(selected.kanban_state)">{{ selected.kanban_state }}</span>
+            <!-- Mobile info button -->
+            <button class="mobile-info-btn" @click="mobileView = 'details'" aria-label="Visitor details">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Takeover banner -->
+        <div v-if="selected.takeover_active" class="takeover-banner">
+          ⚡ You are controlling this conversation — AI replies are paused
         </div>
 
         <div class="messages" ref="messagesEl">
@@ -97,20 +125,43 @@
             v-for="(msg, i) in chatHistory"
             :key="i"
             class="message"
-            :class="msg.role === 'user' ? 'user-msg' : 'ai-msg'"
+            :class="[msg.role === 'user' ? 'user-msg' : 'ai-msg', msg.source === 'admin' ? 'admin-msg' : '']"
           >
+            <span v-if="msg.source === 'admin'" class="msg-role-label">You (Admin)</span>
             <div class="bubble">{{ msg.message || msg.content }}</div>
           </div>
         </div>
+
+        <!-- Admin message input (visible only during takeover) -->
+        <div v-if="selected.takeover_active" class="admin-input-area">
+          <textarea
+            class="admin-textarea"
+            v-model="adminMsg"
+            placeholder="Type your message… (Ctrl+Enter to send)"
+            rows="2"
+            @keydown.ctrl.enter.prevent="sendAdminMsg"
+          ></textarea>
+          <button class="admin-send-btn" @click="sendAdminMsg" :disabled="!adminMsg.trim() || sendingMsg">
+            <svg v-if="!sendingMsg" width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="22 2 15 22 11 13 2 9 22 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <div v-else class="send-spinner"></div>
+          </button>
+        </div>
       </div>
 
-      <div class="chat-panel empty-panel" v-else>
+      <div class="chat-panel empty-panel" :class="{ 'mobile-hidden': mobileView !== 'chat' }" v-else>
         <svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/></svg>
         <p>Select a conversation</p>
       </div>
 
       <!-- ── Visitor details panel ───────────────────────────────────── -->
-      <div class="visitor-panel" v-if="selected">
+      <div class="visitor-panel" :class="{ 'mobile-hidden': mobileView !== 'details' }" v-if="selected">
+        <!-- Mobile back button -->
+        <div class="vp-mobile-back">
+          <button class="mobile-back-btn" @click="mobileView = 'chat'">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Back to chat
+          </button>
+        </div>
 
         <!-- Customer -->
         <div class="vp-section customer-section">
@@ -273,7 +324,7 @@
       </div>
 
       <!-- No session selected -->
-      <div class="visitor-panel visitor-panel-empty" v-else>
+      <div class="visitor-panel visitor-panel-empty" :class="{ 'mobile-hidden': mobileView !== 'details' }" v-else>
         <svg width="28" height="28" fill="none" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/></svg>
         <p>Visitor details</p>
       </div>
@@ -294,6 +345,53 @@ const activeTab = ref('all')
 const selectedId = ref(null)
 const messagesEl = ref(null)
 let ws = null
+
+// ── Mobile panel navigation ───────────────────────────────────────────────────
+const mobileView = ref('list') // 'list' | 'chat' | 'details'
+const isMobile = () => window.innerWidth <= 768
+
+// ── God View / Takeover ───────────────────────────────────────────────────────
+const adminMsg = ref('')
+const takingOver = ref(false)
+const releasingTakeover = ref(false)
+const sendingMsg = ref(false)
+
+async function takeover() {
+  if (!selected.value || takingOver.value) return
+  takingOver.value = true
+  try {
+    await api.takeoverSession(selected.value.session_id)
+    const idx = sessions.value.findIndex(s => s.session_id === selected.value.session_id)
+    if (idx !== -1) sessions.value[idx] = { ...sessions.value[idx], takeover_active: true }
+  } catch {} finally { takingOver.value = false }
+}
+
+async function releaseTakeover() {
+  if (!selected.value || releasingTakeover.value) return
+  releasingTakeover.value = true
+  try {
+    await api.releaseSession(selected.value.session_id)
+    const idx = sessions.value.findIndex(s => s.session_id === selected.value.session_id)
+    if (idx !== -1) sessions.value[idx] = { ...sessions.value[idx], takeover_active: false }
+    adminMsg.value = ''
+  } catch {} finally { releasingTakeover.value = false }
+}
+
+async function sendAdminMsg() {
+  const msg = adminMsg.value.trim()
+  if (!msg || !selected.value || sendingMsg.value) return
+  sendingMsg.value = true
+  try {
+    await api.sendMessage(selected.value.session_id, msg)
+    const idx = sessions.value.findIndex(s => s.session_id === selected.value.session_id)
+    if (idx !== -1) {
+      const history = [...(sessions.value[idx].chat_history || []), { role: 'ai', message: msg, source: 'admin' }]
+      sessions.value[idx] = { ...sessions.value[idx], chat_history: history }
+    }
+    adminMsg.value = ''
+    nextTick(() => { if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight })
+  } catch {} finally { sendingMsg.value = false }
+}
 
 // ── Duration timer ────────────────────────────────────────────────────────────
 const chatDuration = ref('0m 0s')
@@ -402,6 +500,7 @@ async function loadSessions() {
 
 function select(s) {
   selectedId.value = s.session_id
+  if (isMobile()) mobileView.value = 'chat'
   nextTick(() => {
     if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
   })
@@ -922,13 +1021,149 @@ watch(selected, (s) => {
 
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
-/* Mobile responsive */
+/* ── Takeover styles ─────────────────────────────────────────────────────── */
+.takeover-dot { font-size: 10px; }
+
+.takeover-status-badge {
+  font-size: 11px; font-weight: 600; color: #fbbf24;
+  background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.25);
+  border-radius: 20px; padding: 3px 10px; white-space: nowrap;
+}
+
+.takeover-btn {
+  padding: 5px 14px; font-size: 12px; font-weight: 600;
+  background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.3);
+  color: #a5b4fc; border-radius: 8px; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
+}
+.takeover-btn:hover:not(:disabled) { background: rgba(99,102,241,0.25); }
+.takeover-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.release-btn {
+  padding: 5px 14px; font-size: 12px; font-weight: 600;
+  background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25);
+  color: #fca5a5; border-radius: 8px; cursor: pointer;
+  transition: all 0.15s; white-space: nowrap;
+}
+.release-btn:hover:not(:disabled) { background: rgba(239,68,68,0.2); }
+.release-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.takeover-banner {
+  padding: 10px 20px;
+  background: rgba(251,191,36,0.08);
+  border-bottom: 1px solid rgba(251,191,36,0.2);
+  font-size: 12px; font-weight: 600; color: #fbbf24;
+  flex-shrink: 0;
+}
+
+.admin-input-area {
+  display: flex; gap: 10px; align-items: flex-end;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(99,102,241,0.2);
+  background: rgba(99,102,241,0.04);
+  flex-shrink: 0;
+}
+
+.admin-textarea {
+  flex: 1; background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(99,102,241,0.3); border-radius: 10px;
+  padding: 9px 12px; font-size: 13px; color: #e2e8f0;
+  font-family: inherit; resize: none; outline: none;
+  transition: border-color 0.15s;
+}
+.admin-textarea:focus { border-color: rgba(99,102,241,0.6); }
+
+.admin-send-btn {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: #6366f1; border: none; color: white;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: opacity 0.15s;
+}
+.admin-send-btn:hover:not(:disabled) { opacity: 0.85; }
+.admin-send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.send-spinner {
+  width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.admin-msg { flex-direction: column; align-items: flex-end; }
+.admin-msg .bubble { background: rgba(99,102,241,0.2); color: #c7d2fe; border-bottom-right-radius: 4px; }
+.msg-role-label { font-size: 10px; font-weight: 600; color: #6366f1; margin-bottom: 2px; }
+
+.header-right-actions {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+
+/* Mobile navigation buttons */
+.mobile-back-btn { display: none; }
+.mobile-info-btn { display: none; }
+.vp-mobile-back { display: none; }
+
+/* ── Mobile: single-panel navigation ─────────────────────────────────── */
 @media (max-width: 768px) {
-  .inbox-page { padding: 16px 12px 0; }
-  .inbox-layout { flex-direction: column; height: auto; }
-  .session-list { width: 100%; max-height: 40vh; min-width: 0; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .chat-panel { height: 50vh; min-width: 0; }
-  .visitor-panel { width: 100%; min-width: 0; border-left: none; border-top: 1px solid rgba(255,255,255,0.06); }
+  .inbox-page {
+    padding: 14px 12px 0;
+    height: calc(100vh - 53px); /* subtract mobile topbar */
+  }
+
+  .inbox-layout {
+    position: relative;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Hide non-active panels on mobile */
+  .session-list.mobile-hidden,
+  .chat-panel.mobile-hidden,
+  .visitor-panel.mobile-hidden {
+    display: none !important;
+  }
+
+  /* Full-width single panels on mobile */
+  .session-list {
+    width: 100%; min-width: 0;
+    height: 100%;
+    border-right: none;
+    overflow-y: auto;
+  }
+
+  .chat-panel {
+    width: 100%; min-width: 0;
+    height: 100%;
+    border-right: none;
+  }
+
+  .visitor-panel {
+    width: 100%; min-width: 0;
+    border-left: none;
+  }
+
+  /* Show mobile navigation buttons */
+  .mobile-back-btn {
+    display: flex; align-items: center; gap: 4px;
+    background: none; border: none; color: #a5b4fc;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    padding: 4px 0; flex-shrink: 0;
+  }
+
+  .mobile-info-btn {
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; color: #64748b; cursor: pointer;
+    width: 32px; height: 32px; flex-shrink: 0;
+  }
+
+  .vp-mobile-back {
+    display: block;
+    padding: 12px 16px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+
+  /* Compact header on mobile */
+  .takeover-status-badge { display: none; }
+  .kanban-badge { display: none; }
 }
 
 /* Tags */

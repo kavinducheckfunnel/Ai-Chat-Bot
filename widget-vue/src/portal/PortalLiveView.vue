@@ -492,4 +492,9 @@ watch(() => props.client, () => loadData())
 .ai-msg  .msg-text { background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.05); border-bottom-left-radius: 4px; }
 
 .no-history { color: #334155; font-size: 13px; text-align: center; padding: 24px; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
 </style>
