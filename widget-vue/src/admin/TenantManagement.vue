@@ -1247,4 +1247,11 @@ onMounted(load)
 .si-row { display: flex; gap: 12px; font-size: 12px; }
 .si-key { color: #64748B; font-weight: 600; min-width: 120px; }
 .si-val { color: #0F172A; font-family: monospace; word-break: break-all; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .form-grid { grid-template-columns: 1fr !important; }
+  .sub-usage-grid { grid-template-columns: 1fr; }
+  .addon-grid { grid-template-columns: 1fr 1fr; }
+}
 </style>

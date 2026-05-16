@@ -1155,4 +1155,12 @@ watch(sessionFilters, onFilterChange)
   font-size: 11px;
   color: #60A5FA;
 }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .overview-stats { grid-template-columns: repeat(2, 1fr); }
+  .settings-grid { grid-template-columns: 1fr; }
+  .an-stats-row { grid-template-columns: repeat(2, 1fr); }
+  .an-two-col { grid-template-columns: 1fr; }
+}
 </style>

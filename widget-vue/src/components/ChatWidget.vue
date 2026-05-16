@@ -845,4 +845,30 @@ onBeforeUnmount(() => {
 }
 .cf-lead-submit:hover:not(:disabled) { opacity: 0.88; }
 .cf-lead-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Mobile responsive ──────────────────────────────────────────── */
+@media (max-width: 480px) {
+  #cf-chat-container {
+    right: 8px !important;
+    bottom: 12px !important;
+  }
+  #cf-pill-bar {
+    min-width: 0 !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+  #cf-chat-window {
+    width: calc(100vw - 16px) !important;
+    max-height: 85vh !important;
+    border-radius: 16px !important;
+  }
+  #cf-chat-header {
+    padding: 12px 14px !important;
+  }
+  #cf-chat-messages {
+    padding: 12px 14px !important;
+  }
+  #cf-input-area {
+    padding: 10px 14px !important;
+  }
+}
 </style>

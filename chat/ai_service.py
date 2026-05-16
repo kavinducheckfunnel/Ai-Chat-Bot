@@ -1,5 +1,7 @@
 import os
 import json
+import time
+import logging
 from pgvector.django import CosineDistance
 from scraper.models import DocumentChunk
 from scraper.embeddings import get_embeddings_model
@@ -9,19 +11,36 @@ from .state_machine import update_session_state
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
+logger = logging.getLogger(__name__)
+
+# Ordered fallback chain when the primary model is rate-limited.
+# All route through OpenRouter so only OPENROUTER_API_KEY is needed.
+_PLATFORM_FALLBACK_MODELS = [
+    'google/gemini-2.0-flash-001',
+    'google/gemini-flash-1.5-8b',
+    'meta-llama/llama-3.3-70b-instruct:free',
+]
+
+
+def _make_openrouter_llm(model: str) -> ChatOpenAI:
+    return ChatOpenAI(
+        model=model,
+        openai_api_key=os.environ.get('OPENROUTER_API_KEY'),
+        openai_api_base='https://openrouter.ai/api/v1',
+        temperature=0.4,
+        max_retries=1,
+    )
+
 
 def _build_llm(client):
     """
-    Return a ChatOpenAI instance using the client's BYOK settings if configured,
-    otherwise fall back to the platform OpenRouter key.
+    Return a (llm, is_byok) tuple.
+    Uses the client's BYOK key when configured, otherwise the platform default.
     """
     if client and client.ai_api_key and client.ai_model:
         provider = client.ai_provider or 'openrouter'
         if provider == 'openai':
             api_base = 'https://api.openai.com/v1'
-        elif provider == 'anthropic':
-            # Anthropic via LangChain OpenAI-compat shim through OpenRouter is safest
-            api_base = 'https://openrouter.ai/api/v1'
         else:
             api_base = 'https://openrouter.ai/api/v1'
         return ChatOpenAI(
@@ -29,14 +48,41 @@ def _build_llm(client):
             openai_api_key=client.ai_api_key,
             openai_api_base=api_base,
             temperature=0.4,
-        )
-    # Platform default — gemini-2.0-flash is 5-10x faster than pro-preview
-    return ChatOpenAI(
-        model='google/gemini-2.0-flash-001',
-        openai_api_key=os.environ.get('OPENROUTER_API_KEY'),
-        openai_api_base='https://openrouter.ai/api/v1',
-        temperature=0.4,
-    )
+            max_retries=2,
+        ), True
+    return _make_openrouter_llm(_PLATFORM_FALLBACK_MODELS[0]), False
+
+
+def _invoke_with_fallback(messages, client):
+    """
+    Invoke the LLM. For platform (non-BYOK) requests, walk the fallback chain
+    on 429 rate-limit errors so users never see an error message.
+    """
+    from openai import RateLimitError
+
+    llm, is_byok = _build_llm(client)
+
+    if is_byok:
+        # BYOK — use their key directly, no fallback
+        return llm.invoke(messages)
+
+    # Platform — try each model in the fallback chain
+    last_exc = None
+    for i, model in enumerate(_PLATFORM_FALLBACK_MODELS):
+        llm = _make_openrouter_llm(model)
+        try:
+            result = llm.invoke(messages)
+            if i > 0:
+                logger.info(f'[ai] Rate-limited on primary, succeeded with fallback: {model}')
+            return result
+        except RateLimitError as e:
+            logger.warning(f'[ai] 429 on {model}, trying next fallback. err={e}')
+            last_exc = e
+            time.sleep(0.5 * (i + 1))
+        except Exception as e:
+            raise e  # non-rate-limit errors bubble up immediately
+
+    raise last_exc  # all fallbacks exhausted
 
 
 def generate_ai_response(session, user_message, behavior_matrix, image_data=None):
@@ -109,11 +155,9 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
             HumanMessage(content=user_prompt),
         ]
 
-    # 5. Call LLM (BYOK or platform default)
-    llm = _build_llm(session.client)
-
+    # 5. Call LLM (BYOK or platform default with fallback chain)
     try:
-        raw_result = llm.invoke(messages)
+        raw_result = _invoke_with_fallback(messages, session.client)
         content = raw_result.content
 
         # Strip markdown code fences if model wraps output
@@ -129,12 +173,12 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print(
-            f'LLM Error: {e}\n'
+        logger.error(
+            f'[ai] LLM Error: {e} | '
             f"Raw: {raw_result.content if 'raw_result' in locals() else 'N/A'}"
         )
         result = {
-            'reply_text': 'I encountered an error processing your request.',
+            'reply_text': "Sorry, I'm having a little trouble right now. Please try again in a moment!",
             'intent_score': 0.5,
             'budget_score': 0.5,
             'urgency_score': 0.5,

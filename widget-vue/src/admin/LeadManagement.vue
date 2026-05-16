@@ -482,4 +482,9 @@ onMounted(() => {
   font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.15s; font-family: inherit;
 }
 .view-btn:hover { background: #6366F1; color: white; border-color: #6366F1; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
 </style>

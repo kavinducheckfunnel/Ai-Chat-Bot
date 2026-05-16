@@ -691,4 +691,18 @@ onUnmounted(() => {
 .ai-msg .msg-text { background: #F8FAFC; color: #334155; border: 1px solid #E2E8F0; border-bottom-left-radius: 4px; }
 
 .no-history { color: #94A3B8; font-size: 13px; text-align: center; padding: 20px; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 14px; }
+  .header-right { flex-wrap: wrap; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+  .analytics-row { grid-template-columns: 1fr; }
+  .sessions-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 14px; gap: 10px; }
+  .stat-value { font-size: 20px; }
+}
 </style>

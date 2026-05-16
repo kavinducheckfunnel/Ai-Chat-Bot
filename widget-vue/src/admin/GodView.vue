@@ -408,4 +408,11 @@ onUnmounted(() => clearInterval(pollInterval))
 .loader { width: 24px; height: 24px; border: 2px solid #E2E8F0; border-top-color: #6366F1; border-radius: 50%; animation: spin 0.8s linear infinite; }
 .btn-loader { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 10px; align-items: flex-start; }
+  .header-right { flex-wrap: wrap; }
+  .godview-body { flex-direction: column; }
+  .info-panel { width: 100%; flex-direction: row; flex-wrap: wrap; gap: 10px; }
+}
 </style>

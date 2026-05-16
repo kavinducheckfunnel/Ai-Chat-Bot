@@ -547,4 +547,9 @@ onMounted(() => {
 }
 .delete-confirm-btn:hover:not(:disabled) { opacity: 0.9; }
 .delete-confirm-btn:disabled { opacity: 0.6; }
+
+@media (max-width: 768px) {
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .clients-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
 </style>

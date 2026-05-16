@@ -18,22 +18,22 @@
     <nav class="nav">
       <p class="nav-section">Main</p>
 
-      <router-link to="/admin" class="nav-item" :class="{ active: $route.path === '/admin' }">
+      <router-link to="/admin" class="nav-item" :class="{ active: $route.path === '/admin' }" @click="$emit('close')">
         <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
         Dashboard
       </router-link>
 
-      <router-link to="/admin/kanban" class="nav-item" :class="{ active: $route.path === '/admin/kanban' }">
+      <router-link to="/admin/kanban" class="nav-item" :class="{ active: $route.path === '/admin/kanban' }" @click="$emit('close')">
         <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1" stroke="currentColor" stroke-width="2"/><rect x="10" y="3" width="5" height="12" rx="1" stroke="currentColor" stroke-width="2"/><rect x="17" y="3" width="5" height="15" rx="1" stroke="currentColor" stroke-width="2"/></svg>
         Kanban
       </router-link>
 
-      <router-link to="/admin/leads" class="nav-item" :class="{ active: $route.path === '/admin/leads' }">
+      <router-link to="/admin/leads" class="nav-item" :class="{ active: $route.path === '/admin/leads' }" @click="$emit('close')">
         <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><line x1="19" y1="8" x2="19" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="22" y1="11" x2="16" y2="11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Leads
       </router-link>
 
-      <router-link to="/admin/clients" class="nav-item" :class="{ active: $route.path.startsWith('/admin/clients') }">
+      <router-link to="/admin/clients" class="nav-item" :class="{ active: $route.path.startsWith('/admin/clients') }" @click="$emit('close')">
         <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         Clients
       </router-link>
@@ -41,15 +41,15 @@
       <!-- Superadmin only -->
       <template v-if="isSuperAdmin">
         <p class="nav-section">Super Admin</p>
-        <router-link to="/admin/superadmin" class="nav-item" :class="{ active: $route.path === '/admin/superadmin' }">
+        <router-link to="/admin/superadmin" class="nav-item" :class="{ active: $route.path === '/admin/superadmin' }" @click="$emit('close')">
           <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Intelligence
         </router-link>
-        <router-link to="/admin/tenants" class="nav-item" :class="{ active: $route.path === '/admin/tenants' }">
+        <router-link to="/admin/tenants" class="nav-item" :class="{ active: $route.path === '/admin/tenants' }" @click="$emit('close')">
           <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polyline points="9 22 9 12 15 12 15 22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           Tenants
         </router-link>
-        <router-link to="/admin/permissions" class="nav-item" :class="{ active: $route.path === '/admin/permissions' }">
+        <router-link to="/admin/permissions" class="nav-item" :class="{ active: $route.path === '/admin/permissions' }" @click="$emit('close')">
           <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           Permissions
         </router-link>
@@ -89,6 +89,8 @@
 import { computed } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 import UsageBar from './UsageBar.vue'
+
+defineEmits(['close'])
 
 const api = useAdminApi()
 const user = computed(() => api.getUser())

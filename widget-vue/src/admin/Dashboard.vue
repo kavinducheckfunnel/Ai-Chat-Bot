@@ -1,6 +1,19 @@
 <template>
   <div class="admin-container">
-    <Sidebar />
+    <!-- Mobile top bar -->
+    <div class="mobile-topbar">
+      <button class="hamburger" @click="sidebarOpen = true" aria-label="Open menu">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <span class="mobile-brand">Checkfunnel</span>
+    </div>
+
+    <!-- Overlay -->
+    <div v-if="sidebarOpen" class="sa-overlay" @click="sidebarOpen = false"></div>
+
+    <!-- Sidebar -->
+    <Sidebar :class="{ 'sidebar-open': sidebarOpen }" @close="sidebarOpen = false" />
+
     <main class="admin-main">
 
       <!-- Header -->
@@ -357,6 +370,8 @@
 import { ref, computed, onMounted } from 'vue'
 import Sidebar from './Sidebar.vue'
 import { useAdminApi } from '../composables/useAdminApi'
+
+const sidebarOpen = ref(false)
 
 const api = useAdminApi()
 const loading = ref(true)
@@ -835,10 +850,56 @@ const iconClock  = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24" 
   .charts-row { grid-template-columns:1fr; }
   .stats-row { grid-template-columns:repeat(3,1fr); }
 }
-@media (max-width:768px) {
-  .admin-main { padding:16px; }
-  .revenue-strip { grid-template-columns:repeat(2,1fr); }
-  .stats-row { grid-template-columns:repeat(2,1fr); }
-  .announce-layout { grid-template-columns:1fr; }
+.mobile-topbar { display: none; }
+.sa-overlay { display: none; }
+
+@media (max-width: 768px) {
+  .admin-container { flex-direction: column; }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    background: #0F172A;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    flex-shrink: 0;
+  }
+  .hamburger {
+    background: none; border: none; color: #CBD5E1; cursor: pointer;
+    padding: 4px; display: flex; align-items: center; border-radius: 6px;
+  }
+  .mobile-brand { font-size: 15px; font-weight: 700; color: #F1F5F9; letter-spacing: -0.3px; }
+
+  .sa-overlay {
+    display: block;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: 99;
+  }
+
+  :deep(.sidebar) {
+    position: fixed;
+    top: 0; left: 0;
+    height: 100vh;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  :deep(.sidebar.sidebar-open) {
+    transform: translateX(0);
+  }
+
+  .admin-main { padding: 16px; }
+  .revenue-strip { grid-template-columns: repeat(2, 1fr); }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .announce-layout { grid-template-columns: 1fr; }
+  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .charts-row { grid-template-columns: 1fr; }
+  .modal { min-width: unset; }
+  .modal-wide { min-width: unset; }
 }
 </style>
