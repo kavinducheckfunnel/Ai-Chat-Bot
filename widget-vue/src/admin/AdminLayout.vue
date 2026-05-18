@@ -43,7 +43,7 @@ const sidebarOpen = ref(false)
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: #F8FAFC;
+  background: #0F172A;
 }
 
 .main {

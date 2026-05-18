@@ -1,20 +1,5 @@
 <template>
-  <div class="admin-container">
-    <!-- Mobile top bar -->
-    <div class="mobile-topbar">
-      <button class="hamburger" @click="sidebarOpen = true" aria-label="Open menu">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      </button>
-      <span class="mobile-brand">Checkfunnel</span>
-    </div>
-
-    <!-- Overlay -->
-    <div v-if="sidebarOpen" class="sa-overlay" @click="sidebarOpen = false"></div>
-
-    <!-- Sidebar -->
-    <Sidebar :class="{ 'sidebar-open': sidebarOpen }" @close="sidebarOpen = false" />
-
-    <main class="admin-main">
+  <div class="sa-content">
 
       <!-- Header -->
       <div class="page-header">
@@ -396,8 +381,6 @@
 
       </div>
 
-    </main>
-
     <!-- Plan Modal -->
     <div v-if="planModal.open" class="modal-overlay" @click.self="planModal.open=false">
       <div class="modal">
@@ -467,12 +450,9 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import Sidebar from './Sidebar.vue'
 import { useAdminApi } from '../composables/useAdminApi'
 import { useToast } from '../composables/useToast'
 import { useConfirm } from '../composables/useConfirm'
-
-const sidebarOpen = ref(false)
 
 const api = useAdminApi()
 const toast = useToast()
@@ -825,8 +805,7 @@ const iconClock  = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24" 
 
 <style scoped>
 * { box-sizing: border-box; }
-.admin-container { display: flex; min-height: 100vh; background: #0a0a0a; color: #e2e8f0; font-family: 'Inter', -apple-system, sans-serif; }
-.admin-main { flex: 1; padding: 28px 32px; overflow-y: auto; }
+.sa-content { color: #e2e8f0; font-family: 'Inter', -apple-system, sans-serif; }
 
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
 .page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
@@ -1022,50 +1001,7 @@ select.inp option { background-color: #1e2130; color: #e2e8f0; }
   .charts-row { grid-template-columns:1fr; }
   .stats-row { grid-template-columns:repeat(3,1fr); }
 }
-.mobile-topbar { display: none; }
-.sa-overlay { display: none; }
-
 @media (max-width: 768px) {
-  .admin-container { flex-direction: column; }
-
-  .mobile-topbar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 14px 16px;
-    background: #0F172A;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    flex-shrink: 0;
-  }
-  .hamburger {
-    background: none; border: none; color: #CBD5E1; cursor: pointer;
-    padding: 4px; display: flex; align-items: center; border-radius: 6px;
-  }
-  .mobile-brand { font-size: 15px; font-weight: 700; color: #F1F5F9; letter-spacing: -0.3px; }
-
-  .sa-overlay {
-    display: block;
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.55);
-    z-index: 99;
-  }
-
-  :deep(.sidebar) {
-    position: fixed;
-    top: 0; left: 0;
-    height: 100vh;
-    z-index: 100;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-  }
-  :deep(.sidebar.sidebar-open) {
-    transform: translateX(0);
-  }
-
-  .admin-main { padding: 16px; }
   .revenue-strip { grid-template-columns: repeat(2, 1fr); }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .announce-layout { grid-template-columns: 1fr; }

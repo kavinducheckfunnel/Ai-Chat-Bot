@@ -1,7 +1,5 @@
 <template>
-  <div class="perm-app">
-    <Sidebar />
-    <main class="perm-main">
+  <div class="perm-content">
 
       <div class="page-header">
         <div>
@@ -122,13 +120,11 @@
         </div>
       </div>
 
-    </main>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import Sidebar from './Sidebar.vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const api = useAdminApi()
@@ -315,14 +311,13 @@ onMounted(async () => {
 
 <style scoped>
 * { box-sizing: border-box; }
-.perm-app { display: flex; min-height: 100vh; background: #0a0a0a; color: #e2e8f0; font-family: 'Inter', -apple-system, sans-serif; }
-.perm-main { flex: 1; padding: 28px 32px; overflow-y: auto; }
+.perm-content { color: #e2e8f0; font-family: 'Inter', -apple-system, sans-serif; }
 
 .page-header { margin-bottom: 24px; }
 .page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
 .page-sub { font-size: 13px; color: #475569; margin-top: 4px; }
 
-.perm-layout { display: flex; gap: 20px; height: calc(100vh - 130px); }
+.perm-layout { display: flex; gap: 20px; height: calc(100vh - 180px); }
 
 /* Left panel */
 .tenant-list-panel {
@@ -423,4 +418,12 @@ onMounted(async () => {
 }
 .ov-reason { flex: 1; min-width: 80px; }
 .ov-expiry { width: 150px; }
+
+@media (max-width: 768px) {
+  .perm-layout { flex-direction: column; height: auto; }
+  .tenant-list-panel { width: 100%; height: 240px; }
+  .permissions-panel { min-height: 400px; }
+  .feat-grid { grid-template-columns: 1fr; }
+  .page-header { flex-direction: column; gap: 8px; }
+}
 </style>
