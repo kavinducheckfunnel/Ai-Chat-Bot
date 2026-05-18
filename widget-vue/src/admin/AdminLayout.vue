@@ -43,7 +43,8 @@ const sidebarOpen = ref(false)
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: #0F172A;
+  background: var(--cf-bg-page);
+  transition: background 0.2s;
 }
 
 .main {
@@ -70,8 +71,8 @@ const sidebarOpen = ref(false)
     align-items: center;
     gap: 12px;
     padding: 14px 16px;
-    background: #0F172A;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: var(--cf-bg-topbar);
+    border-bottom: 1px solid var(--cf-border-subtle);
     position: sticky;
     top: 0;
     z-index: 50;
@@ -81,7 +82,7 @@ const sidebarOpen = ref(false)
   .hamburger {
     background: none;
     border: none;
-    color: #CBD5E1;
+    color: var(--cf-text-secondary);
     cursor: pointer;
     padding: 4px;
     display: flex;
@@ -91,13 +92,13 @@ const sidebarOpen = ref(false)
   }
 
   .hamburger:hover {
-    background: rgba(255,255,255,0.08);
+    background: var(--cf-bg-ghost-hover);
   }
 
   .mobile-brand {
     font-size: 15px;
     font-weight: 700;
-    color: #F1F5F9;
+    color: var(--cf-text-primary);
     letter-spacing: -0.3px;
   }
 

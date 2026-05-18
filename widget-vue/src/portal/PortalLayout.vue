@@ -132,10 +132,11 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #0a0a0a;
-  color: #e2e8f0;
+  background: var(--cf-bg-page);
+  color: var(--cf-text-primary);
   font-family: 'Inter', -apple-system, sans-serif;
   overflow: hidden;
+  transition: background 0.2s;
 }
 
 /* ── Announcement cards (floating tray, teleported to body) ─────────────────── */
@@ -151,7 +152,7 @@ onMounted(() => {
 .portal-main {
   flex: 1;
   overflow-y: auto;
-  background: #0f0f0f;
+  background: var(--cf-bg-page);
 }
 
 /* ── Loading ─────────────────────────────────────────────────────────────────── */
@@ -160,13 +161,13 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0a0a0a;
+  background: var(--cf-bg-page);
 }
 
 .loading-spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(255,255,255,0.08);
+  border: 3px solid var(--cf-border-subtle);
   border-top-color: #6366f1;
   border-radius: 50%;
   animation: spin 0.7s linear infinite;
@@ -190,8 +191,8 @@ onMounted(() => {
     align-items: center;
     gap: 12px;
     padding: 14px 16px;
-    background: #111111;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: var(--cf-bg-topbar);
+    border-bottom: 1px solid var(--cf-border-subtle);
     position: sticky;
     top: 0;
     z-index: 50;
@@ -201,7 +202,7 @@ onMounted(() => {
   .hamburger {
     background: none;
     border: none;
-    color: #cbd5e1;
+    color: var(--cf-text-secondary);
     cursor: pointer;
     padding: 4px;
     display: flex;
@@ -209,12 +210,12 @@ onMounted(() => {
     border-radius: 6px;
     transition: background 0.15s;
   }
-  .hamburger:hover { background: rgba(255,255,255,0.08); }
+  .hamburger:hover { background: var(--cf-bg-ghost-hover); }
 
   .mobile-brand {
     font-size: 15px;
     font-weight: 700;
-    color: #f1f5f9;
+    color: var(--cf-text-primary);
     letter-spacing: -0.3px;
   }
 

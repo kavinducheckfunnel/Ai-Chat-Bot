@@ -892,13 +892,13 @@ const scrapeStatusLabel = computed(() => {
 }
 
 .page-header { margin-bottom: 24px; }
-.page-title { font-size: 22px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
+.page-title { font-size: 22px; font-weight: 700; color: var(--cf-text-primary); letter-spacing: -0.4px; }
 
 /* Tabs */
 .tabs {
   display: flex;
   gap: 2px;
-  border-bottom: 1px solid rgba(255,255,255,0.07);
+  border-bottom: 1px solid var(--cf-border-subtle);
   margin-bottom: 28px;
 }
 
@@ -909,20 +909,20 @@ const scrapeStatusLabel = computed(() => {
   border-bottom: 2px solid transparent;
   font-size: 13px;
   font-weight: 500;
-  color: #475569;
+  color: var(--cf-text-muted);
   cursor: pointer;
   transition: all 0.15s;
   margin-bottom: -1px;
 }
-.tab:hover { color: #94a3b8; }
+.tab:hover { color: var(--cf-text-secondary); }
 .tab.active { color: #a5b4fc; border-bottom-color: #6366f1; }
 
 .tab-content { display: flex; flex-direction: column; gap: 16px; }
 
 /* Section cards */
 .section-card {
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.07);
+  background: var(--cf-bg-surface-raised);
+  border: 1px solid var(--cf-border-subtle);
   border-radius: 14px;
   padding: 24px;
   display: flex;
@@ -949,8 +949,8 @@ const scrapeStatusLabel = computed(() => {
 .messenger-icon { background: rgba(0,132,255,0.1); }
 .twilio-icon { background: rgba(242,47,70,0.1); }
 
-.section-title { font-size: 15px; font-weight: 600; color: #f1f5f9; }
-.section-sub { font-size: 12px; color: #475569; margin-top: 3px; }
+.section-title { font-size: 15px; font-weight: 600; color: var(--cf-text-primary); }
+.section-sub { font-size: 12px; color: var(--cf-text-muted); margin-top: 3px; }
 
 .status-badge {
   margin-left: auto;
@@ -964,7 +964,7 @@ const scrapeStatusLabel = computed(() => {
 /* Embed box */
 .embed-box {
   background: #0d0d0d;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--cf-border-subtle);
   border-radius: 12px;
   padding: 20px;
   display: flex;
@@ -972,7 +972,7 @@ const scrapeStatusLabel = computed(() => {
   gap: 16px;
 }
 
-.embed-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+.embed-title { font-size: 14px; font-weight: 600; color: var(--cf-text-primary); }
 
 .format-tabs { display: flex; gap: 6px; }
 .format-tab {
@@ -980,25 +980,25 @@ const scrapeStatusLabel = computed(() => {
   align-items: center;
   gap: 7px;
   padding: 7px 14px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: var(--cf-bg-surface);
+  border: 1px solid var(--cf-border-subtle);
   border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
-  color: #64748b;
+  color: var(--cf-text-muted);
   cursor: pointer;
   transition: all 0.12s;
 }
-.format-tab:hover { background: rgba(255,255,255,0.07); color: #94a3b8; }
+.format-tab:hover { background: var(--cf-bg-surface-hover); color: var(--cf-text-secondary); }
 .format-tab.active { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); color: #a5b4fc; }
 .format-icon { display: flex; align-items: center; }
 
-.embed-instruction { font-size: 12px; color: #475569; }
-.embed-instruction code { background: rgba(255,255,255,0.07); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: #94a3b8; }
+.embed-instruction { font-size: 12px; color: var(--cf-text-muted); }
+.embed-instruction code { background: var(--cf-bg-surface-hover); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: var(--cf-text-secondary); }
 
 .code-block {
-  background: #0a0a0a;
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--cf-bg-page);
+  border: 1px solid var(--cf-border-subtle);
   border-radius: 10px;
   padding: 16px;
   position: relative;
@@ -1009,7 +1009,7 @@ const scrapeStatusLabel = computed(() => {
   font-family: 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.7;
-  color: #94a3b8;
+  color: var(--cf-text-secondary);
   white-space: pre;
   overflow-x: auto;
 }
@@ -1022,20 +1022,20 @@ const scrapeStatusLabel = computed(() => {
   gap: 6px;
   margin-top: 14px;
   padding: 8px 16px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--cf-bg-ghost);
+  border: 1px solid var(--cf-border-default);
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--cf-text-secondary);
   cursor: pointer;
   transition: all 0.15s;
 }
-.copy-btn:hover { background: rgba(255,255,255,0.1); color: #f1f5f9; }
+.copy-btn:hover { background: var(--cf-bg-ghost-hover); color: var(--cf-text-primary); }
 .copy-btn.copied { color: #22c55e; border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.08); }
 
 .skeleton { min-height: 120px; }
-.skeleton-line { height: 12px; background: rgba(255,255,255,0.05); border-radius: 4px; margin-bottom: 10px; }
+.skeleton-line { height: 12px; background: var(--cf-bg-input); border-radius: 4px; margin-bottom: 10px; }
 .skeleton-line.short { width: 60%; }
 
 /* Channels list */
@@ -1046,24 +1046,24 @@ const scrapeStatusLabel = computed(() => {
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
-  background: #161616;
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--cf-bg-surface-raised);
+  border: 1px solid var(--cf-border-subtle);
   border-radius: 12px;
 }
 
 .channel-meta { flex: 1; display: flex; align-items: center; gap: 10px; }
-.channel-name { font-size: 14px; font-weight: 500; color: #94a3b8; }
+.channel-name { font-size: 14px; font-weight: 500; color: var(--cf-text-secondary); }
 .channel-status { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 4px; }
-.channel-status.off { background: rgba(255,255,255,0.05); color: #475569; }
+.channel-status.off { background: var(--cf-bg-input); color: var(--cf-text-muted); }
 
 .btn-configure {
   padding: 6px 14px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: var(--cf-bg-surface);
+  border: 1px solid var(--cf-border-default);
   border-radius: 7px;
   font-size: 12px;
   font-weight: 500;
-  color: #475569;
+  color: var(--cf-text-muted);
   cursor: not-allowed;
 }
 
@@ -1071,7 +1071,7 @@ const scrapeStatusLabel = computed(() => {
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 
 .field { display: flex; flex-direction: column; gap: 7px; }
-.field label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+.field label { font-size: 12px; font-weight: 600; color: var(--cf-text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
 
 .input {
   padding: 10px 13px;
@@ -1079,13 +1079,13 @@ const scrapeStatusLabel = computed(() => {
   border: 1px solid rgba(255,255,255,0.09);
   border-radius: 9px;
   font-size: 14px;
-  color: #f1f5f9;
+  color: var(--cf-text-primary);
   outline: none;
   transition: border-color 0.15s;
   width: 100%;
 }
 .input:focus { border-color: #6366f1; }
-.input::placeholder { color: #334155; }
+.input::placeholder { color: var(--cf-text-muted); }
 
 /* Theme */
 .theme-row { display: flex; gap: 10px; }
@@ -1095,14 +1095,14 @@ const scrapeStatusLabel = computed(() => {
   background: #0d0d0d;
   border: 1.5px solid rgba(255,255,255,0.09);
   border-radius: 9px;
-  font-size: 13px; font-weight: 500; color: #64748b;
+  font-size: 13px; font-weight: 500; color: var(--cf-text-muted);
   cursor: pointer; transition: all 0.12s;
 }
-.theme-btn:hover { border-color: #334155; color: #94a3b8; }
+.theme-btn:hover { border-color: var(--cf-text-muted); color: var(--cf-text-secondary); }
 .theme-btn.selected { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.08); }
 .theme-dot { width: 12px; height: 12px; border-radius: 50%; }
-.dark-dot { background: #0f172a; border: 1px solid #334155; }
-.light-dot { background: #f8fafc; border: 1px solid #cbd5e1; }
+.dark-dot { background: var(--cf-bg-page); border: 1px solid #334155; }
+.light-dot { background: var(--cf-bg-surface); border: 1px solid #cbd5e1; }
 
 /* Colors */
 .color-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1110,7 +1110,7 @@ const scrapeStatusLabel = computed(() => {
 .color-swatch.selected { outline: 2px solid #6366f1; outline-offset: 2px; }
 .color-custom { display: flex; align-items: center; gap: 7px; }
 .color-picker { width: 26px; height: 26px; border: none; border-radius: 50%; cursor: pointer; padding: 0; background: none; }
-.color-hex { font-size: 11px; color: #475569; font-family: monospace; }
+.color-hex { font-size: 11px; color: var(--cf-text-muted); font-family: monospace; }
 
 /* Save */
 .btn-save {
@@ -1150,14 +1150,14 @@ const scrapeStatusLabel = computed(() => {
 .status-done { color: #22c55e; }
 .status-running { color: #a5b4fc; }
 .status-failed { color: #ef4444; }
-.status-pending { color: #475569; }
+.status-pending { color: var(--cf-text-muted); }
 
-.pages-count { font-size: 12px; color: #475569; }
+.pages-count { font-size: 12px; color: var(--cf-text-muted); }
 
 .progress-wrap { display: flex; flex-direction: column; gap: 6px; }
 .progress-bar { height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; }
 .progress-fill { height: 100%; background: #6366f1; border-radius: 2px; transition: width 0.5s; }
-.progress-text { font-size: 12px; color: #475569; }
+.progress-text { font-size: 12px; color: var(--cf-text-muted); }
 
 .mini-spinner {
   width: 13px; height: 13px;
@@ -1177,19 +1177,19 @@ const scrapeStatusLabel = computed(() => {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--cf-border-subtle);
 }
 .feature-row:last-child { border-bottom: none; padding-bottom: 0; }
 .feature-info { display: flex; flex-direction: column; gap: 3px; }
-.feature-name { font-size: 14px; font-weight: 500; color: #e2e8f0; }
-.feature-desc { font-size: 12px; color: #475569; }
+.feature-name { font-size: 14px; font-weight: 500; color: var(--cf-text-primary); }
+.feature-desc { font-size: 12px; color: var(--cf-text-muted); }
 
 .toggle { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; cursor: pointer; }
 .toggle input { opacity: 0; width: 0; height: 0; }
 .toggle-slider {
   position: absolute; inset: 0;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--cf-bg-ghost-hover);
+  border: 1px solid var(--cf-border-default);
   border-radius: 24px;
   transition: all 0.2s;
 }
@@ -1206,8 +1206,8 @@ const scrapeStatusLabel = computed(() => {
 .toggle input:checked + .toggle-slider::before { transform: translateX(20px); background: #6366f1; }
 
 /* Integrations */
-.status-badge.inactive { background: rgba(71,85,105,0.2); color: #475569; border: 1px solid rgba(71,85,105,0.3); }
-.field-hint { font-size: 11px; color: #334155; line-height: 1.5; }
+.status-badge.inactive { background: rgba(71,85,105,0.2); color: var(--cf-text-muted); border: 1px solid rgba(71,85,105,0.3); }
+.field-hint { font-size: 11px; color: var(--cf-text-muted); line-height: 1.5; }
 .save-row { display: flex; justify-content: flex-end; }
 .pw-error { font-size: 13px; color: #fca5a5; background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
 .btn-save {
@@ -1227,8 +1227,8 @@ const scrapeStatusLabel = computed(() => {
 .toggle-btn {
   position: relative;
   width: 44px; height: 24px;
-  background: rgba(255,255,255,0.08);
-  border: 1px solid rgba(255,255,255,0.12);
+  background: var(--cf-bg-ghost-hover);
+  border: 1px solid var(--cf-border-default);
   border-radius: 24px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1244,7 +1244,7 @@ const scrapeStatusLabel = computed(() => {
   transition: all 0.2s;
 }
 .toggle-btn.on .toggle-knob { transform: translateX(20px); background: #6366f1; }
-.toggle-lbl { font-size: 13px; color: #64748b; }
+.toggle-lbl { font-size: 13px; color: var(--cf-text-muted); }
 /* Canned responses */
 .canned-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
 .canned-row { display: flex; gap: 10px; align-items: flex-start; }
@@ -1256,7 +1256,7 @@ const scrapeStatusLabel = computed(() => {
 .btn-add-canned:hover { background: rgba(99,102,241,0.15); }
 /* Toggle label in form */
 .toggle-field { display: flex; align-items: center; }
-.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: #94a3b8; }
+.toggle-label { display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 13px; color: var(--cf-text-secondary); }
 .toggle-input { position: absolute; opacity: 0; width: 0; height: 0; }
 
 /* Feature gate overlay */
@@ -1270,7 +1270,7 @@ const scrapeStatusLabel = computed(() => {
   gap: 10px; padding: 24px; text-align: center;
 }
 .gate-lock { font-size: 28px; line-height: 1; }
-.gate-msg { font-size: 13px; color: #cbd5e1; line-height: 1.6; max-width: 280px; }
+.gate-msg { font-size: 13px; color: var(--cf-text-primary); line-height: 1.6; max-width: 280px; }
 .gate-msg strong { color: #a5b4fc; }
 .gate-upgrade-btn {
   display: inline-block; background: #6366f1; color: white;
@@ -1301,25 +1301,25 @@ const scrapeStatusLabel = computed(() => {
   backdrop-filter: blur(4px);
 }
 .model-picker-box {
-  background: #111827; border: 1px solid rgba(255,255,255,0.08);
+  background: #111827; border: 1px solid var(--cf-border-default);
   border-radius: 14px; width: 520px; max-width: calc(100vw - 32px);
   max-height: 80vh; display: flex; flex-direction: column;
   box-shadow: 0 24px 64px rgba(0,0,0,0.5);
 }
 .model-picker-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
-  font-size: 15px; font-weight: 600; color: #f1f5f9;
+  padding: 16px 20px; border-bottom: 1px solid var(--cf-border-subtle);
+  font-size: 15px; font-weight: 600; color: var(--cf-text-primary);
 }
 .model-picker-close {
-  background: none; border: none; color: #64748b; font-size: 16px;
+  background: none; border: none; color: var(--cf-text-muted); font-size: 16px;
   cursor: pointer; padding: 4px 8px; border-radius: 6px;
 }
-.model-picker-close:hover { color: #f1f5f9; background: rgba(255,255,255,0.06); }
+.model-picker-close:hover { color: var(--cf-text-primary); background: var(--cf-bg-ghost); }
 .model-picker-search {
   margin: 12px 16px; padding: 10px 14px; border-radius: 8px;
-  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
-  color: #e2e8f0; font-size: 14px; outline: none;
+  background: var(--cf-bg-surface); border: 1px solid var(--cf-border-default);
+  color: var(--cf-text-primary); font-size: 14px; outline: none;
 }
 .model-picker-search:focus { border-color: #6366f1; }
 .model-picker-list { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
@@ -1328,12 +1328,12 @@ const scrapeStatusLabel = computed(() => {
   padding: 10px 12px; border-radius: 8px; cursor: pointer;
   transition: background 0.12s;
 }
-.model-picker-row:hover { background: rgba(255,255,255,0.05); }
+.model-picker-row:hover { background: var(--cf-bg-input); }
 .model-picker-active { background: rgba(99,102,241,0.12) !important; }
-.mp-id { font-size: 13px; color: #e2e8f0; font-family: monospace; word-break: break-all; }
+.mp-id { font-size: 13px; color: var(--cf-text-primary); font-family: monospace; word-break: break-all; }
 .mp-meta { display: flex; gap: 6px; align-items: center; flex-shrink: 0; margin-left: 8px; }
 .mp-free { font-size: 10px; font-weight: 700; background: rgba(34,197,94,0.15); color: #86efac; padding: 2px 6px; border-radius: 4px; }
 .mp-paid { font-size: 10px; font-weight: 700; background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; }
-.mp-ctx  { font-size: 11px; color: #64748b; }
-.mp-empty, .mp-loading { padding: 24px; text-align: center; color: #475569; font-size: 14px; }
+.mp-ctx  { font-size: 11px; color: var(--cf-text-muted); }
+.mp-empty, .mp-loading { padding: 24px; text-align: center; color: var(--cf-text-muted); font-size: 14px; }
 </style>

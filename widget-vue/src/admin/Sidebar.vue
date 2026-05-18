@@ -58,6 +58,8 @@
 
     <UsageBar />
 
+    <ThemeToggle class="sidebar-theme-toggle" />
+
     <!-- Impersonation banner -->
     <div v-if="isImpersonating" class="impersonate-banner">
       <div class="impersonate-info">
@@ -89,6 +91,7 @@
 import { computed } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 import UsageBar from './UsageBar.vue'
+import ThemeToggle from '../components/ThemeToggle.vue'
 
 defineEmits(['close'])
 
@@ -114,11 +117,12 @@ function returnFromImpersonation() {
 .sidebar {
   width: 220px;
   min-width: 220px;
-  background: #0F172A;
+  background: var(--cf-sidebar-bg);
   display: flex;
   flex-direction: column;
   padding: 22px 14px;
-  border-right: 1px solid rgba(255,255,255,0.05);
+  border-right: 1px solid var(--cf-sidebar-border);
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .brand {
@@ -140,7 +144,7 @@ function returnFromImpersonation() {
 .brand-name {
   font-size: 15px;
   font-weight: 700;
-  color: #F1F5F9;
+  color: var(--cf-sidebar-brand);
   letter-spacing: -0.3px;
 }
 
@@ -151,7 +155,7 @@ function returnFromImpersonation() {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #334155;
+  color: var(--cf-sidebar-section);
   padding: 0 10px;
   margin-bottom: 4px;
   margin-top: 12px;
@@ -166,19 +170,23 @@ function returnFromImpersonation() {
   border-radius: 9px;
   font-size: 13px;
   font-weight: 500;
-  color: #64748B;
+  color: var(--cf-sidebar-item);
   text-decoration: none;
   transition: all 0.15s;
 }
 
 .nav-item:hover {
-  background: rgba(255,255,255,0.05);
-  color: #CBD5E1;
+  background: var(--cf-sidebar-item-hover-bg);
+  color: var(--cf-sidebar-item-hover-text);
 }
 
 .nav-item.active {
-  background: rgba(99,102,241,0.15);
-  color: #A5B4FC;
+  background: var(--cf-sidebar-item-active-bg);
+  color: var(--cf-sidebar-item-active-text);
+}
+
+.sidebar-theme-toggle {
+  margin: 10px 2px 8px;
 }
 
 .sidebar-bottom {
@@ -186,7 +194,7 @@ function returnFromImpersonation() {
   align-items: center;
   gap: 8px;
   padding: 12px 8px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  border-top: 1px solid var(--cf-sidebar-bottom-border);
 }
 
 .user-card {
@@ -213,7 +221,7 @@ function returnFromImpersonation() {
 .user-name {
   font-size: 12px;
   font-weight: 600;
-  color: #CBD5E1;
+  color: var(--cf-sidebar-user-name);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -221,7 +229,7 @@ function returnFromImpersonation() {
 
 .user-role {
   font-size: 10px;
-  color: #475569;
+  color: var(--cf-sidebar-user-role);
   text-transform: capitalize;
 }
 
@@ -231,7 +239,7 @@ function returnFromImpersonation() {
   cursor: pointer;
   padding: 6px;
   border-radius: 7px;
-  color: #475569;
+  color: var(--cf-sidebar-logout);
   display: flex; align-items: center;
   transition: all 0.15s;
   flex-shrink: 0;

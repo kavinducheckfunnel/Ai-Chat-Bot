@@ -74,6 +74,8 @@
       </router-link>
     </nav>
 
+    <ThemeToggle class="sidebar-theme-toggle" />
+
     <!-- Impersonation banner -->
     <div v-if="isImpersonating" class="impersonate-banner">
       <div class="impersonate-info">
@@ -107,6 +109,7 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import ThemeToggle from '../components/ThemeToggle.vue'
 
 const props = defineProps({ client: Object })
 defineEmits(['close'])
@@ -137,12 +140,13 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
 .sidebar {
   width: 224px;
   min-width: 224px;
-  background: #111111;
-  border-right: 1px solid rgba(255,255,255,0.06);
+  background: var(--cf-sidebar-bg);
+  border-right: 1px solid var(--cf-sidebar-border);
   display: flex;
   flex-direction: column;
   padding: 20px 12px;
   gap: 0;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .brand {
@@ -164,7 +168,7 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
 .brand-name {
   font-size: 14px;
   font-weight: 700;
-  color: #f1f5f9;
+  color: var(--cf-sidebar-brand);
   letter-spacing: -0.3px;
 }
 
@@ -173,7 +177,8 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
   align-items: center;
   gap: 7px;
   padding: 7px 10px;
-  background: rgba(255,255,255,0.04);
+  background: var(--cf-bg-surface);
+  border: 1px solid var(--cf-border-subtle);
   border-radius: 8px;
   margin-bottom: 18px;
 }
@@ -187,7 +192,7 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
 .client-name {
   font-size: 12px;
   font-weight: 600;
-  color: #94a3b8;
+  color: var(--cf-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -200,7 +205,7 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #334155;
+  color: var(--cf-sidebar-section);
   padding: 0 10px;
   margin: 14px 0 4px;
 }
@@ -214,14 +219,14 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
-  color: #64748b;
+  color: var(--cf-sidebar-item);
   text-decoration: none;
   transition: all 0.12s;
   position: relative;
 }
 
-.nav-item:hover { background: rgba(255,255,255,0.04); color: #cbd5e1; }
-.nav-item.active { background: rgba(99,102,241,0.12); color: #a5b4fc; }
+.nav-item:hover { background: var(--cf-sidebar-item-hover-bg); color: var(--cf-sidebar-item-hover-text); }
+.nav-item.active { background: var(--cf-sidebar-item-active-bg); color: var(--cf-sidebar-item-active-text); }
 
 .badge {
   margin-left: auto;
@@ -233,6 +238,10 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
   border-radius: 10px;
   min-width: 18px;
   text-align: center;
+}
+
+.sidebar-theme-toggle {
+  margin: 10px 2px 6px;
 }
 
 .impersonate-banner {
@@ -269,7 +278,7 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
   align-items: center;
   gap: 6px;
   padding: 12px 6px;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-top: 1px solid var(--cf-sidebar-bottom-border);
   margin-top: 8px;
 }
 
@@ -285,12 +294,12 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
 }
 
 .user-info { min-width: 0; }
-.user-name { font-size: 12px; font-weight: 600; color: #cbd5e1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.user-role { font-size: 10px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-name { font-size: 12px; font-weight: 600; color: var(--cf-sidebar-user-name); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.user-role { font-size: 10px; color: var(--cf-sidebar-user-role); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .logout-btn {
   background: none; border: none; cursor: pointer;
-  padding: 5px; border-radius: 6px; color: #475569;
+  padding: 5px; border-radius: 6px; color: var(--cf-sidebar-logout);
   display: flex; align-items: center;
   transition: all 0.12s; flex-shrink: 0;
 }
