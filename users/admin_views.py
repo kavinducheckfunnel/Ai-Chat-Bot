@@ -1,5 +1,6 @@
 import csv
 import logging
+import os
 import secrets
 import threading
 from datetime import timedelta
@@ -2026,3 +2027,99 @@ def platform_feature_flags(request):
         'sessions_used': tenant.sessions_this_month,
         'features': features,
     })
+
+
+# ─── Platform AI Config (superadmin only) ──────────────────────────────────────
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsSuperAdmin])
+def platform_config(request):
+    from .models import PlatformConfig
+    from django.core.cache import cache
+
+    cfg = PlatformConfig.get()
+
+    if request.method == 'GET':
+        return Response({
+            'openrouter_api_key_set': bool(cfg.openrouter_api_key),
+            'openrouter_api_key_preview': (
+                '••••••' + cfg.openrouter_api_key[-6:]
+                if cfg.openrouter_api_key else ''
+            ),
+            'primary_model': cfg.primary_model,
+            'updated_at': cfg.updated_at.isoformat() if cfg.updated_at else None,
+            'updated_by': cfg.updated_by.username if cfg.updated_by else None,
+        })
+
+    # PUT — update key and/or model
+    key   = request.data.get('openrouter_api_key')
+    model = request.data.get('primary_model')
+
+    if key is not None:
+        cfg.openrouter_api_key = key.strip()
+    if model:
+        cfg.primary_model = model.strip()
+
+    cfg.updated_by = request.user
+    cfg.save()
+    cache.delete('platform_config')
+
+    from users.feature_flags import log_audit
+    log_audit(request.user, 'platform_config_update', extra={
+        'model': cfg.primary_model,
+        'key_updated': key is not None,
+    })
+
+    return Response({
+        'openrouter_api_key_set': bool(cfg.openrouter_api_key),
+        'openrouter_api_key_preview': (
+            '••••••' + cfg.openrouter_api_key[-6:]
+            if cfg.openrouter_api_key else ''
+        ),
+        'primary_model': cfg.primary_model,
+        'updated_at': cfg.updated_at.isoformat() if cfg.updated_at else None,
+        'updated_by': cfg.updated_by.username if cfg.updated_by else None,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperAdmin])
+def openrouter_models(request):
+    """Proxy to OpenRouter /models. Uses the stored API key."""
+    from .models import PlatformConfig
+    import requests as req_lib
+
+    cfg = PlatformConfig.get()
+    api_key = cfg.openrouter_api_key or os.environ.get('OPENROUTER_API_KEY', '')
+
+    if not api_key:
+        return Response({'error': 'No OpenRouter API key configured'}, status=400)
+
+    try:
+        resp = req_lib.get(
+            'https://openrouter.ai/api/v1/models',
+            headers={'Authorization': f'Bearer {api_key}'},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json().get('data', [])
+    except Exception as e:
+        return Response({'error': str(e)}, status=502)
+
+    models = []
+    for m in data:
+        models.append({
+            'id':             m.get('id', ''),
+            'name':           m.get('name', m.get('id', '')),
+            'description':    m.get('description', ''),
+            'context_length': m.get('context_length', 0),
+            'pricing': {
+                'prompt':     m.get('pricing', {}).get('prompt', '0'),
+                'completion': m.get('pricing', {}).get('completion', '0'),
+            },
+        })
+
+    # Free models first, then alphabetical
+    models.sort(key=lambda m: (float(m['pricing']['prompt']) > 0, m['name'].lower()))
+
+    return Response({'models': models, 'total': len(models)})

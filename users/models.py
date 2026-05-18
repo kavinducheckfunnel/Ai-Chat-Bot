@@ -353,3 +353,28 @@ class PlatformAnnouncement(models.Model):
 
     def __str__(self):
         return f"[{self.announcement_type.upper()}] {self.title}"
+
+
+class PlatformConfig(models.Model):
+    """Singleton — exactly one row (pk=1). Stores platform-level AI config."""
+    openrouter_api_key = models.CharField(max_length=255, blank=True, default='')
+    primary_model      = models.CharField(max_length=200, default='google/gemini-2.0-flash-001')
+    updated_at         = models.DateTimeField(auto_now=True)
+    updated_by         = models.ForeignKey(
+        User, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='+'
+    )
+
+    class Meta:
+        verbose_name = 'Platform Config'
+
+    @classmethod
+    def get(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+        from django.core.cache import cache
+        cache.delete('platform_config')

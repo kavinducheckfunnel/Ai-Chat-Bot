@@ -334,6 +334,13 @@ export function useAdminApi() {
     // ── Feature flags (portal) ────────────────────────────────────────
     getFeatureFlags: () => apiFetch('/api/admin/feature-flags/'),
 
+    // ── Platform AI Config (superadmin) ──────────────────────────────
+    getPlatformConfig: () => apiFetch('/api/admin/platform-config/'),
+    updatePlatformConfig: (data) => apiFetch('/api/admin/platform-config/', {
+      method: 'PUT', body: JSON.stringify(data),
+    }),
+    getOpenRouterModels: () => apiFetch('/api/admin/platform-config/models/'),
+
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {
       const token = localStorage.getItem('cf_access_token')

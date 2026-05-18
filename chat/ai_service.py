@@ -13,8 +13,8 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
 
-# Ordered fallback chain when the primary model is rate-limited.
-# All route through OpenRouter so only OPENROUTER_API_KEY is needed.
+# Fallback chain used when the primary model is rate-limited.
+# Index 0 is overridden by PlatformConfig.primary_model at runtime.
 _PLATFORM_FALLBACK_MODELS = [
     'google/gemini-2.0-flash-001',
     'google/gemini-flash-1.5-8b',
@@ -22,10 +22,29 @@ _PLATFORM_FALLBACK_MODELS = [
 ]
 
 
-def _make_openrouter_llm(model: str) -> ChatOpenAI:
+def _get_platform_config():
+    """Return (api_key, primary_model) from DB, cached 60 s to avoid a DB hit per message."""
+    from django.core.cache import cache
+    cached = cache.get('platform_config')
+    if cached:
+        return cached
+    try:
+        from users.models import PlatformConfig
+        cfg = PlatformConfig.get()
+        key   = cfg.openrouter_api_key or os.environ.get('OPENROUTER_API_KEY', '')
+        model = cfg.primary_model or _PLATFORM_FALLBACK_MODELS[0]
+    except Exception:
+        key   = os.environ.get('OPENROUTER_API_KEY', '')
+        model = _PLATFORM_FALLBACK_MODELS[0]
+    result = (key, model)
+    cache.set('platform_config', result, 60)
+    return result
+
+
+def _make_openrouter_llm(model: str, api_key: str = None) -> ChatOpenAI:
     return ChatOpenAI(
         model=model,
-        openai_api_key=os.environ.get('OPENROUTER_API_KEY'),
+        openai_api_key=api_key or os.environ.get('OPENROUTER_API_KEY'),
         openai_api_base='https://openrouter.ai/api/v1',
         temperature=0.4,
         max_retries=1,
@@ -50,7 +69,8 @@ def _build_llm(client):
             temperature=0.4,
             max_retries=2,
         ), True
-    return _make_openrouter_llm(_PLATFORM_FALLBACK_MODELS[0]), False
+    api_key, primary_model = _get_platform_config()
+    return _make_openrouter_llm(primary_model, api_key), False
 
 
 def _invoke_with_fallback(messages, client):
@@ -66,10 +86,12 @@ def _invoke_with_fallback(messages, client):
         # BYOK — use their key directly, no fallback
         return llm.invoke(messages)
 
-    # Platform — try each model in the fallback chain
+    # Platform — try primary model then static fallbacks
+    api_key, primary_model = _get_platform_config()
+    fallback_chain = [primary_model] + [m for m in _PLATFORM_FALLBACK_MODELS if m != primary_model]
     last_exc = None
-    for i, model in enumerate(_PLATFORM_FALLBACK_MODELS):
-        llm = _make_openrouter_llm(model)
+    for i, model in enumerate(fallback_chain):
+        llm = _make_openrouter_llm(model, api_key)
         try:
             result = llm.invoke(messages)
             if i > 0:

@@ -72,4 +72,8 @@ urlpatterns = [
 
     # Feature flags (tenant portal)
     path('feature-flags/', admin_views.platform_feature_flags, name='admin-feature-flags'),
+
+    # Platform AI config (superadmin only)
+    path('platform-config/', admin_views.platform_config, name='admin-platform-config'),
+    path('platform-config/models/', admin_views.openrouter_models, name='admin-openrouter-models'),
 ]

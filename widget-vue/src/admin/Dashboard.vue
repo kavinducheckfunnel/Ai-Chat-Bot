@@ -297,6 +297,105 @@
         </div>
       </div>
 
+      <!-- ═══════════ AI SETTINGS TAB ═══════════ -->
+      <div v-else-if="activeTab==='ai'" class="tab-content">
+
+        <!-- Header row -->
+        <div class="ai-header">
+          <div>
+            <h2 class="ai-section-title">Platform AI Settings</h2>
+            <p class="ai-section-sub">Controls the model used by all platform chatbots. BYOK tenants are unaffected.</p>
+          </div>
+          <button class="btn-primary ai-save-btn" :disabled="aiSaving || aiLoading" @click="saveAIConfig">
+            {{ aiSaving ? 'Saving…' : 'Save Changes' }}
+          </button>
+        </div>
+
+        <!-- Feedback message -->
+        <div v-if="aiMsg" class="ai-msg" :class="{ 'ai-msg-error': aiMsgIsError }">{{ aiMsg }}</div>
+
+        <!-- API Key card -->
+        <div class="ai-card">
+          <div class="ai-card-header">
+            <span class="ai-card-title">OpenRouter API Key</span>
+            <span class="ai-status-badge" :class="aiConfig.openrouter_api_key_set ? 'badge-set' : 'badge-unset'">
+              {{ aiConfig.openrouter_api_key_set ? '● Configured' : '○ Not set' }}
+            </span>
+          </div>
+          <div class="ai-key-row">
+            <template v-if="!aiKeyVisible">
+              <span class="ai-key-mask">{{ aiConfig.openrouter_api_key_preview || 'No key saved yet' }}</span>
+              <button class="btn-ghost ai-key-btn" @click="aiKeyVisible = true">Change Key</button>
+            </template>
+            <template v-else>
+              <input v-model="aiKeyInput" class="inp ai-key-inp" type="password" placeholder="sk-or-v1-••••••••••••••••" autocomplete="off" />
+              <button class="btn-ghost ai-key-btn" @click="aiKeyVisible = false; aiKeyInput = ''">Cancel</button>
+            </template>
+          </div>
+          <div v-if="aiConfig.updated_by" class="ai-card-meta">
+            Last updated by <strong>{{ aiConfig.updated_by }}</strong>
+            <span v-if="aiConfig.updated_at"> · {{ fmtDate(aiConfig.updated_at) }}</span>
+          </div>
+        </div>
+
+        <!-- Active model card -->
+        <div class="ai-card ai-active-card">
+          <div class="ai-card-title">Current Primary Model</div>
+          <div class="ai-active-row">
+            <span class="ai-model-id-active">{{ aiConfig.primary_model || '—' }}</span>
+            <span class="ai-active-pill">ACTIVE</span>
+          </div>
+          <div class="ai-card-sub">Click any model in the list below to select it, then click Save Changes.</div>
+        </div>
+
+        <!-- Model browser card -->
+        <div class="ai-card">
+          <div class="ai-models-toolbar">
+            <span class="ai-card-title">
+              Available Models
+              <span class="ai-count" v-if="aiModelsTotal">({{ aiModelsTotal }})</span>
+            </span>
+            <input v-model="aiSearch" class="search-input ai-search" placeholder="Search models…" />
+          </div>
+
+          <div v-if="aiLoading" class="ai-loading">
+            <div class="spinner" style="width:22px;height:22px;margin:0 auto 8px"></div>
+            Fetching models from OpenRouter…
+          </div>
+
+          <div v-else-if="!aiConfig.openrouter_api_key_set && aiModels.length === 0" class="ai-empty">
+            Enter an OpenRouter API key above and click Save Changes to load the model list.
+          </div>
+
+          <div v-else class="ai-model-list">
+            <div
+              v-for="m in aiFiltered"
+              :key="m.id"
+              class="ai-model-row"
+              :class="{ 'ai-model-selected': aiConfig.primary_model === m.id }"
+              @click="aiConfig.primary_model = m.id"
+            >
+              <div class="ai-model-radio">
+                <span class="ai-radio-dot" :class="{ 'ai-radio-active': aiConfig.primary_model === m.id }"></span>
+              </div>
+              <div class="ai-model-info">
+                <div class="ai-model-name">{{ m.name }}</div>
+                <div class="ai-model-id-small">{{ m.id }}</div>
+                <div v-if="m.description" class="ai-model-desc">{{ m.description.slice(0, 130) }}{{ m.description.length > 130 ? '…' : '' }}</div>
+              </div>
+              <div class="ai-model-meta">
+                <span v-if="m.context_length" class="ai-ctx">{{ (m.context_length / 1000).toFixed(0) }}k ctx</span>
+                <span class="ai-price" :class="parseFloat(m.pricing.prompt) === 0 ? 'ai-price-free' : 'ai-price-paid'">
+                  {{ parseFloat(m.pricing.prompt) === 0 ? 'FREE' : '$' + (parseFloat(m.pricing.prompt) * 1_000_000).toFixed(2) + '/M' }}
+                </span>
+              </div>
+            </div>
+            <div v-if="aiFiltered.length === 0 && !aiLoading" class="ai-empty">No models match "{{ aiSearch }}"</div>
+          </div>
+        </div>
+
+      </div>
+
     </main>
 
     <!-- Plan Modal -->
@@ -367,7 +466,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import Sidebar from './Sidebar.vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
@@ -382,6 +481,7 @@ const tabs = [
   { key: 'alerts',   label: 'Alerts' },
   { key: 'audit',    label: 'Audit Log' },
   { key: 'announce', label: 'Announcements' },
+  { key: 'ai',       label: 'AI Settings' },
 ]
 
 // ── Data ─────────────────────────────────────────────────────────────────────
@@ -621,6 +721,66 @@ function fmtDate(iso) {
   if (!iso) return ''
   return new Date(iso).toLocaleString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })
 }
+
+// ── AI Settings tab ───────────────────────────────────────────────────────────
+const aiConfig       = ref({ openrouter_api_key_set: false, openrouter_api_key_preview: '', primary_model: '', updated_by: null, updated_at: null })
+const aiModels       = ref([])
+const aiModelsTotal  = ref(0)
+const aiSearch       = ref('')
+const aiLoading      = ref(false)
+const aiSaving       = ref(false)
+const aiKeyInput     = ref('')
+const aiKeyVisible   = ref(false)
+const aiMsg          = ref('')
+const aiMsgIsError   = ref(false)
+
+const aiFiltered = computed(() => {
+  const q = aiSearch.value.toLowerCase()
+  return q
+    ? aiModels.value.filter(m => m.name.toLowerCase().includes(q) || m.id.toLowerCase().includes(q))
+    : aiModels.value
+})
+
+async function loadAISettings() {
+  aiLoading.value = true
+  aiMsg.value = ''
+  try {
+    const [cfg, mdata] = await Promise.all([
+      api.getPlatformConfig(),
+      api.getOpenRouterModels(),
+    ])
+    aiConfig.value = cfg
+    aiModels.value = mdata.models || []
+    aiModelsTotal.value = mdata.total || 0
+  } catch {
+    aiMsg.value = 'Failed to load AI settings — check OpenRouter API key.'
+    aiMsgIsError.value = true
+  } finally {
+    aiLoading.value = false
+  }
+}
+
+async function saveAIConfig() {
+  aiSaving.value = true
+  aiMsg.value = ''
+  try {
+    const payload = { primary_model: aiConfig.value.primary_model }
+    if (aiKeyInput.value.trim()) payload.openrouter_api_key = aiKeyInput.value.trim()
+    const res = await api.updatePlatformConfig(payload)
+    aiConfig.value = res
+    aiKeyInput.value = ''
+    aiKeyVisible.value = false
+    aiMsg.value = 'Saved. New model takes effect within 60 seconds.'
+    aiMsgIsError.value = false
+  } catch {
+    aiMsg.value = 'Save failed — check the console for details.'
+    aiMsgIsError.value = true
+  } finally {
+    aiSaving.value = false
+  }
+}
+
+watch(activeTab, (t) => { if (t === 'ai') loadAISettings() })
 
 // ── Load all ──────────────────────────────────────────────────────────────────
 async function loadAll() {
@@ -901,5 +1061,61 @@ const iconClock  = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24" 
   .charts-row { grid-template-columns: 1fr; }
   .modal { min-width: unset; }
   .modal-wide { min-width: unset; }
+  .ai-header { flex-direction: column; gap: 10px; }
+  .ai-save-btn { width: 100%; }
+  .ai-key-inp { min-width: 0; width: 100%; }
 }
+
+/* ── AI Settings Tab ────────────────────────────────────────────────── */
+.ai-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.ai-section-title { font-size: 18px; font-weight: 700; color: #e2e8f0; margin: 0 0 4px; }
+.ai-section-sub { font-size: 13px; color: #64748b; margin: 0; }
+.ai-save-btn { flex-shrink: 0; width: auto; padding: 9px 24px; }
+
+.ai-msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 16px; background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.25); }
+.ai-msg.ai-msg-error { background: rgba(239,68,68,0.08); color: #fca5a5; border-color: rgba(239,68,68,0.2); }
+
+.ai-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+.ai-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ai-card-title { font-size: 14px; font-weight: 600; color: #cbd5e1; }
+.ai-card-sub { font-size: 12px; color: #475569; margin-top: 6px; }
+.ai-card-meta { font-size: 12px; color: #475569; margin-top: 10px; }
+
+.ai-status-badge { font-size: 12px; font-weight: 500; padding: 3px 10px; border-radius: 20px; }
+.badge-set { background: rgba(34,197,94,0.1); color: #86efac; }
+.badge-unset { background: rgba(107,114,128,0.1); color: #9ca3af; }
+
+.ai-key-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ai-key-mask { font-family: monospace; font-size: 14px; color: #94a3b8; letter-spacing: 0.05em; flex: 1; }
+.ai-key-btn { flex-shrink: 0; }
+.ai-key-inp { flex: 1; min-width: 220px; }
+
+.ai-active-card { border-color: rgba(99,102,241,0.25); background: rgba(99,102,241,0.05); }
+.ai-active-row { display: flex; align-items: center; gap: 12px; margin: 10px 0 4px; flex-wrap: wrap; }
+.ai-model-id-active { font-family: monospace; font-size: 15px; color: #a5b4fc; font-weight: 600; word-break: break-all; }
+.ai-active-pill { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: rgba(99,102,241,0.2); color: #818cf8; text-transform: uppercase; letter-spacing: 0.06em; flex-shrink: 0; }
+
+.ai-models-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.ai-count { font-size: 12px; color: #475569; font-weight: 400; margin-left: 4px; }
+.ai-search { width: 200px; }
+
+.ai-loading { text-align: center; color: #475569; padding: 32px 0; font-size: 13px; }
+.ai-empty { text-align: center; color: #475569; padding: 28px 0; font-size: 13px; }
+
+.ai-model-list { display: flex; flex-direction: column; gap: 3px; max-height: 540px; overflow-y: auto; }
+.ai-model-row { display: flex; align-items: flex-start; gap: 14px; padding: 11px 12px; border-radius: 8px; cursor: pointer; border: 1px solid transparent; transition: background 0.1s, border-color 0.1s; }
+.ai-model-row:hover { background: rgba(255,255,255,0.04); }
+.ai-model-selected { background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.3); }
+.ai-model-radio { padding-top: 3px; flex-shrink: 0; }
+.ai-radio-dot { display: block; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #374151; background: transparent; transition: all 0.12s; }
+.ai-radio-active { border-color: #6366f1; background: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.25); }
+.ai-model-info { flex: 1; min-width: 0; }
+.ai-model-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+.ai-model-id-small { font-size: 11px; font-family: monospace; color: #475569; margin-top: 2px; }
+.ai-model-desc { font-size: 12px; color: #64748b; margin-top: 4px; line-height: 1.45; }
+.ai-model-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+.ai-ctx { font-size: 11px; color: #475569; }
+.ai-price { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+.ai-price-free { background: rgba(34,197,94,0.1); color: #86efac; }
+.ai-price-paid { background: rgba(251,191,36,0.1); color: #fcd34d; }
 </style>
