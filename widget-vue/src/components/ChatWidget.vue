@@ -225,9 +225,11 @@ const showLeadForm   = ref(false)
 const leadEmail      = ref('')
 const leadPhone      = ref('')
 const leadSubmitting = ref(false)
-// Persist lead-captured state in localStorage so it survives page reloads
 const LEAD_KEY = `cf_lead_captured_${clientId || 'default'}`
-const leadCaptured   = ref(!!localStorage.getItem(LEAD_KEY))
+// submitted → localStorage (permanent). dismissed → sessionStorage (per page load only).
+const leadCaptured   = ref(
+  !!localStorage.getItem(LEAD_KEY) || !!sessionStorage.getItem(LEAD_KEY)
+)
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let socket = null
@@ -269,6 +271,10 @@ function connectWebSocket() {
         chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai', reaction: null })
         speakText(data.message)
         playChime()
+        // Auto-open widget for server-side idle nudges so the visitor sees the message
+        if (data.source === 'afk_nudge' && !isOpen.value) {
+          isOpen.value = true
+        }
         if (!leadCaptured.value && userMessageCount.value >= 2) {
           setTimeout(() => { showLeadForm.value = true }, 1500)
         }
@@ -443,7 +449,7 @@ function react(index, emoji) {
 function dismissLeadForm() {
   showLeadForm.value = false
   leadCaptured.value = true
-  localStorage.setItem(LEAD_KEY, '1')
+  sessionStorage.setItem(LEAD_KEY, '1')  // only this session — shows again on next page load
 }
 
 async function submitLead() {
@@ -483,9 +489,11 @@ function toggleWindow() {
 }
 
 // ── Nudge callback ────────────────────────────────────────────────────────────
-setNudgeCallback((nudgeText) => {
-  if (!nudgeText) return
+setNudgeCallback(() => {
+  // Use configured CTA message or fall back to default
+  const nudgeText = branding.value.cta_message || "Still exploring? I'm here to help — feel free to ask anything! 💬"
   chatMessages.value.push({ type: 'text', text: nudgeText, sender: 'ai', reaction: null })
+  playChime()
   if (!isOpen.value) isOpen.value = true
 })
 
