@@ -320,7 +320,7 @@ onMounted(() => {
 .clients-page { max-width: 1200px; }
 
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 28px; }
-.page-title { font-size: 24px; font-weight: 700; color: #0F172A; letter-spacing: -0.4px; }
+.page-title { font-size: 24px; font-weight: 700; color: #f1f5f9; letter-spacing: -0.4px; }
 .page-sub { font-size: 14px; color: #64748B; margin-top: 4px; }
 
 .add-btn {
@@ -339,14 +339,14 @@ onMounted(() => {
 }
 
 .empty-icon {
-  width: 72px; height: 72px; background: #F1F5F9; border-radius: 20px;
+  width: 72px; height: 72px; background: rgba(255,255,255,0.06); border-radius: 20px;
   display: flex; align-items: center; justify-content: center;
 }
 .empty-title { font-size: 16px; font-weight: 600; color: #475569; }
 .empty-sub { font-size: 13px; color: #94A3B8; }
 
 .loader {
-  width: 32px; height: 32px; border: 3px solid #E2E8F0;
+  width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.08);
   border-top-color: #6366F1; border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -354,8 +354,8 @@ onMounted(() => {
 
 /* Table */
 .clients-table-wrap {
-  background: white; border-radius: 14px; border: 1px solid #F1F5F9;
-  overflow: visible; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  background: rgba(255,255,255,0.04); border-radius: 14px; border: 1px solid rgba(255,255,255,0.07);
+  overflow: visible; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
 }
 /* Re-apply corner clipping on the table rows so border-radius still looks correct */
 .clients-table thead tr:first-child th:first-child { border-radius: 14px 0 0 0; }
@@ -365,19 +365,19 @@ onMounted(() => {
 
 .clients-table { width: 100%; border-collapse: collapse; }
 
-.clients-table thead tr { background: #F8FAFC; }
+.clients-table thead tr { background: rgba(255,255,255,0.04); }
 .clients-table th {
   padding: 12px 16px; text-align: left;
   font-size: 12px; font-weight: 600; color: #64748B;
   text-transform: uppercase; letter-spacing: 0.05em;
-  border-bottom: 1px solid #F1F5F9;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
 }
 .clients-table td {
   padding: 14px 16px; border-bottom: 1px solid #F8FAFC;
   vertical-align: middle;
 }
 .clients-table tbody tr:last-child td { border-bottom: none; }
-.clients-table tbody tr:hover { background: #FAFAFA; }
+.clients-table tbody tr:hover { background: rgba(255,255,255,0.03); }
 
 .client-name-cell { display: flex; align-items: center; gap: 12px; }
 .client-avatar {
@@ -385,7 +385,7 @@ onMounted(() => {
   color: white; font-size: 12px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.client-name { font-size: 14px; font-weight: 600; color: #0F172A; }
+.client-name { font-size: 14px; font-weight: 600; color: #f1f5f9; }
 .client-url { font-size: 12px; color: #94A3B8; }
 .client-url[href] { color: #6366F1; text-decoration: none; }
 .client-url[href]:hover { text-decoration: underline; }
@@ -394,8 +394,8 @@ onMounted(() => {
   font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px;
 }
 .platform-wordpress { background: #EEF2FF; color: #4338CA; }
-.platform-shopify { background: #F0FDF4; color: #15803D; }
-.platform-custom { background: #F8FAFC; color: #475569; }
+.platform-shopify { background: rgba(34,197,94,0.08); color: #15803D; }
+.platform-custom { background: rgba(255,255,255,0.04); color: #475569; }
 
 .status-dot-wrap { display: flex; align-items: center; gap: 7px; }
 .status-dot {
@@ -417,14 +417,14 @@ onMounted(() => {
 .tenant-badge-ro { font-size: 12px; color: #475569; }
 .assign-wrap { position: relative; }
 .assign-btn {
-  width: 22px; height: 22px; border-radius: 5px; border: 1px solid #E2E8F0;
-  background: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 5px; border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04); cursor: pointer; display: flex; align-items: center; justify-content: center;
   color: #94A3B8; transition: all 0.15s; flex-shrink: 0;
 }
 .assign-btn:hover { background: #EEF2FF; border-color: #C7D2FE; color: #6366F1; }
 .assign-dropdown {
   position: absolute; bottom: 28px; left: 0; z-index: 200;
-  background: white; border: 1px solid #E2E8F0; border-radius: 10px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 180px; padding: 6px;
 }
 .assign-dropdown-label {
@@ -433,37 +433,37 @@ onMounted(() => {
 }
 .assign-option {
   display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 7px;
-  border: none; background: none; font-size: 13px; color: #334155;
+  border: none; background: none; font-size: 13px; color: #94a3b8;
   cursor: pointer; font-family: inherit; transition: all 0.1s;
 }
-.assign-option:hover { background: #F1F5F9; }
+.assign-option:hover { background: rgba(255,255,255,0.06); }
 .assign-option.active { background: rgba(99,102,241,0.08); color: #4F46E5; font-weight: 600; }
 .assign-option.unassign { color: #EF4444; margin-top: 4px; border-top: 1px solid #F1F5F9; border-radius: 0 0 7px 7px; }
-.assign-option.unassign:hover { background: #FEF2F2; }
+.assign-option.unassign:hover { background: rgba(239,68,68,0.08); }
 
-.sessions-count { font-size: 14px; font-weight: 600; color: #0F172A; }
+.sessions-count { font-size: 14px; font-weight: 600; color: #f1f5f9; }
 
 .ingestion-cell { display: flex; align-items: center; gap: 8px; }
 .ingestion-badge {
   font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px;
   text-transform: uppercase; letter-spacing: 0.05em;
 }
-.ing-pending { background: #F1F5F9; color: #64748B; }
-.ing-running { background: #EFF6FF; color: #2563EB; }
-.ing-done { background: #F0FDF4; color: #15803D; }
-.ing-failed { background: #FEF2F2; color: #B91C1C; }
+.ing-pending { background: rgba(255,255,255,0.06); color: #64748B; }
+.ing-running { background: rgba(59,130,246,0.12); color: #2563EB; }
+.ing-done { background: rgba(34,197,94,0.08); color: #15803D; }
+.ing-failed { background: rgba(239,68,68,0.08); color: #B91C1C; }
 .pages-count { font-size: 12px; color: #94A3B8; }
 
 .actions { display: flex; gap: 6px; }
 .action-btn {
-  width: 30px; height: 30px; border-radius: 7px; border: 1px solid #E2E8F0;
-  background: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04); cursor: pointer; display: flex; align-items: center; justify-content: center;
   color: #64748B; transition: all 0.15s;
 }
 .action-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .view-btn:hover { background: #EEF2FF; border-color: #C7D2FE; color: #4338CA; }
-.scrape-btn:hover:not(:disabled) { background: #F0FDF4; border-color: #BBF7D0; color: #15803D; }
-.delete-btn:hover { background: #FEF2F2; border-color: #FECACA; color: #DC2626; }
+.scrape-btn:hover:not(:disabled) { background: rgba(34,197,94,0.08); border-color: #BBF7D0; color: #15803D; }
+.delete-btn:hover { background: rgba(239,68,68,0.08); border-color: #FECACA; color: #DC2626; }
 
 .mini-spinner {
   width: 14px; height: 14px; border: 2px solid rgba(0,0,0,0.1);
@@ -479,9 +479,9 @@ onMounted(() => {
 }
 
 .modal {
-  background: white; border-radius: 16px;
+  background: rgba(255,255,255,0.04); border-radius: 16px;
   width: 100%; max-width: 480px;
-  box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
 }
 .modal.small { max-width: 380px; }
 
@@ -489,12 +489,12 @@ onMounted(() => {
   display: flex; justify-content: space-between; align-items: center;
   padding: 20px 20px 0;
 }
-.modal-header h3 { font-size: 17px; font-weight: 600; color: #0F172A; }
+.modal-header h3 { font-size: 17px; font-weight: 600; color: #f1f5f9; }
 .modal-close {
   background: none; border: none; cursor: pointer; padding: 4px;
   color: #94A3B8; border-radius: 6px; transition: all 0.15s;
 }
-.modal-close:hover { background: #F1F5F9; color: #475569; }
+.modal-close:hover { background: rgba(255,255,255,0.06); color: #475569; }
 
 .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .modal-footer { padding: 0 20px 20px; display: flex; gap: 10px; justify-content: flex-end; }
@@ -502,15 +502,15 @@ onMounted(() => {
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field label { font-size: 13px; font-weight: 500; color: #475569; }
 .field input, .field select {
-  border: 1px solid #E2E8F0; border-radius: 9px; padding: 10px 12px;
-  font-size: 14px; color: #0F172A; outline: none; font-family: inherit;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 10px 12px;
+  font-size: 14px; color: #f1f5f9; outline: none; font-family: inherit;
   transition: border-color 0.15s;
 }
 .field input:focus, .field select:focus { border-color: #6366F1; box-shadow: 0 0 0 3px rgba(99,102,241,0.08); }
 .field-hint { font-size: 12px; color: #94A3B8; }
 
 .webhook-info {
-  background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px; padding: 14px;
+  background: rgba(34,197,94,0.08); border: 1px solid #BBF7D0; border-radius: 10px; padding: 14px;
 }
 .info-title { font-size: 13px; font-weight: 600; color: #15803D; margin-bottom: 6px; }
 .info-text { font-size: 12px; color: #166534; line-height: 1.5; margin-bottom: 8px; }
@@ -518,16 +518,16 @@ onMounted(() => {
 .info-sub { font-size: 11px; color: #94A3B8; margin-top: 8px; }
 
 .form-error {
-  background: #FEF2F2; border: 1px solid #FECACA; border-radius: 8px;
+  background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px;
   padding: 10px 12px; font-size: 13px; color: #B91C1C;
 }
 
 .cancel-btn {
-  background: white; border: 1px solid #E2E8F0; border-radius: 9px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 9px;
   padding: 9px 16px; font-size: 14px; font-weight: 500; color: #475569;
   cursor: pointer; font-family: inherit; transition: all 0.15s;
 }
-.cancel-btn:hover { background: #F8FAFC; }
+.cancel-btn:hover { background: rgba(255,255,255,0.04); }
 
 .submit-btn {
   background: linear-gradient(135deg, #6366F1, #8B5CF6); color: white;
