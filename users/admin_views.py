@@ -26,6 +26,20 @@ from chat.models import ChatSession
 
 # ─── Auth ────────────────────────────────────────────────────────────────────
 
+import re as _re
+
+def _validate_password_strength(password):
+    """Returns an error string or None if password passes all rules."""
+    if len(password) < 8:
+        return 'Password must be at least 8 characters.'
+    if not _re.search(r'[A-Z]', password):
+        return 'Password must contain at least one uppercase letter.'
+    if not _re.search(r'[0-9]', password):
+        return 'Password must contain at least one number.'
+    if not _re.search(r'[^A-Za-z0-9]', password):
+        return 'Password must contain at least one special character.'
+    return None
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
@@ -45,8 +59,9 @@ def register_view(request):
         return Response({'detail': 'Email is required.'}, status=400)
     if not password:
         return Response({'detail': 'Password is required.'}, status=400)
-    if len(password) < 8:
-        return Response({'detail': 'Password must be at least 8 characters.'}, status=400)
+    pw_err = _validate_password_strength(password)
+    if pw_err:
+        return Response({'detail': pw_err}, status=400)
     if password != confirm_password:
         return Response({'detail': 'Passwords do not match.'}, status=400)
     if User.objects.filter(username=email).exists():
@@ -121,22 +136,101 @@ def forgot_password(request):
     uid = urlsafe_base64_encode(force_bytes(user.pk))
     token = default_token_generator.make_token(user)
     reset_url = f'https://ai.checkfunnels.com/reset-password?uid={uid}&token={token}'
+    display_name = user.get_full_name() or user.username
 
-    body = (
-        f'Hi {user.get_full_name() or user.username},\n\n'
-        f'Click the link below to reset your Checkfunnel password:\n\n'
+    html_body = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Reset your Checkfunnel password</title>
+</head>
+<body style="margin:0;padding:0;background:#0d0d0d;font-family:'Inter',Arial,sans-serif;color:#e2e8f0;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0d0d0d;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#141414;border-radius:16px;border:1px solid rgba(255,255,255,0.08);overflow:hidden;max-width:560px;width:100%;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;font-size:22px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">
+              Checkfunnel
+            </h1>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:40px;">
+            <p style="margin:0 0 8px;font-size:18px;font-weight:600;color:#f1f5f9;">
+              Reset your password
+            </p>
+            <p style="margin:0 0 28px;font-size:14px;color:#94a3b8;line-height:1.6;">
+              Hi {display_name}, we received a request to reset the password for your Checkfunnel account.
+            </p>
+
+            <!-- CTA button -->
+            <table cellpadding="0" cellspacing="0" style="margin:0 auto 28px;">
+              <tr>
+                <td style="background:#6366f1;border-radius:10px;text-align:center;">
+                  <a href="{reset_url}"
+                     style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;letter-spacing:-0.2px;">
+                    Reset Password →
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0 0 16px;font-size:13px;color:#64748b;line-height:1.6;">
+              If the button above doesn't work, copy and paste this link into your browser:
+            </p>
+            <p style="margin:0 0 28px;word-break:break-all;">
+              <a href="{reset_url}" style="font-size:12px;color:#6366f1;text-decoration:none;">{reset_url}</a>
+            </p>
+
+            <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:0 0 24px;"/>
+
+            <p style="margin:0;font-size:12px;color:#475569;line-height:1.6;">
+              This link expires in <strong style="color:#94a3b8;">1 hour</strong>. If you did not request a
+              password reset, you can safely ignore this email — your password will not change.
+            </p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#0f0f0f;padding:20px 40px;text-align:center;">
+            <p style="margin:0;font-size:11px;color:#334155;">
+              © 2026 Checkfunnel · AI-Powered Conversion Intelligence
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    plain_body = (
+        f'Hi {display_name},\n\n'
+        f'Reset your Checkfunnel password by clicking the link below:\n\n'
         f'{reset_url}\n\n'
         f'This link expires in 1 hour. If you did not request a password reset, '
         f'you can safely ignore this email.\n\n'
         f'— The Checkfunnel Team'
     )
     try:
-        DjangoEmail(
+        msg = DjangoEmail(
             subject='Reset your Checkfunnel password',
-            body=body,
+            body=plain_body,
             from_email=django_settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
-        ).send(fail_silently=True)
+        )
+        msg.content_subtype = 'plain'
+        msg.mixed_subtype = 'related'
+        msg.attach_alternative(html_body, 'text/html')
+        msg.send(fail_silently=True)
     except Exception as e:
         logger.warning(f'[forgot_password] Email send failed: {e}')
 
@@ -155,8 +249,9 @@ def reset_password(request):
     token = request.data.get('token', '')
     new_password = request.data.get('new_password', '')
 
-    if len(new_password) < 8:
-        return Response({'detail': 'Password must be at least 8 characters.'}, status=400)
+    pw_err = _validate_password_strength(new_password)
+    if pw_err:
+        return Response({'detail': pw_err}, status=400)
 
     try:
         user_id = force_str(urlsafe_base64_decode(uid))
@@ -181,8 +276,9 @@ def change_password(request):
 
     if not request.user.check_password(current):
         return Response({'detail': 'Current password is incorrect.'}, status=400)
-    if len(new_pw) < 8:
-        return Response({'detail': 'New password must be at least 8 characters.'}, status=400)
+    pw_err = _validate_password_strength(new_pw)
+    if pw_err:
+        return Response({'detail': pw_err}, status=400)
 
     request.user.set_password(new_pw)
     request.user.save()
@@ -1563,21 +1659,20 @@ def revenue_overview(request):
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     prev_month_start = (month_start - timedelta(days=1)).replace(day=1)
 
+    # Active = any tenant on a paid plan (Stripe not required)
     active_tenants = TenantProfile.objects.filter(
-        stripe_subscription_status='active'
+        plan__isnull=False,
+        plan__price_monthly__gt=0,
     ).select_related('plan')
 
-    mrr = sum(
-        float(t.plan.price_monthly) for t in active_tenants if t.plan
-    )
+    mrr = sum(float(t.plan.price_monthly) for t in active_tenants)
     arr = mrr * 12
 
-    # New MRR this month — tenants whose plan was set/changed this month
-    # (approximated via PlanHistory)
+    # New MRR this month — plan upgrades/assignments this month
     new_mrr_tenants = PlanHistory.objects.filter(
         changed_at__gte=month_start,
         to_plan__isnull=False,
-    ).exclude(from_plan__isnull=True)
+    ).select_related('to_plan', 'from_plan')
     new_mrr = sum(
         float(ph.to_plan.price_monthly) - float(ph.from_plan.price_monthly if ph.from_plan else 0)
         for ph in new_mrr_tenants
@@ -1588,7 +1683,7 @@ def revenue_overview(request):
     churned_mrr_tenants = PlanHistory.objects.filter(
         changed_at__gte=month_start,
         to_plan__isnull=True,
-    )
+    ).select_related('from_plan')
     churned_mrr = sum(
         float(ph.from_plan.price_monthly) for ph in churned_mrr_tenants if ph.from_plan
     )
@@ -1596,11 +1691,13 @@ def revenue_overview(request):
     total_tenants = TenantProfile.objects.count()
     arpu = round(mrr / active_tenants.count(), 2) if active_tenants.count() > 0 else 0
 
-    past_due = TenantProfile.objects.filter(stripe_subscription_status='past_due').count()
+    # past_due: tenants on paid plans whose trial expired and haven't paid (approximated)
+    past_due = TenantProfile.objects.filter(
+        stripe_subscription_status='past_due',
+    ).count()
     trialing = TenantProfile.objects.filter(
         trial_ends_at__gt=now,
-        stripe_subscription_status__in=['', None, 'trialing'],
-    ).count()
+    ).exclude(plan__price_monthly__gt=0).count()
 
     # Plan distribution
     plan_dist = []
@@ -1681,7 +1778,7 @@ def tenant_health_board(request):
         score = 0
         if sessions_14d > 0: score += 30
         if sessions_30d > (t.plan.max_sessions_per_month * 0.1 if t.plan else 0): score += 20
-        if t.stripe_subscription_status == 'active': score += 30
+        if t.plan and t.plan.price_monthly > 0: score += 30
         if client_count > 0 and any(c.total_pages_ingested > 0 for c in t.clients.all()): score += 10
         if t.onboarding_complete: score += 10
 
@@ -1762,7 +1859,7 @@ def lifecycle_alerts(request):
             })
 
         # Zero sessions in 14 days (active paid tenants only)
-        if t.stripe_subscription_status == 'active' and t.clients.exists():
+        if t.plan and t.plan.price_monthly > 0 and t.clients.exists():
             client_ids = t.clients.values_list('id', flat=True)
             from chat.models import ChatSession as CS
             recent = CS.objects.filter(

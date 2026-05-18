@@ -137,9 +137,11 @@
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminApi } from '../composables/useAdminApi'
+import { useToast } from '../composables/useToast'
 
 const route = useRoute()
 const api = useAdminApi()
+const toast = useToast()
 
 const sessionId = route.params.id
 const session = ref(null)
@@ -179,7 +181,7 @@ async function takeover() {
     await api.takeoverSession(sessionId)
     session.value = { ...session.value, takeover_active: true }
   } catch (e) {
-    alert(e.message)
+    toast.error(e.message)
   } finally {
     actionLoading.value = false
   }
@@ -191,7 +193,7 @@ async function release() {
     await api.releaseSession(sessionId)
     session.value = { ...session.value, takeover_active: false }
   } catch (e) {
-    alert(e.message)
+    toast.error(e.message)
   } finally {
     actionLoading.value = false
   }
@@ -208,7 +210,7 @@ async function sendAdminMessage() {
     await nextTick()
     scrollToBottom()
   } catch (e) {
-    alert(e.message)
+    toast.error(e.message)
   } finally {
     sending.value = false
   }

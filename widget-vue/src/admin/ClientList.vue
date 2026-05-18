@@ -201,8 +201,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import { useToast } from '../composables/useToast'
 
 const api = useAdminApi()
+const toast = useToast()
 const clients = ref([])
 const tenants = ref([])
 const loading = ref(false)
@@ -246,7 +248,7 @@ async function assignToTenant(client, tenantId) {
     const msg = e.message === 'Failed to fetch'
       ? 'Cannot reach server. Make sure the backend is running.'
       : (e.message || 'Assignment failed.')
-    alert(msg)
+    toast.error(msg)
   }
 }
 
@@ -280,7 +282,7 @@ async function triggerScrape(client) {
     await api.triggerScrape(client.id)
     client.ingestion_status = 'RUNNING'
   } catch (e) {
-    alert(e.message || 'Scrape failed.')
+    toast.error(e.message || 'Scrape failed.')
   } finally {
     scrapingId.value = null
   }
@@ -298,7 +300,7 @@ async function doDelete() {
     clients.value = clients.value.filter(c => c.id !== deleteTarget.value.id)
     deleteTarget.value = null
   } catch (e) {
-    alert(e.message || 'Failed to delete.')
+    toast.error(e.message || 'Failed to delete.')
   } finally {
     deleting.value = false
   }

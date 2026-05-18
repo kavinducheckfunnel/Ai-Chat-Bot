@@ -447,9 +447,11 @@
 import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
+import { useToast } from '../composables/useToast'
 
 const route = useRoute()
 const api = useAdminApi()
+const toast = useToast()
 
 const client = ref(null)
 const analytics = ref(null)
@@ -595,7 +597,7 @@ async function triggerScrape() {
     scrapeProgress.value = { phase: 'crawling', done: 0, total: 0 }
     _startProgressPolling()
   } catch (e) {
-    alert(e.message || 'Scrape failed.')
+    toast.error(e.message || 'Scrape failed.')
   } finally {
     scraping.value = false
   }

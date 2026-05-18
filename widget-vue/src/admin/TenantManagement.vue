@@ -545,11 +545,6 @@
       </div>
     </div>
 
-    <!-- Impersonate toast -->
-    <div v-if="impersonateToast" class="toast" :class="impersonateToast.type">
-      {{ impersonateToast.msg }}
-    </div>
-
     <!-- Delete Confirm -->
     <div v-if="deleteTenant" class="modal-overlay" @click.self="deleteTenant = null">
       <div class="modal modal-sm">
@@ -570,8 +565,10 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import { useToast } from '../composables/useToast'
 
 const api = useAdminApi()
+const toast = useToast()
 const tenants = ref([])
 const plans = ref([])
 const allClients = ref([])
@@ -600,7 +597,6 @@ const deleteTenant = ref(null)
 const deleting = ref(false)
 
 const impersonating = ref(null)
-const impersonateToast = ref(null)
 
 const showPlanManager = ref(false)
 const planPriceIds = ref({})
@@ -789,7 +785,7 @@ async function savePlanPriceIds() {
     plans.value = await api.getPlans() || []
     showPlanManager.value = false
   } catch (e) {
-    alert(e.message || 'Failed to save price IDs.')
+    toast.error(e.message || 'Failed to save price IDs.')
   } finally {
     savingPriceIds.value = false
   }
@@ -914,7 +910,7 @@ async function savePlan() {
     // Reload history to show new entry
     await loadPlanHistory(planTenant.value.id)
   } catch (e) {
-    alert(e.message)
+    toast.error(e.message)
   } finally {
     savingPlan.value = false
   }
@@ -931,18 +927,13 @@ async function loginAsTenant(t) {
     localStorage.setItem('cf_impersonate_return_token', prevToken)
     localStorage.setItem('cf_impersonate_return_user', prevUser)
     localStorage.setItem('cf_impersonating', 'true')
-    showToast(`Logged in as ${data.tenant.username} (${data.tenant.company_name})`, 'success')
+    toast.success(`Logged in as ${data.tenant.username} (${data.tenant.company_name})`)
     setTimeout(() => { window.location.href = '/admin/' }, 1200)
   } catch (e) {
-    showToast(e.message || 'Impersonation failed', 'error')
+    toast.error(e.message || 'Impersonation failed')
   } finally {
     impersonating.value = null
   }
-}
-
-function showToast(msg, type = 'success') {
-  impersonateToast.value = { msg, type }
-  setTimeout(() => { impersonateToast.value = null }, 3000)
 }
 
 function confirmDelete(t) { deleteTenant.value = t }
@@ -954,7 +945,7 @@ async function doDelete() {
     tenants.value = tenants.value.filter(x => x.id !== deleteTenant.value.id)
     deleteTenant.value = null
   } catch (e) {
-    alert(e.message)
+    toast.error(e.message)
   } finally {
     deleting.value = false
   }
@@ -1002,7 +993,7 @@ async function deleteOverride(overrideId) {
     await api.deleteFeatureOverride(overrideTenant.value.id, overrideId)
     tenantOverrides.value = tenantOverrides.value.filter(o => o.id !== overrideId)
   } catch (e) {
-    alert(e.message || 'Failed to delete override.')
+    toast.error(e.message || 'Failed to delete override.')
   } finally {
     deletingOverride.value = null
   }

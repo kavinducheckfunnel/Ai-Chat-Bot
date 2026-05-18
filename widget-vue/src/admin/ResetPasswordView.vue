@@ -78,6 +78,12 @@
             <div class="strength-fill" :style="{ width: strength.pct + '%', background: strength.color }"></div>
           </div>
           <p class="strength-label" v-if="newPw" :style="{ color: strength.color }">{{ strength.label }}</p>
+          <ul class="pw-rules" v-if="newPw">
+            <li :class="newPw.length >= 8 ? 'met' : 'unmet'">8+ characters</li>
+            <li :class="/[A-Z]/.test(newPw) ? 'met' : 'unmet'">Uppercase</li>
+            <li :class="/[0-9]/.test(newPw) ? 'met' : 'unmet'">Number</li>
+            <li :class="/[^A-Za-z0-9]/.test(newPw) ? 'met' : 'unmet'">Special char</li>
+          </ul>
 
           <div v-if="error" class="error-msg">
             <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#EF4444" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="#EF4444" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="#EF4444" stroke-width="2" stroke-linecap="round"/></svg>
@@ -135,6 +141,9 @@ const strength = computed(() => {
 
 async function handleSubmit() {
   error.value = ''
+  if (!/[A-Z]/.test(newPw.value)) { error.value = 'Password must contain at least one uppercase letter.'; return }
+  if (!/[0-9]/.test(newPw.value)) { error.value = 'Password must contain at least one number.'; return }
+  if (!/[^A-Za-z0-9]/.test(newPw.value)) { error.value = 'Password must contain at least one special character.'; return }
   if (newPw.value.length < 8) { error.value = 'Password must be at least 8 characters.'; return }
   if (newPw.value !== confirmPw.value) { error.value = 'Passwords do not match.'; return }
 
@@ -225,4 +234,8 @@ async function handleSubmit() {
 .invalid-state svg, .success-state svg { display: block; margin: 0 auto 16px; }
 
 .footer-note { text-align: center; color: #334155; font-size: 12px; margin-top: 28px; }
+.pw-rules { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.pw-rules li { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+.pw-rules .met   { background: rgba(34,197,94,0.12); color: #86efac; }
+.pw-rules .unmet { background: rgba(239,68,68,0.1);  color: #fca5a5; }
 </style>

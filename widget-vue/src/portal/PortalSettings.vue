@@ -264,13 +264,57 @@
         </div>
         <div class="field" style="grid-column:1/-1">
           <label>Model ID</label>
-          <input class="input" type="text" v-model="intForm.ai_model" placeholder="e.g. gpt-4o  /  claude-opus-4-6  /  google/gemini-3.1-pro-preview" />
-          <span class="field-hint">Leave blank to use the platform default (Gemini 3.1 Pro).</span>
+          <div class="model-input-row">
+            <input class="input" type="text" v-model="intForm.ai_model" placeholder="e.g. gpt-4o / google/gemini-2.0-flash-001" />
+            <button
+              v-if="intForm.ai_provider === 'openrouter'"
+              class="btn-browse-models"
+              @click="openModelPicker"
+              type="button"
+            >Browse</button>
+          </div>
+          <span class="field-hint">Leave blank to use the platform default. OpenRouter users can click Browse to choose from live models.</span>
         </div>
       </div>
       <div class="save-row">
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save AI settings' }}</button>
       </div>
+
+      <!-- Model picker modal -->
+      <teleport to="body">
+        <div v-if="modelPickerOpen" class="model-picker-overlay" @click.self="modelPickerOpen = false">
+          <div class="model-picker-box">
+            <div class="model-picker-header">
+              <span>OpenRouter Models</span>
+              <button class="model-picker-close" @click="modelPickerOpen = false">✕</button>
+            </div>
+            <input
+              class="model-picker-search"
+              v-model="modelPickerSearch"
+              placeholder="Search models…"
+              autofocus
+            />
+            <div class="model-picker-list" v-if="!modelPickerLoading">
+              <div
+                v-for="m in modelPickerFiltered"
+                :key="m.id"
+                class="model-picker-row"
+                :class="{ 'model-picker-active': intForm.ai_model === m.id }"
+                @click="selectPickerModel(m)"
+              >
+                <div class="mp-id">{{ m.id }}</div>
+                <div class="mp-meta">
+                  <span v-if="m.pricing?.prompt === '0'" class="mp-free">FREE</span>
+                  <span v-else class="mp-paid">PAID</span>
+                  <span v-if="m.context_length" class="mp-ctx">{{ (m.context_length / 1000).toFixed(0) }}k ctx</span>
+                </div>
+              </div>
+              <div v-if="!modelPickerFiltered.length" class="mp-empty">No models match your search.</div>
+            </div>
+            <div v-else class="mp-loading">Loading models…</div>
+          </div>
+        </div>
+      </teleport>
     </div>
     </div><!-- end gate-wrap -->
 
@@ -552,10 +596,12 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 import { generateEmbedCode } from './embedCodeGenerator'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps({ client: Object })
 const emit = defineEmits(['client-updated'])
 const api = useAdminApi()
+const toast = useToast()
 
 const activeTab = ref('channels')
 const embedFormat = ref('html')
@@ -605,6 +651,38 @@ const aiProviders = [
   { val: 'openai', label: 'OpenAI' },
   { val: 'anthropic', label: 'Anthropic' },
 ]
+
+// ── OpenRouter model picker ───────────────────────────────────────────────────
+const modelPickerOpen = ref(false)
+const modelPickerModels = ref([])
+const modelPickerLoading = ref(false)
+const modelPickerSearch = ref('')
+
+const modelPickerFiltered = computed(() => {
+  const q = modelPickerSearch.value.toLowerCase()
+  return q
+    ? modelPickerModels.value.filter(m => m.id.toLowerCase().includes(q) || (m.name || '').toLowerCase().includes(q))
+    : modelPickerModels.value
+})
+
+async function openModelPicker() {
+  modelPickerOpen.value = true
+  if (modelPickerModels.value.length) return
+  modelPickerLoading.value = true
+  try {
+    const data = await api.getOpenRouterModels()
+    modelPickerModels.value = data?.models || []
+  } catch (e) {
+    toast.error('Failed to load models: ' + e.message)
+  } finally {
+    modelPickerLoading.value = false
+  }
+}
+
+function selectPickerModel(model) {
+  intForm.value.ai_model = model.id
+  modelPickerOpen.value = false
+}
 
 const whatsappWebhookUrl = computed(() =>
   props.client ? `${backendUrl}/api/chat/webhooks/whatsapp/${props.client.id}/` : ''
@@ -1205,4 +1283,57 @@ const scrapeStatusLabel = computed(() => {
   .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
   .form-grid { grid-template-columns: 1fr !important; }
 }
+
+/* ── Model picker ─────────────────────────────────────────────────────── */
+.model-input-row { display: flex; gap: 8px; align-items: center; }
+.model-input-row .input { flex: 1; }
+.btn-browse-models {
+  flex-shrink: 0; padding: 0 14px; height: 40px; border-radius: 8px;
+  background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3);
+  font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap;
+  transition: background 0.15s;
+}
+.btn-browse-models:hover { background: rgba(99,102,241,0.25); }
+
+.model-picker-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+  z-index: 99997; display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.model-picker-box {
+  background: #111827; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px; width: 520px; max-width: calc(100vw - 32px);
+  max-height: 80vh; display: flex; flex-direction: column;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+}
+.model-picker-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-size: 15px; font-weight: 600; color: #f1f5f9;
+}
+.model-picker-close {
+  background: none; border: none; color: #64748b; font-size: 16px;
+  cursor: pointer; padding: 4px 8px; border-radius: 6px;
+}
+.model-picker-close:hover { color: #f1f5f9; background: rgba(255,255,255,0.06); }
+.model-picker-search {
+  margin: 12px 16px; padding: 10px 14px; border-radius: 8px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+  color: #e2e8f0; font-size: 14px; outline: none;
+}
+.model-picker-search:focus { border-color: #6366f1; }
+.model-picker-list { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
+.model-picker-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 12px; border-radius: 8px; cursor: pointer;
+  transition: background 0.12s;
+}
+.model-picker-row:hover { background: rgba(255,255,255,0.05); }
+.model-picker-active { background: rgba(99,102,241,0.12) !important; }
+.mp-id { font-size: 13px; color: #e2e8f0; font-family: monospace; word-break: break-all; }
+.mp-meta { display: flex; gap: 6px; align-items: center; flex-shrink: 0; margin-left: 8px; }
+.mp-free { font-size: 10px; font-weight: 700; background: rgba(34,197,94,0.15); color: #86efac; padding: 2px 6px; border-radius: 4px; }
+.mp-paid { font-size: 10px; font-weight: 700; background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; }
+.mp-ctx  { font-size: 11px; color: #64748b; }
+.mp-empty, .mp-loading { padding: 24px; text-align: center; color: #475569; font-size: 14px; }
 </style>

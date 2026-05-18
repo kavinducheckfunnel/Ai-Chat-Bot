@@ -502,13 +502,18 @@ async function loadBranding() {
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
+let _brandingInterval = null
+
 onMounted(() => {
   loadBranding()
   connectWebSocket()
+  // Re-poll widget settings every 60 s so admin changes appear without a page reload
+  _brandingInterval = setInterval(loadBranding, 60_000)
 })
 
 onBeforeUnmount(() => {
   disconnectWebSocket()
+  if (_brandingInterval) clearInterval(_brandingInterval)
 })
 </script>
 

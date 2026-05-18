@@ -9,12 +9,37 @@ const API_BASE =
 const WS_BASE = API_BASE.replace(/^http/, 'ws')
 export const WIDGET_URL = `${API_BASE}/widget/widget.js`
 
-function getHeaders() {
-  const token = localStorage.getItem('cf_access_token')
+function getHeaders(token) {
+  const t = token || localStorage.getItem('cf_access_token')
   return {
     'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(t ? { Authorization: `Bearer ${t}` } : {}),
   }
+}
+
+async function tryRefreshToken() {
+  const refresh = localStorage.getItem('cf_refresh_token')
+  if (!refresh) return null
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/auth/refresh/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh }),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    if (data.access) {
+      localStorage.setItem('cf_access_token', data.access)
+      return data.access
+    }
+  } catch {}
+  return null
+}
+
+function redirectToLogin() {
+  localStorage.removeItem('cf_access_token')
+  localStorage.removeItem('cf_refresh_token')
+  window.location.href = '/admin/login'
 }
 
 async function apiFetch(path, opts = {}) {
@@ -23,9 +48,25 @@ async function apiFetch(path, opts = {}) {
     ...opts,
   })
   if (res.status === 401) {
-    localStorage.removeItem('cf_access_token')
-    localStorage.removeItem('cf_refresh_token')
-    window.location.href = '/admin/login'
+    // Try to silently refresh the access token once
+    const newToken = await tryRefreshToken()
+    if (newToken) {
+      const retryRes = await fetch(`${API_BASE}${path}`, {
+        headers: getHeaders(newToken),
+        ...opts,
+      })
+      if (retryRes.status === 401) {
+        redirectToLogin()
+        return
+      }
+      if (!retryRes.ok) {
+        const err = await retryRes.json().catch(() => ({ detail: retryRes.statusText }))
+        throw new Error(err.detail || 'Request failed')
+      }
+      if (retryRes.status === 204) return null
+      return retryRes.json()
+    }
+    redirectToLogin()
     return
   }
   if (!res.ok) {

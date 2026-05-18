@@ -469,10 +469,14 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import Sidebar from './Sidebar.vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import { useToast } from '../composables/useToast'
+import { useConfirm } from '../composables/useConfirm'
 
 const sidebarOpen = ref(false)
 
 const api = useAdminApi()
+const toast = useToast()
+const { confirm } = useConfirm()
 const loading = ref(true)
 const activeTab = ref('overview')
 const tabs = [
@@ -603,7 +607,8 @@ function healthColor(s) {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 async function impersonate(t) {
-  if (!confirm(`Impersonate ${t.company}? A 15-min token will be issued and audit-logged.`)) return
+  const ok = await confirm(`Impersonate ${t.company}? A 15-min token will be issued and audit-logged.`)
+  if (!ok) return
   try {
     const res = await api.impersonateTenant(t.tenant_id)
     localStorage.setItem('cf_impersonate_return_token', localStorage.getItem('cf_access_token'))
@@ -611,7 +616,7 @@ async function impersonate(t) {
     localStorage.setItem('cf_impersonating', 'true')
     localStorage.setItem('cf_access_token', res.access)
     window.location.href = '/portal/inbox'
-  } catch(e) { alert('Impersonation failed: ' + e.message) }
+  } catch(e) { toast.error('Impersonation failed: ' + e.message) }
 }
 
 async function extendTrial(t) {
@@ -620,7 +625,7 @@ async function extendTrial(t) {
   try {
     await api.updateTenant(t.tenant_id, { extend_trial_days: parseInt(days) })
     await loadAll()
-  } catch(e) { alert('Failed: ' + e.message) }
+  } catch(e) { toast.error('Failed: ' + e.message) }
 }
 
 // ── Plan modal ────────────────────────────────────────────────────────────────
@@ -636,8 +641,9 @@ async function savePlanChange() {
   try {
     await api.assignPlan(planModal.value.tenant.tenant_id, planModal.value.selectedPlanId, planModal.value.remarks)
     planModal.value.open = false
+    toast.success('Plan updated successfully.')
     await loadAll()
-  } catch(e) { alert(e.message) } finally { planModal.value.saving = false }
+  } catch(e) { toast.error(e.message) } finally { planModal.value.saving = false }
 }
 
 // ── Override modal ────────────────────────────────────────────────────────────
@@ -673,12 +679,15 @@ async function saveOverride() {
     overrideModal.value.newFeature = ''
     overrideModal.value.newReason  = ''
     overrideModal.value.newExpiry  = ''
-  } catch(e) { alert(e.message) } finally { overrideModal.value.saving = false }
+    toast.success('Override added.')
+  } catch(e) { toast.error(e.message) } finally { overrideModal.value.saving = false }
 }
 async function deleteOverride(o) {
-  if (!confirm('Remove this override?')) return
+  const ok = await confirm('Remove this override?')
+  if (!ok) return
   await api.deleteFeatureOverride(overrideModal.value.tenant.tenant_id, o.id)
   overrideModal.value.items = overrideModal.value.items.filter(x => x.id !== o.id)
+  toast.success('Override removed.')
 }
 
 // ── Alerts ────────────────────────────────────────────────────────────────────
@@ -689,7 +698,7 @@ function handleAlertAction(a) {
   const t = tenants.value.find(t => t.tenant_id === a.tenant_id)
   if (a.action === 'extend_trial' && t) extendTrial(t)
   else if (a.action === 'upgrade_plan' && t) openPlanModal(t)
-  else alert(`Action: ${a.action} for ${a.label}`)
+  else toast.info(`Action: ${a.action} for ${a.label}`)
 }
 
 // ── Announcements ─────────────────────────────────────────────────────────────
@@ -704,8 +713,8 @@ async function createAnnouncement() {
     await api.createAnnouncement(annForm.value)
     annSent.value = true
     annForm.value = { title:'', body:'', type:'info', target:'all', cta_label:'', cta_url:'' }
-    setTimeout(() => annSent.value = false, 3000)
-  } catch(e) { alert(e.message) } finally { annSaving.value = false }
+    toast.success('Announcement sent.')
+  } catch(e) { toast.error(e.message) } finally { annSaving.value = false }
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
@@ -954,7 +963,8 @@ const iconClock  = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24" 
 
 /* Audit */
 .audit-controls { display:flex; gap:10px; margin-bottom:16px; }
-.sel-input { background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.1); border-radius:9px; padding:8px 12px; font-size:13px; color:#e2e8f0; }
+.sel-input { background:#1e2130; border:1px solid rgba(255,255,255,0.1); border-radius:9px; padding:8px 12px; font-size:13px; color:#e2e8f0; }
+.sel-input option { background-color: #1e2130; color: #e2e8f0; }
 .audit-table-wrap { overflow-x:auto; border-radius:12px; border:1px solid rgba(255,255,255,0.07); }
 .audit-table { width:100%; border-collapse:collapse; font-size:13px; }
 .audit-table thead { background:rgba(255,255,255,0.03); }
@@ -979,6 +989,8 @@ const iconClock  = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24" 
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
 .inp { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); border-radius:9px; padding:9px 12px; font-size:13px; color:#e2e8f0; font-family:inherit; width:100%; outline:none; }
 .inp:focus { border-color:rgba(99,102,241,0.4); }
+select.inp { background-color: #1e2130; color: #e2e8f0; }
+select.inp option { background-color: #1e2130; color: #e2e8f0; }
 .btn-primary { width:100%; padding:10px; background:rgba(99,102,241,0.15); border:1px solid rgba(99,102,241,0.3); border-radius:9px; font-size:13px; font-weight:600; color:#a5b4fc; cursor:pointer; margin-top:14px; }
 .btn-primary:hover:not(:disabled) { background:rgba(99,102,241,0.25); }
 .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }

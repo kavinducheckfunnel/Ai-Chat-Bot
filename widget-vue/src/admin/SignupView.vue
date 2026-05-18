@@ -91,6 +91,12 @@
               </div>
               <span class="strength-label" :style="{ color: strengthColor }">{{ strengthLabel }}</span>
             </div>
+            <ul class="pw-rules" v-if="form.password">
+              <li :class="form.password.length >= 8 ? 'met' : 'unmet'">8+ characters</li>
+              <li :class="/[A-Z]/.test(form.password) ? 'met' : 'unmet'">Uppercase letter</li>
+              <li :class="/[0-9]/.test(form.password) ? 'met' : 'unmet'">Number</li>
+              <li :class="/[^A-Za-z0-9]/.test(form.password) ? 'met' : 'unmet'">Special character</li>
+            </ul>
           </div>
 
           <div class="field">
@@ -165,6 +171,14 @@ onMounted(() => {
   }
 })
 
+function validatePassword(p) {
+  if (p.length < 8) return 'Password must be at least 8 characters.'
+  if (!/[A-Z]/.test(p)) return 'Password must contain at least one uppercase letter.'
+  if (!/[0-9]/.test(p)) return 'Password must contain at least one number.'
+  if (!/[^A-Za-z0-9]/.test(p)) return 'Password must contain at least one special character.'
+  return null
+}
+
 // Password strength
 const strengthPct = computed(() => {
   const p = form.value.password
@@ -202,10 +216,8 @@ async function handleSignup() {
     error.value = 'Passwords do not match.'
     return
   }
-  if (password.length < 8) {
-    error.value = 'Password must be at least 8 characters.'
-    return
-  }
+  const pwErr = validatePassword(password)
+  if (pwErr) { error.value = pwErr; return }
 
   loading.value = true
   try {
@@ -488,6 +500,23 @@ async function handleSignup() {
   width: 36px;
   text-align: right;
 }
+
+.pw-rules {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pw-rules li {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.pw-rules .met   { background: rgba(34,197,94,0.12); color: #86efac; }
+.pw-rules .unmet { background: rgba(239,68,68,0.1);  color: #fca5a5; }
 
 .terms-row {
   display: flex;

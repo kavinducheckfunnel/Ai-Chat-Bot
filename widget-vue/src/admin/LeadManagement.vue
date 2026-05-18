@@ -10,12 +10,20 @@
           <span v-if="hasFilters" class="filter-active-badge">filtered</span>
         </p>
       </div>
-      <button class="export-btn" @click="doExport" :disabled="exporting || !leads.length">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        {{ exporting ? 'Exporting…' : 'Export CSV' }}
-      </button>
+      <div class="export-group">
+        <button class="export-btn" @click="doExport" :disabled="exporting || !leads.length" title="Export with current filters">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ exporting ? 'Exporting…' : 'Export Filtered' }}
+        </button>
+        <button class="export-btn export-all-btn" @click="doExportAll" :disabled="exportingAll" title="Export all leads regardless of filters">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {{ exportingAll ? 'Exporting…' : 'Export All' }}
+        </button>
+      </div>
     </div>
 
     <!-- Filter bar -->
@@ -170,13 +178,16 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAdminApi } from '../composables/useAdminApi'
+import { useToast } from '../composables/useToast'
 
 const api = useAdminApi()
+const toast = useToast()
 const router = useRouter()
 
 const leads = ref([])
 const clients = ref([])
 const loading = ref(false)
+const exportingAll = ref(false)
 const exporting = ref(false)
 
 const filters = ref({
@@ -243,9 +254,26 @@ async function doExport() {
     }
     await api.exportLeadsCSV(params)
   } catch (e) {
-    console.error('Export failed:', e)
+    toast.error('Export failed: ' + e.message)
   } finally {
     exporting.value = false
+  }
+}
+
+async function doExportAll() {
+  exportingAll.value = true
+  try {
+    // Only pass client/date filters; deliberately omit min_heat
+    const params = {
+      client_id: filters.value.client_id || undefined,
+      date_from: filters.value.date_from || undefined,
+      date_to:   filters.value.date_to   || undefined,
+    }
+    await api.exportLeadsCSV(params)
+  } catch (e) {
+    toast.error('Export failed: ' + e.message)
+  } finally {
+    exportingAll.value = false
   }
 }
 
@@ -324,6 +352,10 @@ onMounted(() => {
   font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
   background: rgba(99,102,241,0.12); color: #6366F1; text-transform: uppercase; letter-spacing: 0.05em;
 }
+
+.export-group { display: flex; gap: 8px; }
+.export-all-btn { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); }
+.export-all-btn:hover:not(:disabled) { background: #4338ca; }
 
 .export-btn {
   display: flex; align-items: center; gap: 7px;

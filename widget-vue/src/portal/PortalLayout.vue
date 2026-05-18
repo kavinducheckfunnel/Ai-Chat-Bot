@@ -1,26 +1,49 @@
 <template>
   <div class="portal-shell" v-if="ready">
-    <!-- Mobile top bar -->
-    <div class="mobile-topbar">
-      <button class="hamburger" @click="sidebarOpen = true" aria-label="Open menu">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
-          <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-      </button>
-      <span class="mobile-brand">Checkfunnel</span>
+    <ToastContainer />
+    <ConfirmDialog />
+
+    <!-- Announcement banners (above everything, full-width) -->
+    <div v-if="announcements.length" class="announcement-stack">
+      <div
+        v-for="ann in announcements"
+        :key="ann.id"
+        class="announcement-bar"
+        :class="`ann-${ann.type}`"
+      >
+        <span class="ann-icon">{{ annIcon(ann.type) }}</span>
+        <span class="ann-body">
+          <strong v-if="ann.title">{{ ann.title }}: </strong>{{ ann.body }}
+          <a v-if="ann.cta_url && ann.cta_label" :href="ann.cta_url" target="_blank" class="ann-cta">{{ ann.cta_label }}</a>
+        </span>
+        <button v-if="ann.dismissible" class="ann-dismiss" @click="dismiss(ann.id)" aria-label="Dismiss">✕</button>
+      </div>
     </div>
 
-    <!-- Overlay -->
-    <transition name="fade">
-      <div v-if="sidebarOpen" class="overlay" @click="sidebarOpen = false" />
-    </transition>
+    <!-- Body row: sidebar + main content -->
+    <div class="portal-body">
+      <!-- Mobile top bar -->
+      <div class="mobile-topbar">
+        <button class="hamburger" @click="sidebarOpen = true" aria-label="Open menu">
+          <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+            <path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <span class="mobile-brand">Checkfunnel</span>
+      </div>
 
-    <!-- Sidebar -->
-    <PortalSidebar :client="client" :class="{ 'sidebar-open': sidebarOpen }" @close="sidebarOpen = false" />
+      <!-- Overlay -->
+      <transition name="fade">
+        <div v-if="sidebarOpen" class="overlay" @click="sidebarOpen = false" />
+      </transition>
 
-    <main class="portal-main">
-      <router-view :client="client" @client-updated="onClientUpdated" />
-    </main>
+      <!-- Sidebar -->
+      <PortalSidebar :client="client" :class="{ 'sidebar-open': sidebarOpen }" @close="sidebarOpen = false" />
+
+      <main class="portal-main">
+        <router-view :client="client" @client-updated="onClientUpdated" />
+      </main>
+    </div>
   </div>
   <div v-else class="portal-loading">
     <div class="loading-spinner"></div>
@@ -32,6 +55,8 @@ import { ref, onMounted, provide } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAdminApi } from '../composables/useAdminApi'
 import PortalSidebar from './PortalSidebar.vue'
+import ToastContainer from '../components/ToastContainer.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -40,8 +65,13 @@ const api = useAdminApi()
 const client = ref(null)
 const ready = ref(false)
 const sidebarOpen = ref(false)
+const announcements = ref([])
 
 provide('portalClient', client)
+
+function annIcon(type) {
+  return { info: 'ℹ️', warning: '⚠️', critical: '🚨', success: '✅' }[type] ?? 'ℹ️'
+}
 
 async function loadClient() {
   try {
@@ -59,20 +89,75 @@ async function loadClient() {
   }
 }
 
+async function loadAnnouncements() {
+  try {
+    const data = await api.getAnnouncements()
+    announcements.value = Array.isArray(data) ? data : []
+  } catch {}
+}
+
+async function dismiss(id) {
+  announcements.value = announcements.value.filter(a => a.id !== id)
+  try { await api.dismissAnnouncement(id) } catch {}
+}
+
 function onClientUpdated(updated) {
   client.value = { ...client.value, ...updated }
 }
 
-onMounted(loadClient)
+onMounted(() => {
+  loadClient()
+  loadAnnouncements()
+})
 </script>
 
 <style scoped>
+/* ── Shell ──────────────────────────────────────────────────────────────────── */
 .portal-shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   background: #0a0a0a;
   color: #e2e8f0;
   font-family: 'Inter', -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+/* ── Announcement banners ────────────────────────────────────────────────────── */
+.announcement-stack {
+  flex-shrink: 0;
+  z-index: 200;
+}
+
+.announcement-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.ann-info     { background: #1e3a5f; border-bottom: 1px solid rgba(37,99,235,0.3); color: #93c5fd; }
+.ann-warning  { background: #451a03; border-bottom: 1px solid rgba(217,119,6,0.5); color: #fcd34d; }
+.ann-critical { background: #4c0519; border-bottom: 1px solid rgba(220,38,38,0.3); color: #fca5a5; }
+.ann-success  { background: #052e16; border-bottom: 1px solid rgba(22,163,74,0.3); color: #86efac; }
+.ann-icon { flex-shrink: 0; font-size: 15px; }
+.ann-body { flex: 1; }
+.ann-body strong { font-weight: 600; }
+.ann-cta { margin-left: 8px; text-decoration: underline; font-weight: 600; opacity: 0.9; }
+.ann-dismiss {
+  background: none; border: none; color: inherit; opacity: 0.6;
+  cursor: pointer; font-size: 13px; padding: 2px 6px;
+  border-radius: 4px; transition: opacity 0.15s; flex-shrink: 0;
+}
+.ann-dismiss:hover { opacity: 1; }
+
+/* ── Body row (sidebar + main) ──────────────────────────────────────────────── */
+.portal-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
 }
 
 .portal-main {
@@ -81,6 +166,7 @@ onMounted(loadClient)
   background: #0f0f0f;
 }
 
+/* ── Loading ─────────────────────────────────────────────────────────────────── */
 .portal-loading {
   height: 100vh;
   display: flex;
@@ -104,9 +190,8 @@ onMounted(loadClient)
 .overlay { display: none; }
 
 @media (max-width: 768px) {
-  .portal-shell {
+  .portal-body {
     flex-direction: column;
-    height: 100vh;
     overflow: hidden;
   }
 

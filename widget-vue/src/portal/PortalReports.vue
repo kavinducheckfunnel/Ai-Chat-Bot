@@ -372,9 +372,11 @@
 <script setup>
 import { ref, computed, onMounted, watch, h } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import { useToast } from '../composables/useToast'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
+const toast = useToast()
 
 const loading = ref(true)
 const exporting = ref(false)
@@ -635,7 +637,7 @@ async function exportCSV() {
   try {
     await api.exportAnalyticsCSV(props.client.id, period.value)
   } catch (e) {
-    alert('Export failed: ' + (e.message || 'Unknown error'))
+    toast.error('Export failed: ' + (e.message || 'Unknown error'))
   } finally {
     exporting.value = false
   }

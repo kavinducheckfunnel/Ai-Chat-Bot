@@ -1,5 +1,8 @@
 <template>
   <div class="layout">
+    <ToastContainer />
+    <ConfirmDialog />
+
     <!-- Mobile top bar -->
     <div class="mobile-topbar">
       <button class="hamburger" @click="sidebarOpen = true" aria-label="Open menu">
@@ -29,6 +32,8 @@
 <script setup>
 import { ref } from 'vue'
 import Sidebar from './Sidebar.vue'
+import ToastContainer from '../components/ToastContainer.vue'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 
 const sidebarOpen = ref(false)
 </script>

@@ -79,9 +79,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # Update last visitor message time for AFK tracking
         await self.update_visitor_timestamp(session)
 
-        # Persist latest page visits from the widget
+        # Persist latest page visits and behavioral signals from the widget
         if page_visits:
             await self.save_page_visits(session.session_id, page_visits)
+        if behavior_matrix:
+            await self.save_behavior_matrix(session.session_id, behavior_matrix)
 
         # Generate AI response (pass image_data for vision if present)
         ai_response = await database_sync_to_async(generate_ai_response)(
@@ -226,6 +228,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ChatSession.objects.filter(session_id=session_id).update(page_visits=page_visits)
 
     @database_sync_to_async
+    def save_behavior_matrix(self, session_id, behavior_matrix):
+        """Persist latest behavioral signals so the admin dashboard can surface them."""
+        if not behavior_matrix:
+            return
+        session = ChatSession.objects.filter(session_id=session_id).first()
+        if not session:
+            return
+        ctx = session.behavioral_context or {}
+        ctx['pages_viewed']          = len(behavior_matrix.get('pagesViewed', []))
+        ctx['pricing_page_visits']   = behavior_matrix.get('pricingPageVisits', 0)
+        ctx['exit_intent_triggered'] = behavior_matrix.get('exitIntentFired', False)
+        ctx['scroll_depth']          = behavior_matrix.get('scrollDepth', 0)
+        ctx['time_on_site']          = behavior_matrix.get('timeOnSite', 0)
+        session.behavioral_context = ctx
+        session.save(update_fields=['behavioral_context'])
+
+    @database_sync_to_async
     def get_session(self, client_id, session_id):
         from users.models import Client
         try:
@@ -243,6 +262,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             TenantProfile.objects.filter(clients=client).update(
                 sessions_this_month=models.F('sessions_this_month') + 1
             )
+            # Apply any beacon data cached before the session existed
+            from django.core.cache import cache
+            from analytics.views import _apply_behavior
+            cached_behavior = cache.get(f'beacon_{session_id}')
+            if cached_behavior:
+                _apply_behavior(session, cached_behavior)
+                cache.delete(f'beacon_{session_id}')
         return session
 
     @database_sync_to_async
