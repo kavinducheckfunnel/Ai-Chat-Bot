@@ -2065,10 +2065,12 @@ def platform_config(request):
     cache.delete('platform_config')
 
     from users.feature_flags import log_audit
-    log_audit(request.user, 'platform_config_update', extra={
-        'model': cfg.primary_model,
-        'key_updated': key is not None,
-    })
+    log_audit(
+        request.user,
+        'platform_config_update',
+        target_label='PlatformConfig',
+        notes=f"model={cfg.primary_model}, key_updated={key is not None}",
+    )
 
     return Response({
         'openrouter_api_key_set': bool(cfg.openrouter_api_key),
