@@ -330,6 +330,15 @@ export function useAdminApi() {
       method: 'POST', body: JSON.stringify({}),
     }),
 
+    getActivityPages: (clientId, days = 7) =>
+      apiFetch(`/api/admin/clients/${clientId}/activity/pages/?days=${days}`),
+
+    getPageHeatmap: (clientId, pageUrl, days = 7) =>
+      apiFetch(`/api/admin/clients/${clientId}/heatmap/?page_url=${encodeURIComponent(pageUrl)}&days=${days}`),
+
+    getSessionTimeline: (sessionId) =>
+      apiFetch(`/api/admin/sessions/${sessionId}/timeline/`),
+
     // ── Billing ──────────────────────────────────────────────────────────────
     getSubscription: () => apiFetch('/api/admin/billing/subscription/'),
 

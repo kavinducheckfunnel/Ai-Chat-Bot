@@ -577,6 +577,222 @@ def suggest_cta(request, client_id):
     return Response({'suggestions': suggestions})
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def activity_pages(request, client_id):
+    """
+    Returns the list of pages where visitors generated click events,
+    ranked by total click count over the past N days. Used to populate
+    the page selector dropdown in the Activity heatmap UI.
+    """
+    from analytics.models import AnalyticEvent
+    from django.db.models import Count
+
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    try:
+        days = max(1, min(int(request.query_params.get('days', '7')), 90))
+    except ValueError:
+        days = 7
+    since = timezone.now() - timedelta(days=days)
+
+    pages = (
+        AnalyticEvent.objects
+        .filter(client=client, created_at__gte=since)
+        .exclude(page_url='')
+        .values('page_url')
+        .annotate(
+            total_clicks=Count('id', filter=Q(event_type__in=['click', 'cta_click', 'add_to_cart'])),
+            total_events=Count('id'),
+        )
+        .order_by('-total_events')[:50]
+    )
+
+    return Response({
+        'days': days,
+        'pages': [
+            {
+                'page_url': p['page_url'],
+                'total_clicks': p['total_clicks'],
+                'total_events': p['total_events'],
+            }
+            for p in pages
+        ],
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def page_heatmap(request, client_id):
+    """
+    Aggregate click events on a specific page into spatial clusters
+    suitable for rendering a heatmap.
+
+    Query params:
+      page_url   — required, the page path to aggregate
+      days       — lookback window (default 7, max 90)
+
+    Returns:
+      total_clicks, unique_visitors, top_elements, clusters
+    """
+    from analytics.models import AnalyticEvent
+    from collections import defaultdict
+
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    page_url = (request.query_params.get('page_url') or '').strip()
+    if not page_url:
+        return Response({'detail': 'page_url required.'}, status=400)
+
+    try:
+        days = max(1, min(int(request.query_params.get('days', '7')), 90))
+    except ValueError:
+        days = 7
+    since = timezone.now() - timedelta(days=days)
+
+    qs = AnalyticEvent.objects.filter(
+        client=client,
+        page_url=page_url,
+        event_type__in=['click', 'cta_click', 'add_to_cart', 'rage_click'],
+        created_at__gte=since,
+    ).values('payload', 'session_id', 'event_type')
+
+    # Bucket coords into 5% × 5% cells to cluster nearby clicks
+    clusters = defaultdict(lambda: {'count': 0, 'texts': defaultdict(int), 'has_cta': False, 'has_rage': False})
+    element_counts = defaultdict(lambda: {'count': 0, 'tag': '', 'href': None})
+    unique_sessions = set()
+    total_clicks = 0
+
+    for ev in qs:
+        p = ev['payload'] or {}
+        unique_sessions.add(ev['session_id'])
+        total_clicks += 1
+
+        x = p.get('x')
+        y = p.get('y')
+        text = (p.get('text') or '').strip()
+        tag = p.get('tag') or ''
+        href = p.get('href')
+
+        if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+            x_b = round(x / 5) * 5
+            y_b = round(y / 5) * 5
+            key = (x_b, y_b)
+            clusters[key]['count'] += 1
+            if text:
+                clusters[key]['texts'][text] += 1
+            if ev['event_type'] == 'cta_click' or ev['event_type'] == 'add_to_cart':
+                clusters[key]['has_cta'] = True
+            if ev['event_type'] == 'rage_click':
+                clusters[key]['has_rage'] = True
+
+        if text:
+            element_counts[text]['count'] += 1
+            element_counts[text]['tag'] = tag
+            element_counts[text]['href'] = href
+
+    # Top 500 hottest clusters
+    cluster_list = []
+    for (x, y), data in clusters.items():
+        top_text = max(data['texts'].items(), key=lambda kv: kv[1])[0] if data['texts'] else ''
+        cluster_list.append({
+            'x': x,
+            'y': y,
+            'count': data['count'],
+            'text': top_text,
+            'is_cta': data['has_cta'],
+            'is_rage': data['has_rage'],
+        })
+    cluster_list.sort(key=lambda c: -c['count'])
+    cluster_list = cluster_list[:500]
+
+    top_elements = sorted(
+        [{'text': t, 'count': d['count'], 'tag': d['tag'], 'href': d['href']}
+         for t, d in element_counts.items()],
+        key=lambda x: -x['count'],
+    )[:25]
+
+    return Response({
+        'page_url': page_url,
+        'days': days,
+        'total_clicks': total_clicks,
+        'unique_visitors': len(unique_sessions),
+        'clusters': cluster_list,
+        'top_elements': top_elements,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def session_timeline(request, session_id):
+    """
+    Returns chronological event timeline for a single visitor session.
+    Used by the inbox visitor panel "watch over their shoulder" view.
+    """
+    from analytics.models import AnalyticEvent
+
+    try:
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    accessible_ids = list(get_accessible_clients(request.user).values_list('id', flat=True))
+    if session.client_id and session.client_id not in accessible_ids:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    events = (
+        AnalyticEvent.objects
+        .filter(session_id=str(session_id))
+        .order_by('-created_at')[:100]
+    )
+
+    timeline = []
+    for ev in events:
+        timeline.append({
+            'event_type': ev.event_type,
+            'page_url': ev.page_url,
+            'payload': ev.payload,
+            'created_at': ev.created_at.isoformat(),
+        })
+
+    # Add page_visits + chat_history as virtual events for completeness
+    for pv in (session.page_visits or []):
+        timeline.append({
+            'event_type': 'page_view',
+            'page_url': pv.get('url', ''),
+            'payload': {
+                'page_title': pv.get('title', ''),
+                'duration_seconds': pv.get('duration_seconds', 0),
+            },
+            'created_at': pv.get('visited_at', ''),
+        })
+
+    for msg in (session.chat_history or []):
+        timeline.append({
+            'event_type': 'chat_user' if msg.get('role') == 'user' else 'chat_ai',
+            'page_url': '',
+            'payload': {'message': (msg.get('message') or msg.get('content') or '')[:200]},
+            'created_at': msg.get('timestamp', ''),
+        })
+
+    # Sort chronologically (most recent last)
+    timeline = [t for t in timeline if t.get('created_at')]
+    timeline.sort(key=lambda x: x.get('created_at') or '')
+
+    return Response({
+        'session_id': str(session_id),
+        'events': timeline[-150:],  # cap displayed length
+    })
+
+
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def session_detail(request, session_id):

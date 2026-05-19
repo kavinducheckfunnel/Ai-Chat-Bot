@@ -293,6 +293,27 @@
           </div>
         </div>
 
+        <!-- Activity timeline -->
+        <div class="vp-section" v-if="timeline.length">
+          <div class="vp-section-title">
+            Activity timeline
+            <span class="vp-count">{{ timeline.length }}</span>
+          </div>
+          <div class="timeline-list">
+            <div
+              v-for="(ev, i) in timeline.slice().reverse().slice(0, 30)"
+              :key="i"
+              class="timeline-row"
+            >
+              <span class="tl-icon" :class="'tl-' + ev.event_type">{{ eventIcon(ev.event_type) }}</span>
+              <div class="tl-body">
+                <div class="tl-label">{{ eventLabel(ev) }}</div>
+                <div class="tl-meta">{{ formatTimelineTime(ev.created_at) }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Hot Signals -->
         <div class="vp-section" v-if="hotSignals(selected).length">
           <div class="vp-section-title">Hot signals</div>
@@ -644,6 +665,63 @@ function trendClass(trend) {
   return 'trend-flat'
 }
 
+// ── Activity timeline ────────────────────────────────────────────────────────
+const timeline = ref([])
+
+async function loadTimeline(sessionId) {
+  if (!sessionId) { timeline.value = []; return }
+  try {
+    const data = await api.getSessionTimeline(sessionId)
+    timeline.value = data?.events || []
+  } catch {
+    timeline.value = []
+  }
+}
+
+function eventIcon(t) {
+  const map = {
+    click: '👆', cta_click: '⭐', add_to_cart: '🛒', rage_click: '😤',
+    form_focus: '✍️', form_abandoned: '⏸', copy: '📋',
+    page_view: '📄', pricing_visit: '💰', exit_intent: '🚪',
+    chat_user: '💬', chat_ai: '🤖',
+  }
+  return map[t] || '•'
+}
+
+function eventLabel(ev) {
+  const p = ev.payload || {}
+  switch (ev.event_type) {
+    case 'click':       return `Clicked "${(p.text || 'element').slice(0, 50)}"`
+    case 'cta_click':   return `Clicked CTA: "${(p.text || '').slice(0, 50)}"`
+    case 'add_to_cart': return `🛒 Added to cart: "${(p.text || 'item').slice(0, 50)}"`
+    case 'rage_click':  return 'Rage-clicked (frustration signal)'
+    case 'form_focus':  return 'Started filling a form'
+    case 'form_abandoned': return 'Abandoned a form'
+    case 'copy':        return `Copied text: "${(p.value || p.text || '').slice(0, 40)}"`
+    case 'page_view':   return `Viewed ${p.page_title || ev.page_url || '(page)'}` +
+                               (p.duration_seconds ? ` (${formatDuration(p.duration_seconds)})` : '')
+    case 'pricing_visit': return `Visited pricing page`
+    case 'exit_intent': return 'Showed exit intent'
+    case 'chat_user':   return `Said: "${(p.message || '').slice(0, 70)}"`
+    case 'chat_ai':     return `AI replied: "${(p.message || '').slice(0, 70)}"`
+    default:            return ev.event_type
+  }
+}
+
+function formatTimelineTime(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    const diff = Date.now() - d.getTime()
+    if (diff < 60000) return 'just now'
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
 function hotSignals(session) {
   const ctx = session?.behavioral_context || {}
   const signals = []
@@ -808,6 +886,7 @@ watch(() => props.client, loadSessions)
 watch(selected, (s) => {
   if (s) {
     startTimers()
+    loadTimeline(s.session_id)
     // For non-website channels, poll for new messages since there's no WebSocket
     if (s.channel && s.channel !== 'website') {
       startChannelPolling(s.session_id)
@@ -816,6 +895,7 @@ watch(selected, (s) => {
     }
   } else {
     stopChannelPolling()
+    timeline.value = []
   }
   nextTick(() => {
     if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
@@ -1407,4 +1487,49 @@ watch(selected, (s) => {
 .sig-high  { background: rgba(239,68,68,0.15);  color: #ef4444; }
 .sig-med   { background: rgba(245,158,11,0.15); color: #f59e0b; }
 .sig-low   { background: rgba(100,116,139,0.15); color: #64748b; }
+
+/* ── Activity timeline ───────────────────────────────────────────────────── */
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.timeline-list::-webkit-scrollbar { width: 4px; }
+.timeline-list::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 4px; }
+.timeline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--cf-bg-input);
+  border-radius: 6px;
+  border-left: 2px solid transparent;
+  transition: background 0.15s;
+}
+.timeline-row:hover { background: var(--cf-bg-ghost-hover); }
+.tl-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  line-height: 1.4;
+}
+.tl-body { flex: 1; min-width: 0; }
+.tl-label {
+  font-size: 12px;
+  color: var(--cf-text-secondary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+.tl-meta {
+  font-size: 10px;
+  color: var(--cf-text-muted);
+  margin-top: 1px;
+}
+.timeline-row:has(.tl-add_to_cart) { border-left-color: #f59e0b; }
+.timeline-row:has(.tl-rage_click)  { border-left-color: #ef4444; }
+.timeline-row:has(.tl-cta_click)   { border-left-color: #6366f1; }
 </style>

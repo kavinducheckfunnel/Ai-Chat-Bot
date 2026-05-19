@@ -169,7 +169,9 @@ def beacon_receiver(request):
         return JsonResponse({'error': 'invalid json'}, status=400)
 
     session_id = data.get('sessionId')
+    client_id  = data.get('clientId')
     behavior   = data.get('behaviorMatrix', {})
+    events     = data.get('events') or []
 
     if session_id and behavior:
         try:
@@ -185,4 +187,76 @@ def beacon_receiver(request):
         except Exception:
             pass  # beacon is fire-and-forget
 
+    # ── Persist individual events for heatmap / activity timeline ──────────
+    if session_id and events:
+        _persist_events(session_id, client_id, events)
+
     return JsonResponse({'status': 'ok'})
+
+
+_TRACKED_EVENT_TYPES = {
+    'click', 'cta_click', 'add_to_cart', 'rage_click',
+    'form_focus', 'form_abandoned', 'copy', 'page_view',
+    'pricing_visit', 'exit_intent',
+}
+
+
+def _persist_events(session_id, client_id, events):
+    """
+    Insert raw widget events into AnalyticEvent for heatmap aggregation
+    and per-visitor activity timeline.
+
+    Caps inserts at 200 per beacon call (defensive against flood/replay).
+    Caps total per-session events to 1000 to prevent unbounded growth.
+    Drops events older than 24h (replay protection).
+    """
+    from .models import AnalyticEvent
+    from users.models import Client
+    from django.utils import timezone
+    from datetime import timedelta
+
+    if len(events) > 200:
+        events = events[:200]
+
+    # Per-session cap: skip insert if session already has 1000+ events
+    existing = AnalyticEvent.objects.filter(session_id=session_id).count()
+    if existing >= 1000:
+        return
+
+    client = None
+    if client_id:
+        try:
+            client = Client.objects.filter(pk=client_id).first()
+        except Exception:
+            client = None
+
+    cutoff = timezone.now() - timedelta(hours=24)
+    to_create = []
+
+    for ev in events:
+        et = ev.get('type')
+        if et not in _TRACKED_EVENT_TYPES:
+            continue
+        payload = ev.get('data') or {}
+        if not isinstance(payload, dict):
+            payload = {'value': payload}
+
+        # Page URL — prefer explicit, fall back to data.page_url
+        page_url = payload.get('page_url') or ev.get('page_url') or ''
+        if not page_url and et == 'page_view' and isinstance(ev.get('data'), str):
+            page_url = ev['data']
+
+        to_create.append(AnalyticEvent(
+            client=client,
+            session_id=str(session_id),
+            event_type=et,
+            page_url=page_url[:2000] if page_url else '',
+            payload=payload,
+        ))
+
+    if to_create:
+        # bulk_create with ignore_conflicts so a duplicate-flood doesn't error
+        try:
+            AnalyticEvent.objects.bulk_create(to_create, batch_size=100, ignore_conflicts=True)
+        except Exception:
+            pass  # never block beacon

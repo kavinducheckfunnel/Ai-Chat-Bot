@@ -27,6 +27,8 @@ urlpatterns = [
     path('clients/<uuid:client_id>/assign-tenant/', admin_views.assign_client_to_tenant, name='admin-client-assign-tenant'),
     path('clients/<uuid:client_id>/analytics/export/', admin_views.analytics_export, name='admin-client-analytics-export'),
     path('clients/<uuid:client_id>/suggest-cta/', admin_views.suggest_cta, name='admin-client-suggest-cta'),
+    path('clients/<uuid:client_id>/activity/pages/', admin_views.activity_pages, name='admin-client-activity-pages'),
+    path('clients/<uuid:client_id>/heatmap/', admin_views.page_heatmap, name='admin-client-heatmap'),
 
     # Sessions (CRUD + God View)
     path('sessions/<uuid:session_id>/', admin_views.session_detail, name='admin-session-detail'),
@@ -35,6 +37,7 @@ urlpatterns = [
     path('sessions/<uuid:session_id>/send/', admin_views.session_send_message, name='admin-session-send'),
     path('sessions/<uuid:session_id>/history/', admin_views.session_history, name='admin-session-history'),
     path('sessions/<uuid:session_id>/tags/', admin_views.session_set_tags, name='admin-session-tags'),
+    path('sessions/<uuid:session_id>/timeline/', admin_views.session_timeline, name='admin-session-timeline'),
 
     # Platform
     path('stats/', admin_views.platform_stats, name='admin-platform-stats'),

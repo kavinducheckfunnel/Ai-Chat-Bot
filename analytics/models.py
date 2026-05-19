@@ -10,6 +10,13 @@ class AnalyticEvent(models.Model):
         ('scroll_depth', 'Scroll Depth'),
         ('session_start', 'Session Start'),
         ('beacon', 'Beacon'),
+        ('click', 'Click'),
+        ('cta_click', 'CTA Click'),
+        ('add_to_cart', 'Add to Cart'),
+        ('rage_click', 'Rage Click'),
+        ('form_focus', 'Form Focus'),
+        ('form_abandoned', 'Form Abandoned'),
+        ('copy', 'Copy Event'),
     ]
 
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='analytic_events', null=True, blank=True)

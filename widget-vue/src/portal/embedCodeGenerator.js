@@ -530,7 +530,8 @@ function saveState(){
     sessionStartTime:startTime,pageVisits:pageVisits,
     currentPage:{url:currentPage.url,title:currentPage.title,
       duration_seconds:currentPage.duration_seconds,visited_at:currentPage.visited_at},
-    behavior:behavior
+    behavior:behavior,
+    eventQueue:eventQueue
   }))}catch(e){}
 }
 setInterval(saveState,2000);
@@ -556,29 +557,63 @@ window.addEventListener('scroll',function(){
   }
 },{passive:true});
 
-// Click tracking with rage detection + add-to-cart + CTA
+// ── Event queue for heatmap / activity timeline ──────────────────────
+// Each entry: {type, data: {page_url, page_title, x, y, text, tag, href, ts}}
+var eventQueue=saved.eventQueue||[];
+function logEvent(type,data){
+  eventQueue.push({type:type,data:data||{}});
+  if(eventQueue.length>200)eventQueue=eventQueue.slice(-200);
+}
+// Record this page view as a discrete event for timelines
+logEvent('page_view',{page_url:pathNow,page_title:document.title});
+
+// Click tracking with rage detection + add-to-cart + CTA + heatmap coords
 var CTA_PAT=/add.to.cart|buy.now|get.started|subscribe|checkout|order.now|sign.up|book.now|contact/i;
 var recentClicks={};
 document.addEventListener('click',function(e){
-  var el=e.target.closest('button,a,[role="button"]')||e.target;
-  var text=(el.innerText||el.value||'').trim();
+  var el=e.target.closest('button,a,[role="button"],input[type="submit"]')||e.target;
+  var text=(el.innerText||el.value||el.alt||'').trim().slice(0,80);
+  var tag=(el.tagName||'').toLowerCase();
+  var href=tag==='a'?(el.getAttribute('href')||'').slice(0,300):null;
   behavior.clickCount++;
-  if(el.matches&&el.matches('.add_to_cart_button,.single_add_to_cart_button,[name="add-to-cart"]')){
-    behavior.addToCartClicks++;flush(true);fireTrigger('add_to_cart_help');
-  } else if(CTA_PAT.test(text)){
+
+  // Coordinates normalised to viewport width % and full-document height %
+  var docH=Math.max(document.body.scrollHeight,document.documentElement.scrollHeight,window.innerHeight);
+  var xPct=Math.round(e.clientX/window.innerWidth*1000)/10;
+  var yPct=Math.round((e.clientY+window.scrollY)/docH*1000)/10;
+  var clickData={page_url:pathNow,page_title:document.title,
+    x:Math.max(0,Math.min(100,xPct)),y:Math.max(0,Math.min(100,yPct)),
+    text:text,tag:tag,href:href};
+
+  var isATC=el.matches&&el.matches('.add_to_cart_button,.single_add_to_cart_button,[name="add-to-cart"]');
+  var isCTA=CTA_PAT.test(text);
+
+  if(isATC){
+    behavior.addToCartClicks++;
+    logEvent('add_to_cart',clickData);
+    flush(true);fireTrigger('add_to_cart_help');
+  }else if(isCTA){
     behavior.ctaClicks++;
+    logEvent('cta_click',clickData);
+  }else{
+    logEvent('click',clickData);
   }
-  if(el.tagName==='A'){
-    var href=el.getAttribute('href')||'';
+
+  if(tag==='a'&&href){
     if(/\\.(pdf|zip|docx?|xlsx?|mp4|mp3)(\\?|$)/i.test(href))behavior.fileDownloads++;
   }
+
   // Rage detection
   var k=Math.round(e.clientX/20)+'_'+Math.round(e.clientY/20);
   if(!recentClicks[k])recentClicks[k]=[];
   var now=Date.now();
   recentClicks[k]=recentClicks[k].filter(function(t){return now-t<1000});
   recentClicks[k].push(now);
-  if(recentClicks[k].length>=3){recentClicks[k]=[];behavior.rageClicks++;flush(true);fireTrigger('rage_click_help');}
+  if(recentClicks[k].length>=3){
+    recentClicks[k]=[];behavior.rageClicks++;
+    logEvent('rage_click',clickData);
+    flush(true);fireTrigger('rage_click_help');
+  }
 });
 
 // Form tracking
@@ -648,12 +683,15 @@ function fireTrigger(type){
     body:JSON.stringify({session_id:sid,client_id:C,trigger_type:type})}).catch(function(){});
 }
 
-// Beacon flush (periodic + on unload)
+// Beacon flush (periodic + on unload + on high-signal events)
 function flush(force){
   // Snapshot current page entry as a temporary page-visit for inclusion
   var dur=Math.round((Date.now()-currentPage.enteredAt)/1000);
   var visits=pageVisits.concat([{url:currentPage.url,title:currentPage.title,duration_seconds:dur,visited_at:new Date(currentPage.enteredAt).toISOString()}]);
-  var payload=JSON.stringify({sessionId:sid,clientId:C,behaviorMatrix:behavior,events:[],page_visits_snapshot:visits});
+  // Send any queued events for heatmap/timeline
+  var eventsToSend=eventQueue.slice();
+  eventQueue.length=0;  // clear queue — backend dedupes via bulk_create
+  var payload=JSON.stringify({sessionId:sid,clientId:C,behaviorMatrix:behavior,events:eventsToSend,page_visits_snapshot:visits});
   if(navigator.sendBeacon)navigator.sendBeacon(B+'/api/analytics/beacon/',payload);
   else fetch(B+'/api/analytics/beacon/',{method:'POST',body:payload,keepalive:true}).catch(function(){});
 }

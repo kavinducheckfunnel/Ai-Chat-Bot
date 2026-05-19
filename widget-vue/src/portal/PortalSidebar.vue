@@ -52,6 +52,12 @@
         Live View
       </router-link>
 
+      <!-- ACTIVITY -->
+      <router-link to="/portal/activity" class="nav-item" :class="{ active: $route.path === '/portal/activity' }" @click="$emit('close')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="2" fill="currentColor"/><circle cx="14" cy="9" r="3" fill="currentColor" opacity="0.6"/><circle cx="18" cy="16" r="1.5" fill="currentColor"/></svg>
+        Activity
+      </router-link>
+
       <!-- PIPELINE -->
       <p class="nav-section">Pipeline</p>
       <router-link to="/portal/pipeline" class="nav-item" :class="{ active: $route.path === '/portal/pipeline' }" @click="$emit('close')">
