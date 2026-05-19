@@ -93,7 +93,11 @@ def woocommerce_webhook(request, client_id):
     title = data.get('name', '')
     body_html = data.get('description', '') or data.get('short_description', '')
     price = data.get('price', '0')
-    url = data.get('permalink', client.domain_url)
+    permalink = data.get('permalink', '')
+    slug = data.get('slug', '')
+    url = permalink or (f"{client.domain_url.rstrip('/')}/product/{slug}" if slug else '')
+    if not url:
+        return Response({'status': 'skipped — no permalink or slug'}, status=400)
 
     if not (product_id and title):
         return Response({'status': 'skipped — missing id or name'}, status=400)
