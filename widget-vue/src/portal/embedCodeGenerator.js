@@ -89,20 +89,21 @@ export function generateEmbedCode(id, url, color, botName, format) {
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
 #cf-msgs::-webkit-scrollbar { width: 4px; }
 #cf-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-.cf-ai, .cf-me { padding: 11px 16px; border-radius: 18px; font-size: 14px;
-  line-height: 1.55; max-width: 82%; animation: cf-mi .2s ease; word-break: break-word; }
-.cf-me { padding: 11px 18px; }  /* extra horizontal padding on user bubble */
+.cf-ai, .cf-me { padding: 13px 18px; border-radius: 18px; font-size: 14px;
+  line-height: 1.6; max-width: 82%; animation: cf-mi .2s ease; word-break: break-word; }
+.cf-me { padding: 12px 20px; }  /* user bubble: slightly tighter vertical, more horizontal */
 @keyframes cf-mi { from { opacity: 0; transform: translateY(7px); }
   to { opacity: 1; transform: translateY(0); } }
 .cf-ai { background: var(--cf-bubble-ai); color: var(--cf-text);
-  align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--cf-border-soft); }
+  align-self: flex-start; border-bottom-left-radius: 6px; border: 1px solid var(--cf-border-soft); }
 .cf-me { background: var(--cf-accent); color: #fff;
-  align-self: flex-end; border-bottom-right-radius: 4px; }
+  align-self: flex-end; border-bottom-right-radius: 6px; }
 .cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 12px;
   object-fit: cover; display: block; border: 1px solid rgba(255,255,255,0.08); }
-.cf-ai ol { margin: 5px 0 6px 0; padding-left: 18px; list-style-type: decimal; }
-.cf-ai li { margin-bottom: 5px; color: var(--cf-text); line-height: 1.5; display: list-item; }
-.cf-ai p { margin: 0 0 5px 0; color: var(--cf-text); }
+.cf-ai ol { margin: 6px 0 4px 0; padding-left: 22px; list-style-type: decimal; }
+.cf-ai li { margin-bottom: 8px; color: var(--cf-text); line-height: 1.55; display: list-item; padding-left: 4px; }
+.cf-ai li:last-child { margin-bottom: 2px; }
+.cf-ai p { margin: 0 0 7px 0; color: var(--cf-text); }
 .cf-ai p:last-child { margin-bottom: 0; }
 .cf-ai a { color: #a5b4fc; text-decoration: underline; font-weight: 500; word-break: break-word; }
 .cf-ai a:hover { color: #c4b5fd; }
@@ -183,14 +184,27 @@ export function generateEmbedCode(id, url, color, botName, format) {
   transition: background .15s; }
 #cf-lead-cls:hover { background: rgba(255,255,255,0.12); color: var(--cf-text-strong); }
 .cf-lead-row { display: flex; gap: 7px; align-items: stretch; }
-.cf-lead-inp { flex: 1; padding: 10px 13px; height: 38px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.10);
+.cf-lead-inp { flex: 1; padding: 10px 14px; height: 38px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 19px; font-size: 13px; color: var(--cf-text);
   outline: none; box-sizing: border-box; font-family: inherit; line-height: 1.3;
-  transition: border-color .15s, background .15s; }
-.cf-lead-inp:focus { border-color: var(--cf-accent); background: rgba(255,255,255,0.07); }
-.cf-lead-inp::placeholder { color: rgba(255,255,255,0.30); }
+  transition: border-color .15s, background .15s;
+  /* Prevent browser autofill from painting the input white on dark themes */
+  -webkit-text-fill-color: var(--cf-text); }
+.cf-lead-inp:focus { border-color: var(--cf-accent); background: rgba(255,255,255,0.09); }
+.cf-lead-inp::placeholder { color: rgba(255,255,255,0.55); opacity: 1; }
+/* Kill the yellow/white autofill background so the dark theme stays dark.
+   The inset box-shadow trick is how WebKit lets us override autofill bg. */
+.cf-lead-inp:-webkit-autofill,
+.cf-lead-inp:-webkit-autofill:hover,
+.cf-lead-inp:-webkit-autofill:focus,
+.cf-lead-inp:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--cf-text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--cf-bg-elev) inset !important;
+  caret-color: var(--cf-text) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
 .cf-lead-btn { background: var(--cf-accent); border: none; border-radius: 19px;
   padding: 0 20px; height: 38px; min-width: 78px;
   font-size: 13px; font-weight: 600; color: #fff;
@@ -201,9 +215,19 @@ export function generateEmbedCode(id, url, color, botName, format) {
 .cf-lead-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Inline lead capture — LIGHT theme */
-#cf-w[data-cf-theme="light"] .cf-lead-inp { background: #f8fafc; border-color: #e2e8f0; color: #1e293b; }
-#cf-w[data-cf-theme="light"] .cf-lead-inp::placeholder { color: #94a3b8; }
+#cf-w[data-cf-theme="light"] .cf-lead-inp {
+  background: #f8fafc; border-color: #e2e8f0; color: #1e293b;
+  -webkit-text-fill-color: #1e293b;
+}
+#cf-w[data-cf-theme="light"] .cf-lead-inp::placeholder { color: #94a3b8; opacity: 1; }
 #cf-w[data-cf-theme="light"] .cf-lead-inp:focus { background: #ffffff; }
+#cf-w[data-cf-theme="light"] .cf-lead-inp:-webkit-autofill,
+#cf-w[data-cf-theme="light"] .cf-lead-inp:-webkit-autofill:hover,
+#cf-w[data-cf-theme="light"] .cf-lead-inp:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1e293b !important;
+  -webkit-box-shadow: 0 0 0 1000px #f8fafc inset !important;
+  caret-color: #1e293b !important;
+}
 
 /* ── LIGHT THEME OVERRIDES (applied when data-cf-theme="light" on #cf-w) ── */
 #cf-w[data-cf-theme="light"] {
