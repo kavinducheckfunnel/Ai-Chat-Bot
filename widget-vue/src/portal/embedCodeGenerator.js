@@ -165,33 +165,68 @@ export function generateEmbedCode(id, url, color, botName, format) {
   padding: 5px 0 7px; background: var(--cf-bg-elev); }
 #cf-pby a { color: rgba(255,255,255,0.3); text-decoration: none; }
 
-/* ── Lead modal ── */
-#cf-lead-ov { --cf-accent: ${defaultColor}; position: fixed; inset: 0;
-  background: rgba(0,0,0,0.65); z-index: 2147483648; display: none;
-  align-items: center; justify-content: center; }
+/* ── Lead modal — appears INSIDE chat window, not as full-screen overlay ── */
+#cf-lead-ov { --cf-accent: ${defaultColor};
+  --cf-lead-bg: #1a1f2e; --cf-lead-border: rgba(255,255,255,0.1);
+  --cf-lead-input-bg: #23293a; --cf-lead-input-border: rgba(255,255,255,0.12);
+  --cf-lead-title: #f1f5f9; --cf-lead-sub: #94a3b8; --cf-lead-text: #e2e8f0;
+  --cf-lead-placeholder: rgba(255,255,255,0.35);
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.55); z-index: 2147483649;
+  display: none; align-items: center; justify-content: center;
+  padding: 24px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
 #cf-lead-ov.show { display: flex; animation: cf-fdin .2s ease; }
 @keyframes cf-fdin { from { opacity: 0; } to { opacity: 1; } }
-#cf-lead-box { background: #1a1f2e; border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 20px; padding: 28px 24px; width: 300px; max-width: 88vw;
-  position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.55);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-#cf-lead-cls { position: absolute; top: 10px; right: 12px; background: none;
-  border: none; font-size: 20px; cursor: pointer; color: #64748b; line-height: 1; padding: 4px; }
-.cf-lead-ico { font-size: 32px; text-align: center; margin-bottom: 10px; }
-.cf-lead-ttl { margin: 0 0 5px; font-size: 17px; font-weight: 700; color: #f1f5f9; text-align: center; }
-.cf-lead-sub { margin: 0 0 16px; font-size: 13px; color: #64748b; text-align: center; line-height: 1.5; }
-.cf-lead-inp { width: 100%; padding: 10px 13px; background: #23293a;
-  border: 1px solid rgba(255,255,255,0.12); border-radius: 10px;
-  font-size: 13px; color: #e2e8f0; outline: none; box-sizing: border-box;
-  font-family: inherit; display: block; margin: 0 0 8px 0; line-height: 1.4; }
-.cf-lead-inp:focus { border-color: rgba(99,102,241,0.6); background: #2a3045; }
-.cf-lead-inp::placeholder { color: rgba(255,255,255,0.3); }
+#cf-lead-box { background: var(--cf-lead-bg);
+  border: 1px solid var(--cf-lead-border);
+  border-radius: 20px; padding: 26px 22px 22px; width: 320px; max-width: calc(100vw - 48px);
+  position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  animation: cf-leadpop .25s cubic-bezier(.34,1.56,.64,1); }
+@keyframes cf-leadpop { from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); } }
+#cf-lead-cls { position: absolute; top: 10px; right: 12px;
+  width: 26px; height: 26px; border-radius: 50%;
+  background: rgba(255,255,255,0.06); border: none;
+  font-size: 14px; cursor: pointer; color: #94a3b8; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s; }
+#cf-lead-cls:hover { background: rgba(255,255,255,0.12); color: var(--cf-lead-title); }
+.cf-lead-ico { font-size: 32px; text-align: center; margin-bottom: 8px; }
+.cf-lead-ttl { margin: 0 0 4px; font-size: 17px; font-weight: 700;
+  color: var(--cf-lead-title); text-align: center; letter-spacing: -.2px; }
+.cf-lead-sub { margin: 0 0 18px; font-size: 12.5px; color: var(--cf-lead-sub);
+  text-align: center; line-height: 1.5; }
+.cf-lead-inp { width: 100%; padding: 11px 14px; background: var(--cf-lead-input-bg);
+  border: 1px solid var(--cf-lead-input-border); border-radius: 10px;
+  font-size: 13px; color: var(--cf-lead-text); outline: none; box-sizing: border-box;
+  font-family: inherit; display: block; margin: 0 0 9px 0; line-height: 1.4;
+  transition: border-color .15s, background .15s; }
+.cf-lead-inp:focus { border-color: var(--cf-accent); }
+.cf-lead-inp::placeholder { color: var(--cf-lead-placeholder); }
 .cf-lead-btn { width: 100%; padding: 11px; background: var(--cf-accent);
   border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
   color: #fff; cursor: pointer; font-family: inherit; transition: opacity .15s;
-  margin-top: 2px; display: block; }
-.cf-lead-btn:hover { opacity: .85; }
+  margin-top: 4px; display: block; }
+.cf-lead-btn:hover:not(:disabled) { opacity: .88; }
 .cf-lead-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* Lead modal — LIGHT theme override (matches widget light theme) */
+#cf-w[data-cf-theme="light"] ~ #cf-lead-ov,
+#cf-lead-ov.cf-light {
+  --cf-lead-bg: #ffffff;
+  --cf-lead-border: #e2e8f0;
+  --cf-lead-input-bg: #f8fafc;
+  --cf-lead-input-border: #e2e8f0;
+  --cf-lead-title: #0f172a;
+  --cf-lead-sub: #64748b;
+  --cf-lead-text: #1e293b;
+  --cf-lead-placeholder: #94a3b8;
+}
+#cf-lead-ov.cf-light { background: rgba(15,23,42,0.32); }
+#cf-lead-ov.cf-light #cf-lead-cls { background: #f1f5f9; color: #64748b; }
+#cf-lead-ov.cf-light #cf-lead-cls:hover { background: #e2e8f0; color: #1e293b; }
+#cf-lead-ov.cf-light #cf-lead-box { box-shadow: 0 20px 60px rgba(15,23,42,0.18); }
 
 /* ── LIGHT THEME OVERRIDES (applied when data-cf-theme="light" on #cf-w) ── */
 #cf-w[data-cf-theme="light"] {
@@ -216,6 +251,17 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-w[data-cf-theme="light"] #cf-pby a { color: #64748b; }
 #cf-w[data-cf-theme="light"] .cf-mb { background: #f1f5f9; border-color: #e2e8f0; color: #64748b; }
 #cf-w[data-cf-theme="light"] .cf-mb:hover { background: #e2e8f0; color: #1e293b; }
+/* Light-mode AI bubble — needs visible border since bg = border var by default */
+#cf-w[data-cf-theme="light"] .cf-ai { background: #f1f5f9; border-color: #e2e8f0; color: #1e293b; }
+#cf-w[data-cf-theme="light"] .cf-ai p { color: #1e293b; }
+#cf-w[data-cf-theme="light"] .cf-ai li { color: #1e293b; }
+#cf-w[data-cf-theme="light"] .cf-ai strong { color: #0f172a; }
+#cf-w[data-cf-theme="light"] .cf-ai a { color: #4338ca; }
+#cf-w[data-cf-theme="light"] .cf-rb { background: #e2e8f0; border-color: #cbd5e1; color: #475569; }
+#cf-w[data-cf-theme="light"] .cf-rb:hover { background: #cbd5e1; color: #1e293b; }
+#cf-w[data-cf-theme="light"] .cf-rb.on { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #4338ca; }
+#cf-w[data-cf-theme="light"] .cf-typ { background: #f1f5f9; border-color: #e2e8f0; }
+#cf-w[data-cf-theme="light"] .cf-typ span { background: #94a3b8; }
 </style>`
 
   const html = `<div id="cf-lead-ov">
@@ -290,7 +336,14 @@ function applyConfig(cfg){
     var hn=$('cf-hn');if(hn)hn.textContent=cfg.chatbot_name;
     var win=$('cf-win');if(win)win.setAttribute('aria-label','Chat with '+cfg.chatbot_name);
   }
-  if(cfg.chatbot_theme&&w)w.setAttribute('data-cf-theme',cfg.chatbot_theme);
+  if(cfg.chatbot_theme){
+    if(w)w.setAttribute('data-cf-theme',cfg.chatbot_theme);
+    // Apply matching theme class to lead modal (sibling order can't rely on CSS ~)
+    if(lead){
+      if(cfg.chatbot_theme==='light')lead.classList.add('cf-light');
+      else lead.classList.remove('cf-light');
+    }
+  }
   if(cfg.voice_input_enabled)$('cf-vb').style.display='flex';else $('cf-vb').style.display='none';
   if(cfg.image_input_enabled)$('cf-ib').style.display='flex';else $('cf-ib').style.display='none';
   if(cfg.cta_message)liveCtaMsg=cfg.cta_message;
@@ -350,20 +403,50 @@ function dots(){var d=document.createElement('div');d.className='cf-typ';d.id='c
 function rmDots(){var t=$('cf-tdots');if(t)t.remove()}
 function escHtml(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML}
 
+// ── Visitor metadata (sent once on WebSocket open) ───────────────────
+function parseDevice(ua){if(/tablet|ipad|playbook|silk/i.test(ua))return'tablet';if(/mobile|iphone|ipod|android|blackberry/i.test(ua))return'mobile';return'desktop'}
+function parseOS(ua){if(/windows nt/i.test(ua))return'Windows';if(/mac os x/i.test(ua)&&!/iphone|ipad|ipod/i.test(ua))return'macOS';if(/iphone|ipad|ipod/i.test(ua))return'iOS';if(/android/i.test(ua))return'Android';if(/linux/i.test(ua))return'Linux';return'Unknown'}
+function parseBrowser(ua){if(/edg\\//i.test(ua))return'Edge';if(/opr\\//i.test(ua)||/opera/i.test(ua))return'Opera';if(/firefox/i.test(ua))return'Firefox';if(/chrome/i.test(ua))return'Chrome';if(/safari/i.test(ua))return'Safari';return'Other'}
+var RETURNING_KEY='__cf_returning__';
+var isReturning=!!localStorage.getItem(RETURNING_KEY);
+localStorage.setItem(RETURNING_KEY,'1');
+var visitorMeta={device:parseDevice(navigator.userAgent),os:parseOS(navigator.userAgent),
+  browser:parseBrowser(navigator.userAgent),referrer:document.referrer||null,
+  timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||null,
+  country:null,city:null,country_code:null,ip:null,is_returning:isReturning};
+// Geo lookup (best-effort, non-blocking)
+fetch('https://ipapi.co/json/').then(function(r){return r.json()}).then(function(d){
+  visitorMeta.country=d.country_name||null;visitorMeta.city=d.city||null;
+  visitorMeta.country_code=d.country_code||null;visitorMeta.ip=d.ip||null;
+}).catch(function(){});
+
 // ── WebSocket ────────────────────────────────────────────────────────
 var isOpen=false;
+var sentVisitorMeta=false;
+function sendVisitorMeta(){
+  if(sentVisitorMeta||!ws||ws.readyState!==1)return;
+  sentVisitorMeta=true;
+  var payload={type:'visitor_meta',page_visits:buildPageVisits()};
+  for(var k in visitorMeta)payload[k]=visitorMeta[k];
+  ws.send(JSON.stringify(payload));
+}
 function connect(){
   ws=new WebSocket(B.replace(/^https/,'wss').replace(/^http/,'ws')+'/ws/chat/'+C+'/'+sid+'/');
+  ws.onopen=function(){sendVisitorMeta()};
   ws.onmessage=function(e){rmDots();busy=false;$('cf-sb').disabled=!$('cf-inp').value.trim()&&!pendingImg;
     try{var d=JSON.parse(e.data);if(d.type==='ai_message'&&d.message){
       bubble(renderMd(d.message),'ai');chime();
-      // Auto-open for trigger messages so visitor sees them
       var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action'];
       if(AUTO_OPEN.indexOf(d.source)>=0&&!isOpen)toggleOpen();
       msgCount++;if(msgCount>=2&&!leadDone)setTimeout(showLead,1500)
     }}catch(x){}};
   ws.onerror=function(){rmDots();busy=false};
-  ws.onclose=function(){ws=null}}
+  ws.onclose=function(){ws=null;sentVisitorMeta=false}}
+
+// Open WebSocket ON LOAD so visitor_meta + page_visits get saved
+// even before the visitor opens the chat — backend can then use this
+// browsing context when AI generates the first reply.
+setTimeout(connect,500);
 
 // ── Send message ─────────────────────────────────────────────────────
 function send(){
@@ -373,7 +456,7 @@ function send(){
   var msg=text||'[User sent an image]';
   bubble(escHtml(msg),'me');
   $('cf-inp').value='';$('cf-sb').disabled=true;busy=true;dots();
-  var pl=JSON.stringify({message:msg,behavior_matrix:behavior,page_visits:pageVisits});
+  var pl=JSON.stringify({message:msg,behavior_matrix:behavior,page_visits:buildPageVisits()});
   if(ws&&ws.readyState===1){ws.send(pl)}
   else{connect();ws.addEventListener('open',function(){ws.send(pl)},{once:true})}}
 
@@ -396,22 +479,69 @@ function toggleOpen(){
   if(isOpen){$('cf-win').classList.add('open');$('cf-pill').style.display='none';if(!ws)connect()}
   else{$('cf-win').classList.remove('open');$('cf-pill').style.display='flex'}}
 
-// ── Lightweight behavioral tracker (feeds backend EMA scoring) ──────
-var startTime=Date.now();
-var pageVisits=[];
-var currentPage={url:window.location.pathname,title:document.title,enteredAt:Date.now()};
-var behavior={pagesViewed:[window.location.pathname],timeOnSite:0,scrollDepth:0,
+// ── Lightweight behavioral tracker — PERSISTS ACROSS PAGE LOADS ──────
+// State is kept in sessionStorage so visitors browsing multiple pages
+// accumulate behavior + page_visits. Without this, each WP page reload
+// would wipe the tracker and the AI would never see prior pages.
+var STATE_KEY='cf_state_'+C;
+var saved={};
+try{saved=JSON.parse(sessionStorage.getItem(STATE_KEY)||'{}')}catch(e){}
+
+var startTime=saved.sessionStartTime||Date.now();
+var pageVisits=Array.isArray(saved.pageVisits)?saved.pageVisits:[];
+
+// Finalize previous page if visitor navigated to a new URL
+var pathNow=window.location.pathname;
+if(saved.currentPage&&saved.currentPage.url&&saved.currentPage.url!==pathNow){
+  // Page changed — push finalized prior visit into the list
+  pageVisits.push({
+    url:saved.currentPage.url,
+    title:saved.currentPage.title||saved.currentPage.url,
+    duration_seconds:saved.currentPage.duration_seconds||0,
+    visited_at:saved.currentPage.visited_at||new Date().toISOString()
+  });
+  if(pageVisits.length>30)pageVisits=pageVisits.slice(-30);
+}
+
+var currentPage={url:pathNow,title:document.title,enteredAt:Date.now(),
+  visited_at:new Date().toISOString(),duration_seconds:0};
+
+var behavior=saved.behavior||{pagesViewed:[],timeOnSite:0,scrollDepth:0,
   pricingPageVisits:0,checkoutVisits:0,exitIntentFired:false,clickCount:0,ctaClicks:0,
   rageClicks:0,addToCartClicks:0,formFocused:false,formAbandoned:false,
   copyEvents:0,priceViews:0,videoPlays:0,fileDownloads:0,
   scrollMilestones:[],idleSeconds:0,tabHiddenSeconds:0,hoverCount:0};
 
-// Pricing/checkout path detection
+// Add this page to pagesViewed list (deduped)
+if(behavior.pagesViewed.indexOf(pathNow)<0)behavior.pagesViewed.push(pathNow);
+
+// Pricing/checkout path detection (incremented per page visit)
 var PRICING=['/pricing','/plans','/checkout','/subscribe','/upgrade','/buy'];
 var CHECKOUT=['/checkout','/cart','/order'];
-var path=window.location.pathname.toLowerCase();
-if(PRICING.some(function(p){return path.indexOf(p)>=0}))behavior.pricingPageVisits++;
-if(CHECKOUT.some(function(p){return path.indexOf(p)>=0}))behavior.checkoutVisits++;
+var pathLow=pathNow.toLowerCase();
+if(PRICING.some(function(p){return pathLow.indexOf(p)>=0}))behavior.pricingPageVisits++;
+if(CHECKOUT.some(function(p){return pathLow.indexOf(p)>=0}))behavior.checkoutVisits++;
+
+// Save state every 2s + on beforeunload — keeps sessionStorage fresh
+function saveState(){
+  currentPage.duration_seconds=Math.round((Date.now()-currentPage.enteredAt)/1000);
+  behavior.timeOnSite=Math.round((Date.now()-startTime)/1000);
+  try{sessionStorage.setItem(STATE_KEY,JSON.stringify({
+    sessionStartTime:startTime,pageVisits:pageVisits,
+    currentPage:{url:currentPage.url,title:currentPage.title,
+      duration_seconds:currentPage.duration_seconds,visited_at:currentPage.visited_at},
+    behavior:behavior
+  }))}catch(e){}
+}
+setInterval(saveState,2000);
+window.addEventListener('beforeunload',saveState);
+
+// Build the complete page_visits payload (history + current page snapshot)
+function buildPageVisits(){
+  var dur=Math.round((Date.now()-currentPage.enteredAt)/1000);
+  return pageVisits.concat([{url:currentPage.url,title:currentPage.title,
+    duration_seconds:dur,visited_at:currentPage.visited_at}]);
+}
 
 // Scroll tracking
 var MILESTONES=[25,50,75,90];
