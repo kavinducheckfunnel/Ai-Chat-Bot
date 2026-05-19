@@ -130,7 +130,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # Update Visitor's latest known EMA + carry lead info up.
             # Lifetime totals are computed at query time via Sum() across the
             # visitor's sessions — keeps writes cheap and avoids drift.
-            if s.visitor_id:
+            if s.visitor_obj_id:
                 from .models import Visitor
                 v_update = {
                     'intent_ema': s.current_intent_ema,
@@ -141,7 +141,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     v_update['lead_email'] = s.lead_email
                 if s.lead_phone:
                     v_update['lead_phone'] = s.lead_phone
-                Visitor.objects.filter(pk=s.visitor_id).update(**v_update)
+                Visitor.objects.filter(pk=s.visitor_obj_id).update(**v_update)
             return s
         except ChatSession.DoesNotExist:
             return None
@@ -289,11 +289,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     },
                 )
                 # Link session to visitor + bump session counter on creation
-                if session.visitor_id != visitor.id:
-                    session.visitor = visitor
-                    session.save(update_fields=['visitor'])
-                if not session.visitor_id or created:
-                    # Increment lifetime session count once per session
+                if session.visitor_obj_id != visitor.id:
+                    session.visitor_obj = visitor
+                    session.save(update_fields=['visitor_obj'])
+                    # Increment lifetime session count once per link
                     Visitor.objects.filter(pk=visitor.pk).update(
                         total_sessions=models.F('total_sessions') + 1,
                     )

@@ -98,7 +98,14 @@ class ChatSession(models.Model):
     visitor_id = models.CharField(max_length=255, db_index=True)
     # FK link to the persistent cross-session Visitor record (set on connect
     # via the localStorage cf_visitor_<client_id> UUID from the widget).
-    visitor = models.ForeignKey('Visitor', on_delete=models.SET_NULL, null=True, blank=True, related_name='sessions', db_index=True)
+    # Named `visitor_obj` to avoid clashing with the legacy `visitor_id`
+    # CharField above — Django would otherwise auto-derive `visitor_id` for
+    # the FK accessor and collide.
+    visitor_obj = models.ForeignKey(
+        'Visitor', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='sessions', db_index=True,
+        db_column='visitor_obj_id',
+    )
 
     current_intent_ema = models.FloatField(default=0.0)
     current_budget_ema = models.FloatField(default=0.0)

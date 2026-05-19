@@ -52,7 +52,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name='chatsession',
-            name='visitor',
-            field=models.ForeignKey(blank=True, db_index=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='sessions', to='chat.visitor'),
+            name='visitor_obj',
+            field=models.ForeignKey(blank=True, db_column='visitor_obj_id', db_index=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='sessions', to='chat.visitor'),
         ),
     ]
