@@ -2,44 +2,121 @@ import json
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
-# Weight used when updating EMA from behavioral signals.
-# Lower than the LLM-extracted score weight (0.8) so behavioral data nudges
-# rather than overrides the AI-scored values.
+# Behavioral signal → EMA weight. Lower than LLM-extracted (0.8) so behavioral
+# data nudges rather than overrides the AI-scored values.
 _BEHAVIORAL_EMA_WEIGHT = 0.3
+
+
+def _clamp(val, lo=0.0, hi=1.0):
+    return max(lo, min(hi, val))
 
 
 def _apply_behavior(session, behavior):
     """
-    Write behavioral signals from the beacon into a ChatSession.
-    Also nudges the 3-EMA scores based on the behavioral data so that
-    a visitor who browses without chatting still accumulates intent signals.
+    Map behavioral signals from the beacon into a ChatSession.
+    Persists the raw context then nudges the 3-EMA scores so visitors who
+    browse without chatting still accumulate meaningful intent signals.
     """
     # ── Persist raw context ───────────────────────────────────────────────────
     ctx = session.behavioral_context or {}
-    ctx['pages_viewed']          = len(behavior.get('pagesViewed', []))
-    ctx['pricing_page_visits']   = behavior.get('pricingPageVisits', 0)
-    ctx['exit_intent_triggered'] = behavior.get('exitIntentFired', False)
-    ctx['scroll_depth']          = behavior.get('scrollDepth', 0)
-    ctx['time_on_site']          = behavior.get('timeOnSite', 0)
+
+    # Core signals
+    pages          = len(behavior.get('pagesViewed', []))
+    pricing        = behavior.get('pricingPageVisits', 0)
+    checkout       = behavior.get('checkoutVisits', 0)
+    scroll_depth   = behavior.get('scrollDepth', 0)
+    scroll_m       = behavior.get('scrollMilestones', [])
+    time_on        = behavior.get('timeOnSite', 0)
+    exit_intent    = behavior.get('exitIntentFired', False)
+    click_count    = behavior.get('clickCount', 0)
+    cta_clicks     = behavior.get('ctaClicks', 0)
+    rage_clicks    = behavior.get('rageClicks', 0)
+    form_focused   = behavior.get('formFocused', False)
+    form_abandoned = behavior.get('formAbandoned', False)
+    atc_clicks     = behavior.get('addToCartClicks', 0)
+    price_views    = behavior.get('priceViews', 0)
+    copy_events    = behavior.get('copyEvents', 0)
+    video_plays    = behavior.get('videoPlays', 0)
+    file_downloads = behavior.get('fileDownloads', 0)
+    idle_sec       = behavior.get('idleSeconds', 0)
+    tab_hidden     = behavior.get('tabHiddenSeconds', 0)
+
+    # Active time ratio (1.0 = fully engaged)
+    active_time = max(time_on - idle_sec - tab_hidden, 0)
+    active_ratio = _clamp(active_time / max(time_on, 1))
+
+    # Scroll milestone score (fraction of [25,50,75,90] reached)
+    milestone_score = len([m for m in [25, 50, 75, 90] if m in scroll_m]) / 4.0
+
+    ctx.update({
+        'pages_viewed':         pages,
+        'pricing_page_visits':  pricing,
+        'checkout_visits':      checkout,
+        'exit_intent_triggered': exit_intent,
+        'scroll_depth':         scroll_depth,
+        'scroll_milestones':    scroll_m,
+        'time_on_site':         time_on,
+        'active_ratio':         round(active_ratio, 3),
+        'click_count':          click_count,
+        'cta_clicks':           cta_clicks,
+        'rage_clicks':          rage_clicks,
+        'form_focused':         form_focused,
+        'form_abandoned':       form_abandoned,
+        'add_to_cart_clicks':   atc_clicks,
+        'price_views':          price_views,
+        'copy_events':          copy_events,
+        'video_plays':          video_plays,
+        'file_downloads':       file_downloads,
+        'idle_seconds':         idle_sec,
+        'tab_hidden_seconds':   tab_hidden,
+    })
     session.behavioral_context = ctx
     session.save(update_fields=['behavioral_context'])
 
-    # ── Map behavioral signals → raw scores (0.0 – 1.0) ─────────────────────
-    time_on = behavior.get('timeOnSite', 0)     # seconds
-    scroll  = behavior.get('scrollDepth', 0)    # percent
-    pricing = behavior.get('pricingPageVisits', 0)
-    pages   = len(behavior.get('pagesViewed', []))
-
-    # Intent: weighted blend of time-on-site (caps at 2 min) + pages viewed (caps at 8)
-    raw_intent  = min((time_on / 120.0) * 0.6 + (pages / 8.0) * 0.4, 1.0)
-    # Urgency: deep scroll signals active evaluation
-    raw_urgency = min(scroll / 80.0, 1.0)
-    # Budget: visiting pricing pages signals price consideration
-    raw_budget  = min(pricing * 0.4, 1.0)
-
-    # Only update EMA when signals cross a meaningful threshold to avoid noise
-    if raw_intent < 0.08 and raw_urgency < 0.08 and raw_budget == 0.0:
+    # ── Guard against all-zero noise ─────────────────────────────────────────
+    has_signal = (
+        time_on >= 10 or
+        scroll_depth >= 10 or
+        cta_clicks > 0 or
+        atc_clicks > 0 or
+        price_views > 0 or
+        pricing > 0 or
+        copy_events > 0 or
+        form_focused
+    )
+    if not has_signal:
         return
+
+    # ── Map signals → raw EMA scores (0.0 – 1.0) ────────────────────────────
+
+    # INTENT — exploration, content consumption, engagement depth
+    raw_intent = _clamp(
+        (time_on       / 180) * 0.20 +   # cap at 3 min
+        (pages         /   6) * 0.15 +   # cap at 6 pages
+        active_ratio          * 0.15 +   # active vs idle/hidden
+        (cta_clicks    /   3) * 0.20 +   # cap at 3 CTAs
+        milestone_score       * 0.15 +   # scroll depth quality
+        (video_plays   /   2) * 0.08 +   # media engagement
+        (file_downloads /  2) * 0.07     # download = research intent
+    )
+
+    # BUDGET — price-evaluation behaviour
+    raw_budget = _clamp(
+        (pricing       /   2) * 0.35 +   # pricing page visits (cap 2)
+        (price_views   /   4) * 0.25 +   # price elements seen (cap 4)
+        (copy_events   /   3) * 0.20 +   # copying prices/SKUs
+        (checkout      /   2) * 0.20     # checkout page visits
+    )
+
+    # URGENCY — buying signals (add-to-cart strongest; rage-click deducts)
+    raw_urgency = _clamp(
+        (atc_clicks    /   2) * 0.40 +   # add-to-cart (cap 2)
+        int(exit_intent)      * 0.15 +   # leaving = urgency to catch them
+        int(form_focused)     * 0.15 +   # started filling a form
+        (checkout      /   2) * 0.20 +   # on checkout page
+        (cta_clicks    /   3) * 0.10 +   # clicked a CTA
+        int(rage_clicks > 0)  * -0.15    # frustration = negative urgency
+    )
 
     try:
         from chat.ema_engine import calculate_ema, determine_trend
@@ -68,18 +145,19 @@ def _apply_behavior(session, behavior):
             'intent_trend', 'budget_trend', 'urgency_trend',
         ])
     except Exception:
-        pass  # EMA update is best-effort; behavioral context was already saved
+        pass  # EMA update is best-effort; context was already saved
 
 
 @csrf_exempt
 def beacon_receiver(request):
     """
     Receives behavioral analytics from the widget tracker (navigator.sendBeacon).
-    Saves pagesViewed, pricingPageVisits, exitIntentFired, scrollDepth, timeOnSite
-    into ChatSession.behavioral_context, and nudges the 3-EMA scores so that
-    visitors who browse without chatting still accumulate meaningful intent signals.
 
-    If the session doesn't exist yet (user browsed but hasn't chatted), the data
+    Accepts expanded behavior matrix including: clickCount, ctaClicks, rageClicks,
+    formFocused, formAbandoned, addToCartClicks, priceViews, copyEvents, videoPlays,
+    fileDownloads, idleSeconds, tabHiddenSeconds, scrollMilestones, checkoutVisits.
+
+    If the session doesn't exist yet (visitor browsed but hasn't chatted), the data
     is cached for 30 minutes and applied when the session is eventually created.
     """
     if request.method != 'POST':
@@ -91,7 +169,7 @@ def beacon_receiver(request):
         return JsonResponse({'error': 'invalid json'}, status=400)
 
     session_id = data.get('sessionId')
-    behavior = data.get('behaviorMatrix', {})
+    behavior   = data.get('behaviorMatrix', {})
 
     if session_id and behavior:
         try:
@@ -102,9 +180,9 @@ def beacon_receiver(request):
             if session:
                 _apply_behavior(session, behavior)
             else:
-                # Session not created yet — cache so the consumer can apply it on first message
+                # Session not created yet — cache so it can be applied on first message
                 cache.set(f'beacon_{session_id}', behavior, 1800)
         except Exception:
-            pass  # beacon is fire-and-forget, never block the response
+            pass  # beacon is fire-and-forget
 
     return JsonResponse({'status': 'ok'})

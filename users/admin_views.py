@@ -444,6 +444,10 @@ def client_sessions(request, client_id):
             'channel': s.channel,
             'updated_at': s.updated_at.isoformat(),
             'created_at': s.created_at.isoformat(),
+            'behavioral_context': s.behavioral_context,
+            'intent_trend': s.intent_trend,
+            'budget_trend': s.budget_trend,
+            'urgency_trend': s.urgency_trend,
         })
     return Response(data)
 

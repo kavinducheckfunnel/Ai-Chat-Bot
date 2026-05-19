@@ -131,7 +131,7 @@ def trigger_event(request):
     if not client:
         return Response({'status': 'ignored', 'reason': 'no client'})
 
-    # Build FOMO message based on trigger type
+    # Build message based on trigger type
     if trigger_type == 'exit_intent':
         fomo_msg = (
             client.fomo_offer_text
@@ -141,7 +141,7 @@ def trigger_event(request):
                 else "Wait! Don't leave yet — I can help you find exactly what you're looking for."
             )
         )
-    else:  # pricing_hesitation
+    elif trigger_type == 'pricing_hesitation':
         fomo_msg = (
             client.fomo_offer_text
             or (
@@ -150,19 +150,36 @@ def trigger_event(request):
                 else "Still deciding? I can walk you through our plans and find the best fit for you."
             )
         )
+    elif trigger_type == 'add_to_cart_help':
+        fomo_msg = "Great choice! Do you have any questions about this product before you check out? I'm here to help. 🛒"
+    elif trigger_type == 'abandoned_form':
+        fomo_msg = "Looks like you started filling something out — can I help you complete it or answer any questions?"
+    elif trigger_type == 'deep_engagement':
+        fomo_msg = "You've been exploring thoroughly! Is there anything specific I can help you find or decide on? 💬"
+    elif trigger_type == 'rage_click_help':
+        fomo_msg = "Looks like something might not be working as expected — can I help you find what you're looking for?"
+    elif trigger_type == 'high_intent_action':
+        fomo_msg = (
+            f"You seem ready to take the next step! Use code **{client.discount_code}** for an exclusive deal."
+            if client.discount_code
+            else "You seem really interested — I'd love to help you take the next step. What questions do you have?"
+        )
+    else:
+        fomo_msg = "Hey! I noticed you've been exploring — can I help you with anything? 💬"
 
-    # Add countdown hint if configured
-    if client.fomo_countdown_seconds and client.fomo_countdown_seconds > 0:
+    # Countdown hint only for closing-type triggers
+    CLOSING_TRIGGERS = {'exit_intent', 'pricing_hesitation', 'high_intent_action'}
+    if trigger_type in CLOSING_TRIGGERS and client.fomo_countdown_seconds and client.fomo_countdown_seconds > 0:
         mins = client.fomo_countdown_seconds // 60
         fomo_msg += f" This offer expires in {mins} minutes!"
 
-    # Persist to chat history
+    # Persist to chat history; only mark closing_triggered for exit/pricing/high-intent
     history = session.chat_history or []
     history.append({'role': 'ai', 'message': fomo_msg, 'source': trigger_type})
-    ChatSession.objects.filter(session_id=session_id).update(
-        chat_history=history,
-        closing_triggered=True,
-    )
+    update_fields = {'chat_history': history}
+    if trigger_type in CLOSING_TRIGGERS:
+        update_fields['closing_triggered'] = True
+    ChatSession.objects.filter(session_id=session_id).update(**update_fields)
 
     # Push into visitor's WebSocket
     channel_layer = get_channel_layer()

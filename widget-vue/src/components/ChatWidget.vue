@@ -270,8 +270,10 @@ function connectWebSocket() {
         chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai', reaction: null })
         speakText(data.message)
         playChime()
-        // Auto-open widget for server-side idle nudges so the visitor sees the message
-        if ((data.source === 'afk_nudge' || data.source === 'fomo') && !isOpen.value) {
+        // Auto-open widget for trigger-based messages so the visitor sees them
+        const AUTO_OPEN_SOURCES = new Set(['afk_nudge', 'fomo', 'exit_intent', 'pricing_hesitation',
+          'add_to_cart_help', 'abandoned_form', 'deep_engagement', 'rage_click_help', 'high_intent_action'])
+        if (AUTO_OPEN_SOURCES.has(data.source) && !isOpen.value) {
           isOpen.value = true
           nextTick(() => {
             if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight

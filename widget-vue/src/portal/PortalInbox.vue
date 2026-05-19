@@ -293,6 +293,18 @@
           </div>
         </div>
 
+        <!-- Hot Signals -->
+        <div class="vp-section" v-if="hotSignals(selected).length">
+          <div class="vp-section-title">Hot signals</div>
+          <div class="hot-signals-list">
+            <div class="hot-signal-row" v-for="sig in hotSignals(selected)" :key="sig.key">
+              <span class="signal-icon">{{ sig.icon }}</span>
+              <span class="signal-label">{{ sig.label }}</span>
+              <span class="signal-value" :class="sig.level">{{ sig.value }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- Chat tags -->
         <div class="vp-section">
           <div class="vp-section-title">Labels</div>
@@ -630,6 +642,53 @@ function trendClass(trend) {
   if (trend === 'UP') return 'trend-up'
   if (trend === 'DOWN') return 'trend-down'
   return 'trend-flat'
+}
+
+function hotSignals(session) {
+  const ctx = session?.behavioral_context || {}
+  const signals = []
+
+  const atc = ctx.add_to_cart_clicks || 0
+  if (atc > 0) signals.push({ key: 'atc', icon: '🛒', label: 'Added to cart', value: `${atc}×`, level: 'sig-high' })
+
+  const pricing = ctx.pricing_page_visits || 0
+  if (pricing > 0) signals.push({ key: 'pricing', icon: '💰', label: 'Pricing page visits', value: `${pricing}×`, level: pricing >= 2 ? 'sig-high' : 'sig-med' })
+
+  const checkout = ctx.checkout_visits || 0
+  if (checkout > 0) signals.push({ key: 'checkout', icon: '📦', label: 'Checkout visits', value: `${checkout}×`, level: 'sig-high' })
+
+  const cta = ctx.cta_clicks || 0
+  if (cta > 0) signals.push({ key: 'cta', icon: '👆', label: 'CTA clicks', value: `${cta}×`, level: cta >= 2 ? 'sig-high' : 'sig-med' })
+
+  const copies = ctx.copy_events || 0
+  if (copies > 0) signals.push({ key: 'copy', icon: '📋', label: 'Copied content', value: `${copies}×`, level: 'sig-med' })
+
+  const priceV = ctx.price_views || 0
+  if (priceV > 0) signals.push({ key: 'price', icon: '👀', label: 'Viewed prices', value: `${priceV}×`, level: priceV >= 3 ? 'sig-high' : 'sig-med' })
+
+  const time = ctx.time_on_site || 0
+  if (time >= 60) signals.push({ key: 'time', icon: '⏱', label: 'Time on site', value: time >= 120 ? `${Math.floor(time / 60)}m ${time % 60}s` : `${time}s`, level: time >= 120 ? 'sig-med' : 'sig-low' })
+
+  const scroll = ctx.scroll_depth || 0
+  if (scroll >= 75) signals.push({ key: 'scroll', icon: '📜', label: 'Scroll depth', value: `${scroll}%`, level: scroll >= 90 ? 'sig-high' : 'sig-med' })
+
+  const form = ctx.form_focused
+  if (form) signals.push({ key: 'form', icon: '✍️', label: 'Filled a form', value: ctx.form_abandoned ? 'abandoned' : 'in progress', level: ctx.form_abandoned ? 'sig-low' : 'sig-med' })
+
+  const rage = ctx.rage_clicks || 0
+  if (rage > 0) signals.push({ key: 'rage', icon: '😤', label: 'Rage clicks', value: `${rage}×`, level: 'sig-low' })
+
+  const video = ctx.video_plays || 0
+  if (video > 0) signals.push({ key: 'video', icon: '▶️', label: 'Played video', value: `${video}×`, level: 'sig-med' })
+
+  const files = ctx.file_downloads || 0
+  if (files > 0) signals.push({ key: 'files', icon: '📥', label: 'Downloaded files', value: `${files}×`, level: 'sig-med' })
+
+  // Sort: high first, then med, then low
+  const order = { 'sig-high': 0, 'sig-med': 1, 'sig-low': 2 }
+  signals.sort((a, b) => (order[a.level] || 2) - (order[b.level] || 2))
+
+  return signals.slice(0, 7)
 }
 
 function countryFlag(code) {
@@ -1323,4 +1382,29 @@ watch(selected, (s) => {
   font-size: 11px; font-weight: 700; color: white;
   padding: 2px 8px; border-radius: 8px;
 }
+
+/* ── Hot signals ─────────────────────────────────────────────────────────── */
+.hot-signals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hot-signal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--cf-bg-input);
+  border-radius: 7px;
+  border: 1px solid var(--cf-border-subtle);
+}
+.signal-icon { font-size: 13px; flex-shrink: 0; }
+.signal-label { font-size: 12px; color: var(--cf-text-secondary); flex: 1; }
+.signal-value {
+  font-size: 11px; font-weight: 600;
+  padding: 2px 7px; border-radius: 6px;
+}
+.sig-high  { background: rgba(239,68,68,0.15);  color: #ef4444; }
+.sig-med   { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.sig-low   { background: rgba(100,116,139,0.15); color: #64748b; }
 </style>
