@@ -708,9 +708,9 @@ const form = ref({
 const presetColors = ['#ffffff', '#3B82F6', '#22c55e', '#ef4444', '#6366f1', '#f59e0b']
 
 const formats = [
-  { id: 'html',      label: 'HTML',      icon: '<span style="color:#e34c26;font-weight:700;font-size:12px">HTML</span>' },
-  { id: 'wordpress', label: 'WordPress', icon: '<span style="color:#21759b;font-weight:700;font-size:12px">WP</span>' },
-  { id: 'react',     label: 'React',     icon: '<span style="color:#61dafb;font-weight:700;font-size:12px">⚛</span>' },
+  { id: 'html',      label: 'HTML',      icon: '<span style="font-weight:700;font-size:11px;letter-spacing:-0.5px;font-family:monospace">&lt;/&gt;</span>' },
+  { id: 'wordpress', label: 'WordPress', icon: '<span style="color:#21759b;font-weight:700;font-size:11px">WP</span>' },
+  { id: 'react',     label: 'React',     icon: '<span style="font-size:14px;line-height:1">⚛</span>' },
 ]
 
 const embedCode = computed(() => {
@@ -915,7 +915,7 @@ const scrapeStatusLabel = computed(() => {
   margin-bottom: -1px;
 }
 .tab:hover { color: var(--cf-text-secondary); }
-.tab.active { color: #a5b4fc; border-bottom-color: #6366f1; }
+.tab.active { color: #6366f1; border-bottom-color: #6366f1; }
 
 .tab-content { display: flex; flex-direction: column; gap: 16px; }
 
@@ -961,10 +961,10 @@ const scrapeStatusLabel = computed(() => {
 }
 .status-badge.active { background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); }
 
-/* Embed box */
+/* Embed box — always dark (code/terminal aesthetic) */
 .embed-box {
-  background: #0d0d0d;
-  border: 1px solid var(--cf-border-subtle);
+  background: #0f1117;
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 12px;
   padding: 20px;
   display: flex;
@@ -972,7 +972,8 @@ const scrapeStatusLabel = computed(() => {
   gap: 16px;
 }
 
-.embed-title { font-size: 14px; font-weight: 600; color: var(--cf-text-primary); }
+/* Force light text inside embed-box since its bg is always dark */
+.embed-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
 
 .format-tabs { display: flex; gap: 6px; }
 .format-tab {
@@ -993,12 +994,21 @@ const scrapeStatusLabel = computed(() => {
 .format-tab.active { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.3); color: #a5b4fc; }
 .format-icon { display: flex; align-items: center; }
 
-.embed-instruction { font-size: 12px; color: var(--cf-text-muted); }
-.embed-instruction code { background: var(--cf-bg-surface-hover); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: var(--cf-text-secondary); }
+.embed-instruction { font-size: 12px; color: #94a3b8; }
+.embed-instruction code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: #a5b4fc; }
+
+/* Format tabs inside embed-box always on dark bg — force dark-mode palette */
+.embed-box .format-tab {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(255,255,255,0.1);
+  color: #64748b;
+}
+.embed-box .format-tab:hover { background: rgba(255,255,255,0.09); color: #94a3b8; }
+.embed-box .format-tab.active { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); color: #a5b4fc; }
 
 .code-block {
-  background: var(--cf-bg-page);
-  border: 1px solid var(--cf-border-subtle);
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,255,255,0.07);
   border-radius: 10px;
   padding: 16px;
   position: relative;
@@ -1009,7 +1019,7 @@ const scrapeStatusLabel = computed(() => {
   font-family: 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.7;
-  color: var(--cf-text-secondary);
+  color: #94a3b8;
   white-space: pre;
   overflow-x: auto;
 }
@@ -1022,16 +1032,16 @@ const scrapeStatusLabel = computed(() => {
   gap: 6px;
   margin-top: 14px;
   padding: 8px 16px;
-  background: var(--cf-bg-ghost);
-  border: 1px solid var(--cf-border-default);
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
   border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--cf-text-secondary);
+  color: #94a3b8;
   cursor: pointer;
   transition: all 0.15s;
 }
-.copy-btn:hover { background: var(--cf-bg-ghost-hover); color: var(--cf-text-primary); }
+.copy-btn:hover { background: rgba(255,255,255,0.12); color: #e2e8f0; }
 .copy-btn.copied { color: #22c55e; border-color: rgba(34,197,94,0.3); background: rgba(34,197,94,0.08); }
 
 .skeleton { min-height: 120px; }
@@ -1075,16 +1085,16 @@ const scrapeStatusLabel = computed(() => {
 
 .input {
   padding: 10px 13px;
-  background: #0d0d0d;
-  border: 1px solid rgba(255,255,255,0.09);
+  background: var(--cf-bg-input);
+  border: 1px solid var(--cf-border-default);
   border-radius: 9px;
   font-size: 14px;
   color: var(--cf-text-primary);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
   width: 100%;
 }
-.input:focus { border-color: #6366f1; }
+.input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
 .input::placeholder { color: var(--cf-text-muted); }
 
 /* Theme */
@@ -1092,14 +1102,14 @@ const scrapeStatusLabel = computed(() => {
 .theme-btn {
   display: flex; align-items: center; gap: 8px;
   padding: 9px 18px;
-  background: #0d0d0d;
-  border: 1.5px solid rgba(255,255,255,0.09);
+  background: var(--cf-bg-input);
+  border: 1.5px solid var(--cf-border-default);
   border-radius: 9px;
   font-size: 13px; font-weight: 500; color: var(--cf-text-muted);
   cursor: pointer; transition: all 0.12s;
 }
-.theme-btn:hover { border-color: var(--cf-text-muted); color: var(--cf-text-secondary); }
-.theme-btn.selected { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.08); }
+.theme-btn:hover { border-color: var(--cf-border-strong); color: var(--cf-text-secondary); }
+.theme-btn.selected { border-color: #6366f1; color: #6366f1; background: rgba(99,102,241,0.08); }
 .theme-dot { width: 12px; height: 12px; border-radius: 50%; }
 .dark-dot { background: var(--cf-bg-page); border: 1px solid #334155; }
 .light-dot { background: var(--cf-bg-surface); border: 1px solid #cbd5e1; }
@@ -1155,7 +1165,7 @@ const scrapeStatusLabel = computed(() => {
 .pages-count { font-size: 12px; color: var(--cf-text-muted); }
 
 .progress-wrap { display: flex; flex-direction: column; gap: 6px; }
-.progress-bar { height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; }
+.progress-bar { height: 4px; background: var(--cf-border-subtle); border-radius: 2px; overflow: hidden; }
 .progress-fill { height: 100%; background: #6366f1; border-radius: 2px; transition: width 0.5s; }
 .progress-text { font-size: 12px; color: var(--cf-text-muted); }
 
@@ -1301,7 +1311,7 @@ const scrapeStatusLabel = computed(() => {
   backdrop-filter: blur(4px);
 }
 .model-picker-box {
-  background: #111827; border: 1px solid var(--cf-border-default);
+  background: var(--cf-bg-surface-raised); border: 1px solid var(--cf-border-default);
   border-radius: 14px; width: 520px; max-width: calc(100vw - 32px);
   max-height: 80vh; display: flex; flex-direction: column;
   box-shadow: 0 24px 64px rgba(0,0,0,0.5);
