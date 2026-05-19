@@ -737,7 +737,7 @@ const embedCode = computed(() => {
   if (!props.client) return ''
   return generateEmbedCode(
     props.client.id,
-    backendUrl,
+    WIDGET_URL,  // full URL incl. /widget/widget.js — NOT backendUrl (host only)
     form.value.chatbot_color || '#6366f1',
     form.value.chatbot_name || 'AI Assistant',
     embedFormat.value,
