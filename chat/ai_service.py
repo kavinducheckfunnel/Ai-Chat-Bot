@@ -13,6 +13,116 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
 
+
+def build_browsing_context(session):
+    """
+    Build human-readable browsing context for the AI prompt from session data.
+
+    Returns a dict that gets injected into behavior_matrix so the LLM can naturally
+    reference what the visitor was looking at before opening the chat. Without this,
+    the prompt only sees raw URLs and numeric signals — opaque to natural conversation.
+
+    Output shape:
+      {
+        'pages':         [{title, url, dwell_seconds, is_product}, ...],
+        'top_interest':  'Premium Blue Hoodie' | None,
+        'signals':       ['Added to cart 2×', 'Viewed pricing 3×', ...],
+        'heat_level':    'HIGH' | 'MEDIUM' | 'LOW',
+        'is_returning':  bool,
+        'is_first_msg':  bool,    # true when chat_history is empty
+      }
+    """
+    if not session:
+        return {}
+
+    visits = session.page_visits or []
+
+    # Match visited URLs against scraped DocumentChunks for clean titles
+    url_to_title = {}
+    if session.client and visits:
+        visit_urls = [v.get('url') for v in visits if v.get('url')]
+        if visit_urls:
+            # Use absolute URLs where possible
+            qs = DocumentChunk.objects.filter(
+                client=session.client,
+                source_url__in=visit_urls,
+            ).only('source_url', 'metadata')
+            for c in qs:
+                meta = c.metadata or {}
+                title = meta.get('title')
+                if title and c.source_url:
+                    url_to_title[c.source_url] = title
+
+    def _is_product(url):
+        return any(p in (url or '') for p in [
+            '/product/', '/products/', '/shop/', '/item/', '/p/',
+        ])
+
+    pages = []
+    for v in visits[-8:]:  # last 8 pages, most relevant
+        url = v.get('url') or ''
+        clean_title = url_to_title.get(url) or v.get('title') or url
+        pages.append({
+            'title': clean_title,
+            'url': url,
+            'dwell_seconds': v.get('duration_seconds', 0),
+            'is_product': _is_product(url),
+        })
+
+    # Top interest = longest-dwelled product page (≥10s)
+    products = [p for p in pages if p['is_product'] and p['dwell_seconds'] >= 10]
+    top_interest = max(products, key=lambda p: p['dwell_seconds'], default=None)
+
+    # Human-readable signals from behavioral_context
+    ctx = session.behavioral_context or {}
+    signals = []
+    if ctx.get('add_to_cart_clicks'):
+        signals.append(f"Added to cart {ctx['add_to_cart_clicks']}×")
+    if ctx.get('checkout_visits'):
+        signals.append(f"Visited checkout {ctx['checkout_visits']}×")
+    if ctx.get('pricing_page_visits', 0) >= 1:
+        signals.append(f"Viewed pricing {ctx['pricing_page_visits']}×")
+    if ctx.get('price_views', 0) >= 3:
+        signals.append(f"Viewed price elements {ctx['price_views']}×")
+    if ctx.get('copy_events'):
+        signals.append(f"Copied content {ctx['copy_events']}× (likely pricing/SKUs)")
+    if ctx.get('form_focused') and not ctx.get('form_abandoned'):
+        signals.append("Started filling a form")
+    if ctx.get('form_abandoned'):
+        signals.append("Abandoned a form")
+    if ctx.get('cta_clicks', 0) >= 2:
+        signals.append(f"Clicked CTAs {ctx['cta_clicks']}×")
+    if ctx.get('scroll_depth', 0) >= 75:
+        signals.append(f"Scrolled deeply ({ctx['scroll_depth']}%)")
+    if ctx.get('video_plays'):
+        signals.append(f"Played video {ctx['video_plays']}×")
+    if ctx.get('file_downloads'):
+        signals.append(f"Downloaded files {ctx['file_downloads']}×")
+    if ctx.get('rage_clicks'):
+        signals.append("Showed frustration (rage clicks)")
+
+    # Heat level from composite EMA
+    heat = (
+        session.current_intent_ema * 0.45 +
+        session.current_budget_ema * 0.30 +
+        session.current_urgency_ema * 0.25
+    ) * 100
+    heat_level = 'HIGH' if heat > 60 else 'MEDIUM' if heat > 30 else 'LOW'
+
+    # First message detection — controls whether AI should open with browsing reference
+    is_first_msg = not bool(session.chat_history)
+
+    return {
+        'pages': pages,
+        'top_interest': top_interest['title'] if top_interest else None,
+        'top_interest_dwell': top_interest['dwell_seconds'] if top_interest else 0,
+        'top_interest_url': top_interest['url'] if top_interest else None,
+        'signals': signals,
+        'heat_level': heat_level,
+        'is_returning': bool(getattr(session, 'visitor_is_returning', False)),
+        'is_first_msg': is_first_msg,
+    }
+
 # Fallback chain used when the primary model is rate-limited.
 # Index 0 is overridden by PlatformConfig.primary_model at runtime.
 _PLATFORM_FALLBACK_MODELS = [
@@ -136,16 +246,24 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         distance=CosineDistance('embedding', query_embedding)
     ).order_by('distance')[:40]
 
-    # 3. Build prompt
+    # 3. Build prompt — enrich behavior_matrix with human-readable browsing context
+    #    so the AI can naturally reference what the visitor was looking at.
     client_domain = (
         session.client.domain_url
         if session.client and hasattr(session.client, 'domain_url')
         else 'Unknown'
     )
+    try:
+        enriched_behavior = dict(behavior_matrix or {})
+        enriched_behavior['browsing_summary'] = build_browsing_context(session)
+    except Exception as e:
+        logger.warning(f'[ai] build_browsing_context failed: {e}')
+        enriched_behavior = behavior_matrix or {}
+
     system_prompt, user_prompt = build_prompt(
         session.conversation_state,
         top_chunks,
-        behavior_matrix,
+        enriched_behavior,
         session.chat_history,
         user_message,
         website_domain=client_domain,

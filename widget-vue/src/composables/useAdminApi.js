@@ -326,6 +326,10 @@ export function useAdminApi() {
 
     getPortalAnalytics: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/analytics/?period=${period}`),
 
+    suggestCta: (clientId) => apiFetch(`/api/admin/clients/${clientId}/suggest-cta/`, {
+      method: 'POST', body: JSON.stringify({}),
+    }),
+
     // ── Billing ──────────────────────────────────────────────────────────────
     getSubscription: () => apiFetch('/api/admin/billing/subscription/'),
 

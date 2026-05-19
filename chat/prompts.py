@@ -60,6 +60,27 @@ NEVER return fewer items than requested unless the knowledge base genuinely has 
 
 RULE 8 — SCORING AWARENESS.
 If intent_level is "High-Intent Lead", be direct and action-oriented. End with one clear CTA link — nothing else.
+
+RULE 9 — PERSONALISED OPENING (use sparingly).
+When the user's message is a GREETING ("hi", "hello", "hey", "how are you")
+OR a vague generic question ("what do you have?", "tell me more")
+AND VISITOR BROWSING CONTEXT shows a clear TOP INTEREST product (≥10s dwell)
+AND this is the visitor's FIRST message in the session:
+  → Acknowledge what they were looking at in your reply, NATURALLY.
+
+GOOD examples (vary the wording — don't copy verbatim):
+  • "Hey! Saw you were checking out the Blue Hoodie — anything you'd like to know?"
+  • "Hi there! The [Product Name] caught your eye — happy to help if you have questions."
+  • "Welcome back! Still thinking about [Product Name]? I can help you decide."
+
+BAD examples (do NOT do this):
+  • Mentioning browsing on every message — only the FIRST reply
+  • Listing every page they viewed
+  • Being creepy: "I see you spent 2 minutes 15 seconds on the product page" (too specific)
+  • Using their behavior data when their question is unrelated to it
+
+If TOP INTEREST is missing or dwell <10s → just greet normally, don't reference browsing.
+NEVER fabricate browsing data — only reference what's actually in BROWSING CONTEXT.
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -93,6 +114,56 @@ STATE_INSTRUCTIONS = {
 # PROMPT BUILDER
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _format_browsing_context(behavior_matrix):
+    """
+    Renders the enriched browsing_summary as a readable narrative for the LLM.
+    Falls back to a one-line note if no browsing data is available.
+    """
+    bs = (behavior_matrix or {}).get('browsing_summary') or {}
+    if not bs.get('pages') and not bs.get('signals'):
+        return "(no prior browsing data captured)"
+
+    lines = []
+
+    if bs.get('is_first_msg'):
+        lines.append(">> This is the visitor's FIRST message in the session <<")
+        lines.append("")
+
+    if bs.get('top_interest'):
+        dwell = bs.get('top_interest_dwell', 0)
+        mins, secs = divmod(dwell, 60)
+        t = f"{mins}m {secs}s" if mins else f"{secs}s"
+        url = bs.get('top_interest_url') or ''
+        lines.append(f"TOP INTEREST: {bs['top_interest']} ({t} dwell)")
+        if url:
+            lines.append(f"  → URL: {url}")
+
+    pages = bs.get('pages') or []
+    if pages:
+        lines.append("")
+        lines.append("RECENT PAGES VIEWED (oldest → newest):")
+        for p in pages:
+            secs = p.get('dwell_seconds', 0)
+            mins, ss = divmod(secs, 60)
+            t = f"{mins}m {ss}s" if mins else f"{secs}s"
+            tag = " [PRODUCT]" if p.get('is_product') else ""
+            lines.append(f"  • {p.get('title', 'Unknown')} — {t}{tag}")
+
+    signals = bs.get('signals') or []
+    if signals:
+        lines.append("")
+        lines.append("BEHAVIORAL SIGNALS:")
+        for s in signals:
+            lines.append(f"  • {s}")
+
+    lines.append("")
+    lines.append(f"INTENT HEAT LEVEL: {bs.get('heat_level', 'LOW')}")
+    if bs.get('is_returning'):
+        lines.append("RETURNING VISITOR (they've been here before)")
+
+    return "\n".join(lines)
+
+
 def build_prompt(conversation_state, context_chunks, behavior_matrix, chat_history, user_message, website_domain=""):
     state_instruction = STATE_INSTRUCTIONS.get(conversation_state, STATE_INSTRUCTIONS['RESEARCH'])
 
@@ -111,6 +182,9 @@ def build_prompt(conversation_state, context_chunks, behavior_matrix, chat_histo
     # Trim chat history to last 6 exchanges to keep context manageable
     recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
 
+    # Render browsing context as readable narrative for natural AI responses
+    browsing_block = _format_browsing_context(behavior_matrix)
+
     system_prompt = f"""{SYSTEM_PERSONA}
 
 ════════════════════
@@ -127,9 +201,10 @@ PRODUCT / CONTENT KNOWLEDGE BASE
 {context_text}
 
 ════════════════════
-USER BEHAVIOUR (silent browsing before this chat)
+VISITOR BROWSING CONTEXT
+(What this person did on the site BEFORE opening chat — reference naturally per RULE 9)
 ════════════════════
-{json.dumps(behavior_matrix, indent=2)}
+{browsing_block}
 
 ════════════════════
 RECENT CONVERSATION HISTORY

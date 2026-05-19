@@ -30,6 +30,9 @@
 
         <div class="embed-box">
           <h3 class="embed-title">Choose how to add the widget code</h3>
+          <div class="live-update-banner">
+            ⚡ <strong>Paste once.</strong> Change branding, colors, or CTA from this panel anytime — your widget updates automatically within 60 seconds. No re-paste needed.
+          </div>
 
           <!-- Format tabs -->
           <div class="format-tabs">
@@ -124,8 +127,25 @@
         </div>
 
         <div class="field">
-          <label>CTA message</label>
+          <label>
+            CTA message
+            <button class="suggest-cta-btn" @click="suggestCtaFromBehavior" :disabled="ctaSuggesting" type="button">
+              <span v-if="ctaSuggesting" class="mini-spinner"></span>
+              <span v-else>✨ Suggest from behavior</span>
+            </button>
+          </label>
           <input v-model="form.cta_message" type="text" class="input" placeholder="You're clearly ready — grab your exclusive discount:" />
+          <div v-if="ctaSuggestions.length" class="cta-suggestions">
+            <p class="cta-suggestions-hint">Click to apply, or keep your custom message:</p>
+            <button
+              v-for="(s, i) in ctaSuggestions"
+              :key="i"
+              type="button"
+              class="cta-suggestion-pill"
+              @click="form.cta_message = s"
+            >{{ s }}</button>
+          </div>
+          <p v-if="ctaSuggestError" class="cta-error">{{ ctaSuggestError }}</p>
         </div>
 
         <button class="btn-save" :disabled="saving" @click="saveConfig">
@@ -724,6 +744,29 @@ const embedCode = computed(() => {
   )
 })
 
+
+// ── CTA AI suggestions ────────────────────────────────────────────────────────
+const ctaSuggesting = ref(false)
+const ctaSuggestions = ref([])
+const ctaSuggestError = ref('')
+
+async function suggestCtaFromBehavior() {
+  if (!props.client || ctaSuggesting.value) return
+  ctaSuggesting.value = true
+  ctaSuggestError.value = ''
+  ctaSuggestions.value = []
+  try {
+    const data = await api.suggestCta(props.client.id)
+    ctaSuggestions.value = data?.suggestions || []
+    if (!ctaSuggestions.value.length) {
+      ctaSuggestError.value = 'No suggestions returned. Try again later.'
+    }
+  } catch (e) {
+    ctaSuggestError.value = 'Failed to generate suggestions: ' + (e.message || 'unknown error')
+  } finally {
+    ctaSuggesting.value = false
+  }
+}
 
 // Sync form with client prop
 watch(() => props.client, (c) => {
@@ -1346,4 +1389,75 @@ const scrapeStatusLabel = computed(() => {
 .mp-paid { font-size: 10px; font-weight: 700; background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 6px; border-radius: 4px; }
 .mp-ctx  { font-size: 11px; color: var(--cf-text-muted); }
 .mp-empty, .mp-loading { padding: 24px; text-align: center; color: var(--cf-text-muted); font-size: 14px; }
+
+.live-update-banner {
+  background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(34,197,94,0.10));
+  border: 1px solid rgba(99,102,241,0.30);
+  color: #c7d2fe;
+  font-size: 12px;
+  padding: 9px 13px;
+  border-radius: 8px;
+  margin: 0 0 14px 0;
+  line-height: 1.5;
+}
+.live-update-banner strong { color: #e0e7ff; font-weight: 700; }
+
+/* ── CTA AI suggestions ──────────────────────────────────────────────────── */
+.suggest-cta-btn {
+  margin-left: 8px;
+  background: linear-gradient(135deg, rgba(99,102,241,0.18), rgba(168,85,247,0.18));
+  border: 1px solid rgba(99,102,241,0.35);
+  color: #a5b4fc;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s, transform 0.1s;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.suggest-cta-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, rgba(99,102,241,0.30), rgba(168,85,247,0.30));
+  color: #c7d2fe;
+}
+.suggest-cta-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.cta-suggestions {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cta-suggestions-hint {
+  font-size: 11px;
+  color: var(--cf-text-muted);
+  margin: 0 0 2px 0;
+}
+.cta-suggestion-pill {
+  text-align: left;
+  background: var(--cf-bg-input);
+  border: 1px solid var(--cf-border-subtle);
+  color: var(--cf-text-secondary);
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  font-family: inherit;
+  line-height: 1.5;
+}
+.cta-suggestion-pill:hover {
+  background: var(--cf-bg-ghost-hover);
+  border-color: rgba(99,102,241,0.4);
+  color: var(--cf-text-primary);
+}
+.cta-error {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #f87171;
+}
 </style>

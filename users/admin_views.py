@@ -452,6 +452,131 @@ def client_sessions(request, client_id):
     return Response(data)
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def suggest_cta(request, client_id):
+    """
+    Generate 3 short CTA message suggestions based on:
+      - The client's actual products/content (DocumentChunks)
+      - Aggregate visitor behavior signals from recent sessions
+      - Sample high-intent conversations (what worked)
+
+    Returns: { suggestions: [str, str, str] }
+    """
+    from scraper.models import DocumentChunk
+    from chat.ai_service import _build_llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    # 1. Top product titles from the knowledge base
+    titles = []
+    seen_titles = set()
+    for chunk in DocumentChunk.objects.filter(client=client).order_by('id')[:50]:
+        meta = chunk.metadata or {}
+        t = (meta.get('title') or '').strip()
+        if t and t not in seen_titles:
+            seen_titles.add(t)
+            titles.append(t)
+        if len(titles) >= 8:
+            break
+
+    # 2. Aggregate behavior signals from the last 30 days
+    since = timezone.now() - timedelta(days=30)
+    sessions = ChatSession.objects.filter(client=client, updated_at__gte=since)
+
+    total_atc = 0
+    total_pricing = 0
+    total_checkout = 0
+    total_form_focused = 0
+    total_high_intent = 0
+    for s in sessions:
+        ctx = s.behavioral_context or {}
+        total_atc += ctx.get('add_to_cart_clicks', 0) or 0
+        total_pricing += ctx.get('pricing_page_visits', 0) or 0
+        total_checkout += ctx.get('checkout_visits', 0) or 0
+        if ctx.get('form_focused'):
+            total_form_focused += 1
+        if s.current_intent_ema > 0.5:
+            total_high_intent += 1
+
+    session_total = sessions.count() or 1
+    intent_rate = round(total_high_intent / session_total * 100, 1)
+
+    # 3. Sample 3 high-intent chats to capture audience vibe
+    hot = sessions.filter(current_intent_ema__gt=0.5).order_by('-current_intent_ema')[:3]
+    sample_msgs = []
+    for s in hot:
+        for msg in (s.chat_history or [])[:4]:
+            if msg.get('role') == 'user' and msg.get('message'):
+                sample_msgs.append(msg['message'][:120])
+                if len(sample_msgs) >= 6:
+                    break
+        if len(sample_msgs) >= 6:
+            break
+
+    # 4. Build the LLM prompt
+    products_str = ', '.join(titles[:8]) if titles else '(no scraped content)'
+    behavior_str = (
+        f"Add-to-cart events: {total_atc}, Pricing visits: {total_pricing}, "
+        f"Checkout visits: {total_checkout}, Forms started: {total_form_focused}, "
+        f"High-intent rate: {intent_rate}% of visitors"
+    )
+    sample_str = '; '.join(f'"{m}"' for m in sample_msgs[:5]) if sample_msgs else '(no sample chats)'
+
+    system = (
+        "You write very short, punchy CTA messages for a chat widget that fires when a visitor "
+        "shows hesitation (e.g. lingering on pricing). Max 90 characters per CTA. "
+        "Friendly, not pushy. Avoid clichés like 'Don't miss out!'. "
+        "Return ONLY a JSON object with key 'suggestions' as a list of exactly 3 strings."
+    )
+    user = (
+        f"Website: {client.domain_url or client.name}\n"
+        f"Top products/content: {products_str}\n"
+        f"Visitor signals (last 30 days): {behavior_str}\n"
+        f"Sample messages high-intent visitors typed: {sample_str}\n\n"
+        f"Generate 3 short CTAs that would help convert hesitant visitors on THIS site. "
+        f"Each should be different in tone (helpful, urgent, value-led). "
+        f"Return as: {{\"suggestions\": [\"...\", \"...\", \"...\"]}}"
+    )
+
+    try:
+        llm, _ = _build_llm(client)
+        result = llm.invoke([SystemMessage(content=system), HumanMessage(content=user)])
+        text = result.content if hasattr(result, 'content') else str(result)
+        # Extract JSON object even if model wraps it in prose
+        import re, json as _json
+        match = re.search(r'\{[^{}]*"suggestions"[^{}]*\}', text, re.DOTALL)
+        if match:
+            data = _json.loads(match.group(0))
+            suggestions = data.get('suggestions') or []
+        else:
+            suggestions = []
+        # Validate
+        suggestions = [str(s).strip() for s in suggestions if s and len(str(s)) < 150][:3]
+    except Exception as e:
+        logger.warning(f'[suggest_cta] LLM failed: {e}')
+        # Fallback so the UI never sees an empty response
+        suggestions = [
+            "Need help deciding? I'm here to answer any questions.",
+            "Have a quick question? I can help you find what's right for you.",
+            "Looking for something specific? Just ask — I'll point you the right way.",
+        ]
+
+    if not suggestions:
+        suggestions = [
+            "Need help deciding? I'm here to answer any questions.",
+            "Have a quick question? I can help you find what's right for you.",
+            "Looking for something specific? Just ask — I'll point you the right way.",
+        ]
+
+    return Response({'suggestions': suggestions})
+
+
 @api_view(['GET', 'PATCH'])
 @permission_classes([IsAuthenticated])
 def session_detail(request, session_id):
