@@ -61,8 +61,11 @@
           :class="{ active: selectedId === s.session_id }"
           @click="select(s)"
         >
-          <div class="session-avatar" :style="{ background: heatColor(s.heat_score) }">
-            {{ initials(s) }}
+          <div class="session-avatar-wrap">
+            <div class="session-avatar" :style="{ background: heatColor(s.heat_score) }">
+              {{ initials(s) }}
+            </div>
+            <span class="presence-dot" :class="presenceClass(s)" :title="presenceLabel(s)"></span>
           </div>
           <div class="session-meta">
             <div class="session-top-row">
@@ -597,6 +600,22 @@ function channelLabel(channel) {
   return 'Web'
 }
 
+function presenceClass(s) {
+  if (!s.updated_at) return 'presence-offline'
+  const diffMin = (Date.now() - new Date(s.updated_at).getTime()) / 60000
+  if (diffMin < 5) return 'presence-online'
+  if (diffMin < 30) return 'presence-away'
+  return 'presence-offline'
+}
+
+function presenceLabel(s) {
+  if (!s.updated_at) return 'Offline'
+  const diffMin = (Date.now() - new Date(s.updated_at).getTime()) / 60000
+  if (diffMin < 5) return 'Online now'
+  if (diffMin < 30) return 'Away'
+  return 'Offline'
+}
+
 function emaPercent(val) {
   return Math.round((val || 0) * 100)
 }
@@ -851,11 +870,25 @@ watch(selected, (s) => {
 .session-row:hover { background: var(--cf-bg-surface); }
 .session-row.active { background: rgba(99,102,241,0.08); }
 
+.session-avatar-wrap {
+  position: relative; flex-shrink: 0; width: 34px; height: 34px;
+}
+
 .session-avatar {
   width: 34px; height: 34px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: white; flex-shrink: 0;
+  font-size: 12px; font-weight: 700; color: white;
 }
+
+.presence-dot {
+  position: absolute; bottom: 0; right: 0;
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 2px solid var(--cf-bg-page);
+  transition: background 0.3s;
+}
+.presence-online  { background: #22c55e; }
+.presence-away    { background: #f59e0b; }
+.presence-offline { background: #475569; }
 
 .session-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .session-top-row { display: flex; justify-content: space-between; align-items: baseline; }
