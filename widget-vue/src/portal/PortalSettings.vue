@@ -31,7 +31,7 @@
         <div class="embed-box">
           <h3 class="embed-title">Choose how to add the widget code</h3>
           <div class="live-update-banner">
-            ⚡ <strong>Paste once.</strong> Change branding, colors, or CTA from this panel anytime — your widget updates automatically within 60 seconds. No re-paste needed.
+            ⚡ <strong>Paste once.</strong> Change color, name, theme, or CTA from this panel anytime — the widget on your site picks up changes on the next page load and re-checks every 60 seconds. <strong>No re-paste ever needed</strong> for branding changes.
           </div>
 
           <!-- Format tabs -->
