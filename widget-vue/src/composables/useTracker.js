@@ -77,6 +77,7 @@ export function useTracker() {
     let startTime = Date.now();
     let timeInterval = null;
     let nudgeTimeout = null;
+    let nudgeFired = false;
     let onNudgeTriggered = () => { };
 
     const setNudgeCallback = (cb) => { onNudgeTriggered = cb; };
@@ -198,7 +199,9 @@ export function useTracker() {
 
     // ── Nudge evaluation ──────────────────────────────────────────────────────
     const evaluateAndTriggerNudge = () => {
+        if (nudgeFired) return;
         if (behaviorMatrix.timeOnSite >= 30 || behaviorMatrix.scrollDepth >= 50) {
+            nudgeFired = true;
             behaviorMatrix.intentLevel = 'High-Intent Lead';
             onNudgeTriggered();
         }

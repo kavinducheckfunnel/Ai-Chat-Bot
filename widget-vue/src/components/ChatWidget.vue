@@ -226,10 +226,8 @@ const leadEmail      = ref('')
 const leadPhone      = ref('')
 const leadSubmitting = ref(false)
 const LEAD_KEY = `cf_lead_captured_${clientId || 'default'}`
-// submitted → localStorage (permanent). dismissed → sessionStorage (per page load only).
-const leadCaptured   = ref(
-  !!localStorage.getItem(LEAD_KEY) || !!sessionStorage.getItem(LEAD_KEY)
-)
+// submitted → localStorage (permanent); dismissed → in-memory only (resets on refresh)
+const leadCaptured   = ref(!!localStorage.getItem(LEAD_KEY))
 
 // ── WebSocket ─────────────────────────────────────────────────────────────────
 let socket = null
@@ -272,8 +270,11 @@ function connectWebSocket() {
         speakText(data.message)
         playChime()
         // Auto-open widget for server-side idle nudges so the visitor sees the message
-        if (data.source === 'afk_nudge' && !isOpen.value) {
+        if ((data.source === 'afk_nudge' || data.source === 'fomo') && !isOpen.value) {
           isOpen.value = true
+          nextTick(() => {
+            if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+          })
         }
         if (!leadCaptured.value && userMessageCount.value >= 2) {
           setTimeout(() => { showLeadForm.value = true }, 1500)
@@ -449,7 +450,7 @@ function react(index, emoji) {
 function dismissLeadForm() {
   showLeadForm.value = false
   leadCaptured.value = true
-  sessionStorage.setItem(LEAD_KEY, '1')  // only this session — shows again on next page load
+  // no storage write — next page refresh resets this so the form can show again
 }
 
 async function submitLead() {
