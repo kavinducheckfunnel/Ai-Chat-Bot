@@ -1,5 +1,5 @@
 <template>
-  <div id="cf-chat-container">
+  <div id="cf-chat-container" ref="widgetRoot">
     <!-- ── Chat Window ─────────────────────────────────────────────────── -->
     <div id="cf-chat-window" v-show="isOpen">
       <!-- Header -->
@@ -186,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, watchEffect, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useTracker } from '../composables/useTracker'
 import { marked } from 'marked'
 
@@ -209,7 +209,8 @@ const clientId    = window.__CF_CLIENT_ID__ || null
 const isOpen      = ref(false)
 const isTyping    = ref(false)
 const inputValue  = ref('')
-const branding    = ref({ chatbot_name: 'AI Assistant', chatbot_color: '#6366f1', chatbot_logo_url: null, voice_input_enabled: false, image_input_enabled: false })
+const widgetRoot  = ref(null)
+const branding    = ref({ chatbot_name: 'AI Assistant', chatbot_color: '#6366f1', chatbot_theme: 'dark', chatbot_logo_url: null, voice_input_enabled: false, image_input_enabled: false })
 const chatMessages = ref([
   { type: 'text', text: "Hi! 👋 I'm your AI Assistant. How can I help you today?", sender: 'ai' },
 ])
@@ -509,6 +510,14 @@ async function loadBranding() {
     window.__CF_BRANDING__ = cfg
   } catch {}
 }
+
+// Apply chatbot_theme (dark|light) as data-cf-theme on the widget root so CSS
+// overrides can scope their selectors without touching the host page's <html>.
+watchEffect(() => {
+  if (widgetRoot.value) {
+    widgetRoot.value.setAttribute('data-cf-theme', branding.value.chatbot_theme || 'dark')
+  }
+})
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 let _brandingInterval = null
@@ -859,6 +868,136 @@ onBeforeUnmount(() => {
 }
 .cf-lead-submit:hover:not(:disabled) { opacity: 0.88; }
 .cf-lead-submit:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Light theme overrides ──────────────────────────────────────── */
+/* Scoped to [data-cf-theme="light"] on #cf-chat-container so the host
+   page's global theme is never affected. */
+#cf-chat-container[data-cf-theme="light"] #cf-pill-bar {
+  background: rgba(255,255,255,0.97) !important;
+  border-color: rgba(0,0,0,0.1) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.07) !important;
+}
+#cf-chat-container[data-cf-theme="light"] .pill-text {
+  color: rgba(0,0,0,0.55) !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-chat-window {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.08) !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-chat-header {
+  background: #f8fafc !important;
+  border-bottom-color: #e2e8f0 !important;
+}
+#cf-chat-container[data-cf-theme="light"] .header-name {
+  color: #0f172a !important;
+}
+#cf-chat-container[data-cf-theme="light"] .header-status {
+  color: #64748b !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-close-btn {
+  background: rgba(0,0,0,0.05) !important;
+  color: #64748b !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-close-btn:hover {
+  background: rgba(0,0,0,0.1) !important;
+  color: #0f172a !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-chat-messages {
+  background: #f8fafc !important;
+  scrollbar-color: rgba(0,0,0,0.15) transparent !important;
+}
+#cf-chat-container[data-cf-theme="light"] .cf-msg-ai {
+  background: #ffffff !important;
+  color: #1e293b !important;
+  border-color: #e2e8f0 !important;
+}
+#cf-chat-container[data-cf-theme="light"] .markdown-body { color: #1e293b !important; }
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(p),
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(ol),
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(ul),
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(li) { color: #1e293b !important; }
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(strong) { color: #0f172a !important; }
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(em) { color: #475569 !important; }
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(a) { color: #6366f1 !important; }
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(code) {
+  background: rgba(0,0,0,0.06) !important; color: #6366f1 !important;
+}
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(pre) {
+  background: rgba(0,0,0,0.04) !important;
+}
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(h1),
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(h2),
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(h3) { color: #0f172a !important; }
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(blockquote) { color: #475569 !important; }
+#cf-chat-container[data-cf-theme="light"] .markdown-body :deep(hr) {
+  border-top-color: #e2e8f0 !important;
+}
+#cf-chat-container[data-cf-theme="light"] .reaction-btn {
+  background: rgba(0,0,0,0.04) !important;
+  border-color: rgba(0,0,0,0.08) !important;
+  color: rgba(0,0,0,0.4) !important;
+}
+#cf-chat-container[data-cf-theme="light"] .reaction-btn:hover {
+  background: rgba(0,0,0,0.08) !important;
+  color: rgba(0,0,0,0.7) !important;
+}
+#cf-chat-container[data-cf-theme="light"] .typing-indicator span {
+  background: #94a3b8 !important;
+}
+#cf-chat-container[data-cf-theme="light"] .image-preview-bar {
+  background: #f8fafc !important;
+}
+#cf-chat-container[data-cf-theme="light"] .preview-thumb {
+  border-color: #e2e8f0 !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-chat-input-area {
+  background: #ffffff !important;
+  border-top-color: #e2e8f0 !important;
+}
+#cf-chat-container[data-cf-theme="light"] .media-btn {
+  background: rgba(0,0,0,0.04) !important;
+  border-color: rgba(0,0,0,0.08) !important;
+  color: #64748b !important;
+}
+#cf-chat-container[data-cf-theme="light"] .media-btn:hover {
+  background: rgba(0,0,0,0.08) !important;
+  color: #334155 !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-chat-input {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-chat-input:focus {
+  border-color: rgba(99,102,241,0.5) !important;
+  background: #ffffff !important;
+}
+#cf-chat-container[data-cf-theme="light"] #cf-chat-input::placeholder {
+  color: rgba(0,0,0,0.3) !important;
+}
+#cf-chat-container[data-cf-theme="light"] .powered-by {
+  background: #ffffff !important;
+  color: rgba(0,0,0,0.3) !important;
+}
+#cf-chat-container[data-cf-theme="light"] .powered-by a {
+  color: rgba(0,0,0,0.35) !important;
+}
+#cf-chat-container[data-cf-theme="light"] .cf-lead-modal {
+  background: #ffffff !important;
+  border-color: #e2e8f0 !important;
+}
+#cf-chat-container[data-cf-theme="light"] .cf-lead-title { color: #0f172a !important; }
+#cf-chat-container[data-cf-theme="light"] .cf-lead-sub { color: #475569 !important; }
+#cf-chat-container[data-cf-theme="light"] .cf-lead-close { color: #64748b !important; }
+#cf-chat-container[data-cf-theme="light"] .cf-lead-input {
+  background: #f8fafc !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+#cf-chat-container[data-cf-theme="light"] .cf-lead-input::placeholder {
+  color: rgba(0,0,0,0.3) !important;
+}
 
 /* ── Mobile responsive ──────────────────────────────────────────── */
 @media (max-width: 480px) {

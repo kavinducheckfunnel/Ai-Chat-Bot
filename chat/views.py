@@ -75,6 +75,7 @@ def widget_config(request, client_id):
         return Response({
             'chatbot_name': 'AI Assistant',
             'chatbot_color': '#3B82F6',
+            'chatbot_theme': 'dark',
             'chatbot_logo_url': None,
             'cta_message': "You're clearly ready — grab your exclusive discount:",
             'fomo_offer_text': None,
@@ -85,6 +86,7 @@ def widget_config(request, client_id):
     return Response({
         'chatbot_name': client.chatbot_name,
         'chatbot_color': client.chatbot_color,
+        'chatbot_theme': client.chatbot_theme,
         'chatbot_logo_url': client.chatbot_logo_url,
         'cta_message': client.cta_message,
         'fomo_offer_text': client.fomo_offer_text,

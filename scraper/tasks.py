@@ -1,5 +1,6 @@
 import time
 import logging
+from django.db import models
 from celery import shared_task
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ def scrape_client_website(self, client_id):
       2. Shopify products API (if platform == SHOPIFY)
       3. Generic HTML crawl + Playwright SPA fallback (CUSTOM / fallback)
     """
+    from django.utils import timezone
     from users.models import Client
     from scraper.ingestion import auto_scrape, ingest_documents
 
@@ -147,7 +149,8 @@ def scrape_client_website(self, client_id):
 
         client.ingestion_status = 'DONE'
         client.total_pages_ingested = count
-        client.save(update_fields=['ingestion_status', 'total_pages_ingested'])
+        client.last_scraped_at = timezone.now()
+        client.save(update_fields=['ingestion_status', 'total_pages_ingested', 'last_scraped_at'])
         logger.info(f'[scrape_client_website] Done — {count} chunks for "{client.name}"')
 
     except Exception as exc:
@@ -155,3 +158,38 @@ def scrape_client_website(self, client_id):
         client.ingestion_status = 'FAILED'
         client.save(update_fields=['ingestion_status'])
         raise self.retry(exc=exc, countdown=60)
+
+
+@shared_task
+def auto_rescrape_stale_clients():
+    """
+    Periodic task — runs every 3 hours via Celery Beat.
+    Finds every active client whose knowledge base is stale (last scraped
+    more than 3 hours ago, or never scraped) and queues a fresh scrape.
+    Skips clients currently being scraped (RUNNING) to avoid overlap.
+    """
+    from django.utils import timezone
+    from datetime import timedelta
+    from users.models import Client
+
+    threshold = timezone.now() - timedelta(hours=3)
+
+    stale_clients = Client.objects.filter(
+        is_active=True,
+        domain_url__isnull=False,
+    ).exclude(
+        ingestion_status='RUNNING',
+    ).filter(
+        # Never scraped, or last scrape was more than 3 hours ago
+        models.Q(last_scraped_at__isnull=True) | models.Q(last_scraped_at__lt=threshold)
+    )
+
+    count = stale_clients.count()
+    if count == 0:
+        logger.info('[auto_rescrape] All clients are up to date, nothing to scrape.')
+        return
+
+    logger.info(f'[auto_rescrape] Queuing rescrape for {count} stale client(s).')
+    for client in stale_clients:
+        scrape_client_website.delay(str(client.id))
+        logger.info(f'[auto_rescrape] Queued: {client.name} (last scraped: {client.last_scraped_at})')

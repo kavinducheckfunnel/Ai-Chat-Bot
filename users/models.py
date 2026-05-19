@@ -127,6 +127,7 @@ class Client(models.Model):
     # Ingestion tracking
     ingestion_status = models.CharField(max_length=20, choices=INGESTION_CHOICES, default='PENDING')
     total_pages_ingested = models.IntegerField(default=0)
+    last_scraped_at = models.DateTimeField(null=True, blank=True)
 
     # ── BYOK — Bring Your Own Key ─────────────────────────────────────────────
     PROVIDER_CHOICES = [

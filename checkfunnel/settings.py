@@ -231,6 +231,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'chat.tasks.archive_long_sessions',
         'schedule': crontab(hour='3', minute='0'),
     },
+    # Auto-rescrape stale client knowledge bases every 3 hours
+    'auto-rescrape-stale-clients': {
+        'task': 'scraper.tasks.auto_rescrape_stale_clients',
+        'schedule': crontab(minute='0', hour='*/3'),
+    },
 }
 
 # ─── Email (SMTP) ─────────────────────────────────────────────────────────────

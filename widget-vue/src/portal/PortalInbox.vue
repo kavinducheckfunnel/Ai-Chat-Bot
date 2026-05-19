@@ -241,6 +241,55 @@
           </div>
         </div>
 
+        <!-- Behavioral Scores (3-EMA) -->
+        <div class="vp-section">
+          <div class="vp-section-title">Behavioral Scores</div>
+          <div class="ema-scores">
+            <div class="ema-row">
+              <div class="ema-header">
+                <span class="ema-label">Intent</span>
+                <span class="ema-value" :class="trendClass(selected.intent_trend)">
+                  {{ emaPercent(selected.intent_ema) }}%
+                  <span class="ema-trend-icon">{{ trendIcon(selected.intent_trend) }}</span>
+                </span>
+              </div>
+              <div class="ema-track">
+                <div class="ema-fill intent-fill" :style="{ width: emaPercent(selected.intent_ema) + '%' }"></div>
+              </div>
+            </div>
+            <div class="ema-row">
+              <div class="ema-header">
+                <span class="ema-label">Budget</span>
+                <span class="ema-value" :class="trendClass(selected.budget_trend)">
+                  {{ emaPercent(selected.budget_ema) }}%
+                  <span class="ema-trend-icon">{{ trendIcon(selected.budget_trend) }}</span>
+                </span>
+              </div>
+              <div class="ema-track">
+                <div class="ema-fill budget-fill" :style="{ width: emaPercent(selected.budget_ema) + '%' }"></div>
+              </div>
+            </div>
+            <div class="ema-row">
+              <div class="ema-header">
+                <span class="ema-label">Urgency</span>
+                <span class="ema-value" :class="trendClass(selected.urgency_trend)">
+                  {{ emaPercent(selected.urgency_ema) }}%
+                  <span class="ema-trend-icon">{{ trendIcon(selected.urgency_trend) }}</span>
+                </span>
+              </div>
+              <div class="ema-track">
+                <div class="ema-fill urgency-fill" :style="{ width: emaPercent(selected.urgency_ema) + '%' }"></div>
+              </div>
+            </div>
+            <div class="heat-composite">
+              <span class="ema-label">Overall heat</span>
+              <span class="heat-chip" :style="{ background: heatColor(selected.heat_score) }">
+                {{ Math.round(selected.heat_score || 0) }}%
+              </span>
+            </div>
+          </div>
+        </div>
+
         <!-- Chat tags -->
         <div class="vp-section">
           <div class="vp-section-title">Labels</div>
@@ -546,6 +595,22 @@ function channelLabel(channel) {
   if (channel === 'whatsapp') return 'WhatsApp'
   if (channel === 'messenger') return 'Messenger'
   return 'Web'
+}
+
+function emaPercent(val) {
+  return Math.round((val || 0) * 100)
+}
+
+function trendIcon(trend) {
+  if (trend === 'UP') return '↑'
+  if (trend === 'DOWN') return '↓'
+  return '→'
+}
+
+function trendClass(trend) {
+  if (trend === 'UP') return 'trend-up'
+  if (trend === 'DOWN') return 'trend-down'
+  return 'trend-flat'
 }
 
 function countryFlag(code) {
@@ -1176,4 +1241,53 @@ watch(selected, (s) => {
 .tag-add-btn:hover:not(:disabled) { background: rgba(99,102,241,0.2); }
 .tag-add-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .tag-error { font-size: 11px; color: #fca5a5; margin-top: 4px; }
+
+/* ── EMA Behavioral Score Bars ──────────────────────────────────── */
+.ema-scores { display: flex; flex-direction: column; gap: 10px; }
+
+.ema-row { display: flex; flex-direction: column; gap: 4px; }
+
+.ema-header {
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.ema-label {
+  font-size: 11px; color: var(--cf-text-muted); font-weight: 500;
+}
+
+.ema-value {
+  font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 3px;
+}
+
+.trend-up    { color: #4ade80; }
+.trend-down  { color: #f87171; }
+.trend-flat  { color: var(--cf-text-muted); }
+
+.ema-trend-icon { font-size: 10px; }
+
+.ema-track {
+  height: 5px; border-radius: 3px;
+  background: var(--cf-border-subtle); overflow: hidden;
+}
+
+.ema-fill {
+  height: 100%; border-radius: 3px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 2px;
+}
+
+.intent-fill  { background: linear-gradient(90deg, #6366f1, #818cf8); }
+.budget-fill  { background: linear-gradient(90deg, #22c55e, #4ade80); }
+.urgency-fill { background: linear-gradient(90deg, #f59e0b, #fcd34d); }
+
+.heat-composite {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 4px; padding-top: 8px;
+  border-top: 1px solid var(--cf-border-subtle);
+}
+
+.heat-chip {
+  font-size: 11px; font-weight: 700; color: white;
+  padding: 2px 8px; border-radius: 8px;
+}
 </style>
