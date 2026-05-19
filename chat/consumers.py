@@ -85,6 +85,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if behavior_matrix:
             await self.save_behavior_matrix(session.session_id, behavior_matrix)
 
+        # CRITICAL: reload session from DB so generate_ai_response sees the
+        # fresh page_visits + behavioral_context. Without this, the AI runs
+        # with the stale session loaded BEFORE the writes above and the
+        # personalized "Hey, saw you were looking at X" greeting never fires.
+        refreshed = await self._refresh_session(session.session_id)
+        if refreshed:
+            session = refreshed
+
         # Generate AI response (pass image_data for vision if present)
         ai_response = await database_sync_to_async(generate_ai_response)(
             session, message, behavior_matrix, image_data=image_data
@@ -193,10 +201,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ).update(visitor_ip=ip)
 
     @database_sync_to_async
+    def _refresh_session(self, session_id):
+        """Reload session from DB so in-memory copy reflects writes from
+        save_page_visits / save_behavior_matrix / save_visitor_meta. Without
+        this, generate_ai_response() reads stale fields and personalization
+        can't fire even when the data has been persisted."""
+        return ChatSession.objects.filter(session_id=session_id).select_related('client').first()
+
+    @database_sync_to_async
     def save_visitor_meta(self, data):
-        """Save visitor fingerprint fields — only fill nulls, never overwrite."""
-        update = {}
-        field_map = {
+        """
+        Save visitor fingerprint + accumulated page_visits.
+
+        Identity fields (country, device, OS, browser, etc.) only fill when
+        null — they don't change for a visitor mid-session.
+
+        page_visits must ALWAYS overwrite to the latest snapshot, because
+        the widget accumulates pages across navigations and resends the full
+        list on every WebSocket open. Without this, the AI only ever sees
+        page_visits from the very first save and misses everything after.
+        """
+        identity_update = {}
+        identity_map = {
             'country': 'visitor_country',
             'city': 'visitor_city',
             'country_code': 'visitor_country_code',
@@ -206,21 +232,24 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'referrer': 'visitor_referrer',
             'timezone': 'visitor_timezone',
         }
-        for key, field in field_map.items():
+        for key, field in identity_map.items():
             val = data.get(key)
             if val:
-                update[field] = val
+                identity_update[field] = val
 
-        page_visits = data.get('page_visits', [])
-        if page_visits:
-            update['page_visits'] = page_visits
-
-        if update:
-            # Only update sessions where the fields are still null (first time)
+        # Identity: only fill nulls (first save)
+        if identity_update:
             ChatSession.objects.filter(
                 session_id=self.session_id,
                 visitor_country__isnull=True,
-            ).update(**update)
+            ).update(**identity_update)
+
+        # page_visits: always overwrite with latest accumulated snapshot
+        page_visits = data.get('page_visits') or []
+        if page_visits:
+            ChatSession.objects.filter(session_id=self.session_id).update(
+                page_visits=page_visits
+            )
 
     @database_sync_to_async
     def save_page_visits(self, session_id, page_visits):
@@ -229,20 +258,33 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_behavior_matrix(self, session_id, behavior_matrix):
-        """Persist latest behavioral signals so the admin dashboard can surface them."""
+        """
+        Persist the FULL behavioral signal set + nudge EMA scores.
+
+        Delegates to analytics.views._apply_behavior so the consumer path
+        uses the same rich pipeline as the beacon endpoint. Previously this
+        only saved 5 fields and ignored: click_count, cta_clicks, rage_clicks,
+        add_to_cart_clicks, form_focused, copy_events, price_views, etc. —
+        all of which feed the hot-signals UI and EMA scoring.
+        """
         if not behavior_matrix:
             return
         session = ChatSession.objects.filter(session_id=session_id).first()
         if not session:
             return
-        ctx = session.behavioral_context or {}
-        ctx['pages_viewed']          = len(behavior_matrix.get('pagesViewed', []))
-        ctx['pricing_page_visits']   = behavior_matrix.get('pricingPageVisits', 0)
-        ctx['exit_intent_triggered'] = behavior_matrix.get('exitIntentFired', False)
-        ctx['scroll_depth']          = behavior_matrix.get('scrollDepth', 0)
-        ctx['time_on_site']          = behavior_matrix.get('timeOnSite', 0)
-        session.behavioral_context = ctx
-        session.save(update_fields=['behavioral_context'])
+        try:
+            from analytics.views import _apply_behavior
+            _apply_behavior(session, behavior_matrix)
+        except Exception:
+            # Fall back to the legacy minimal save so the chat never blocks
+            ctx = session.behavioral_context or {}
+            ctx['pages_viewed']          = len(behavior_matrix.get('pagesViewed', []))
+            ctx['pricing_page_visits']   = behavior_matrix.get('pricingPageVisits', 0)
+            ctx['exit_intent_triggered'] = behavior_matrix.get('exitIntentFired', False)
+            ctx['scroll_depth']          = behavior_matrix.get('scrollDepth', 0)
+            ctx['time_on_site']          = behavior_matrix.get('timeOnSite', 0)
+            session.behavioral_context = ctx
+            session.save(update_fields=['behavioral_context'])
 
     @database_sync_to_async
     def get_session(self, client_id, session_id):
