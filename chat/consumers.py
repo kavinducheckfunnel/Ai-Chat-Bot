@@ -126,6 +126,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
             ) * 100
             s.heat_score = round(min(score, 100), 1)
             s.save(update_fields=['heat_score'])
+
+            # Update Visitor's latest known EMA + carry lead info up.
+            # Lifetime totals are computed at query time via Sum() across the
+            # visitor's sessions — keeps writes cheap and avoids drift.
+            if s.visitor_id:
+                from .models import Visitor
+                v_update = {
+                    'intent_ema': s.current_intent_ema,
+                    'budget_ema': s.current_budget_ema,
+                    'urgency_ema': s.current_urgency_ema,
+                }
+                if s.lead_email:
+                    v_update['lead_email'] = s.lead_email
+                if s.lead_phone:
+                    v_update['lead_phone'] = s.lead_phone
+                Visitor.objects.filter(pk=s.visitor_id).update(**v_update)
             return s
         except ChatSession.DoesNotExist:
             return None
@@ -250,6 +266,37 @@ class ChatConsumer(AsyncWebsocketConsumer):
             ChatSession.objects.filter(session_id=self.session_id).update(
                 page_visits=page_visits
             )
+
+        # Upsert the persistent Visitor record (one human = one Visitor across
+        # multiple sessions). visitor_uid comes from localStorage in the widget.
+        visitor_uid = (data.get('visitor_uid') or '').strip()[:64]
+        if visitor_uid:
+            from .models import Visitor
+            session = ChatSession.objects.filter(session_id=self.session_id).select_related('client').first()
+            if session and session.client_id:
+                visitor, created = Visitor.objects.get_or_create(
+                    visitor_uid=visitor_uid,
+                    client_id=session.client_id,
+                    defaults={
+                        'device': data.get('device') or '',
+                        'os': data.get('os') or '',
+                        'browser': data.get('browser') or '',
+                        'country': data.get('country') or '',
+                        'city': data.get('city') or '',
+                        'country_code': data.get('country_code') or '',
+                        'timezone': data.get('timezone') or '',
+                        'ip': data.get('ip') or '',
+                    },
+                )
+                # Link session to visitor + bump session counter on creation
+                if session.visitor_id != visitor.id:
+                    session.visitor = visitor
+                    session.save(update_fields=['visitor'])
+                if not session.visitor_id or created:
+                    # Increment lifetime session count once per session
+                    Visitor.objects.filter(pk=visitor.pk).update(
+                        total_sessions=models.F('total_sessions') + 1,
+                    )
 
     @database_sync_to_async
     def save_page_visits(self, session_id, page_visits):

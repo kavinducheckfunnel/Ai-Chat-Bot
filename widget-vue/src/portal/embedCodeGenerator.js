@@ -313,12 +313,18 @@ export function generateEmbedCode(id, url, color, botName, format) {
 (function(){
 var C='${id}',B='${backend}';
 
-// ── Session persistence ──────────────────────────────────────────────
-// Client-scoped key so swapping the embed code from one client to another
-// (e.g. during testing) never reuses a session bound to the previous tenant.
+// ── Identity persistence ─────────────────────────────────────────────
+// session_id (sid) lives in sessionStorage  → one per tab visit
+// visitor_uid (vid) lives in localStorage   → one per browser across days
+// Both are client-scoped so the same browser visiting different tenants
+// never gets merged into one visitor record.
+function newUuid(){return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c=='x'?r:(r&3|8)).toString(16)})}
 var SK='__cf_sid_'+C;
+var VK='__cf_vid_'+C;
 var sid=sessionStorage.getItem(SK);
-if(!sid){sid='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c=='x'?r:(r&3|8)).toString(16)});sessionStorage.setItem(SK,sid)}
+if(!sid){sid=newUuid();sessionStorage.setItem(SK,sid)}
+var vid=localStorage.getItem(VK);
+if(!vid){vid=newUuid();localStorage.setItem(VK,vid)}
 
 var ws=null,busy=false,recording=false,pendingImg=null,recognition=null;
 var msgCount=0,liveCtaMsg=null;
@@ -428,7 +434,7 @@ var sentVisitorMeta=false;
 function sendVisitorMeta(){
   if(sentVisitorMeta||!ws||ws.readyState!==1)return;
   sentVisitorMeta=true;
-  var payload={type:'visitor_meta',page_visits:buildPageVisits()};
+  var payload={type:'visitor_meta',visitor_uid:vid,page_visits:buildPageVisits()};
   for(var k in visitorMeta)payload[k]=visitorMeta[k];
   ws.send(JSON.stringify(payload));
 }

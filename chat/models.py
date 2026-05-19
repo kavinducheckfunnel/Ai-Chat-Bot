@@ -4,6 +4,65 @@ from django.contrib.auth.models import User
 from users.models import Client
 
 
+class Visitor(models.Model):
+    """
+    One real-world person across multiple sessions.
+
+    The widget generates a UUID and stores it in localStorage (cf_visitor_<client_id>)
+    so the same browser maps to the same Visitor across days/sessions. Each Visitor
+    aggregates lifetime stats (sessions, messages, page views, clicks) and the most
+    recent EMA scores so the AI / dashboard can reason about returning visitors.
+    """
+    visitor_uid = models.CharField(max_length=64, db_index=True)
+    client      = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='visitors', db_index=True)
+    first_seen  = models.DateTimeField(auto_now_add=True)
+    last_seen   = models.DateTimeField(auto_now=True)
+
+    # Aggregate stats across all sessions
+    total_sessions      = models.IntegerField(default=0)
+    total_messages      = models.IntegerField(default=0)
+    total_page_views    = models.IntegerField(default=0)
+    total_time_seconds  = models.IntegerField(default=0)
+    total_clicks        = models.IntegerField(default=0)
+    total_atc_clicks    = models.IntegerField(default=0)
+
+    # Latest known EMA scores (carried over from the most recent session)
+    intent_ema   = models.FloatField(default=0)
+    budget_ema   = models.FloatField(default=0)
+    urgency_ema  = models.FloatField(default=0)
+
+    # Contact info (filled when a lead is captured in any session)
+    lead_email   = models.EmailField(blank=True)
+    lead_phone   = models.CharField(max_length=50, blank=True)
+    lead_name    = models.CharField(max_length=200, blank=True)
+
+    # Visitor metadata (best-known values)
+    device        = models.CharField(max_length=20, blank=True)
+    os            = models.CharField(max_length=20, blank=True)
+    browser       = models.CharField(max_length=20, blank=True)
+    country       = models.CharField(max_length=100, blank=True)
+    city          = models.CharField(max_length=100, blank=True)
+    country_code  = models.CharField(max_length=10, blank=True)
+    timezone      = models.CharField(max_length=64, blank=True)
+    ip            = models.CharField(max_length=64, blank=True)
+
+    # Top interest (most-dwelled product across all sessions, recomputed periodically)
+    top_interest_title = models.CharField(max_length=300, blank=True)
+    top_interest_url   = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['visitor_uid', 'client'], name='uniq_visitor_per_client'),
+        ]
+        indexes = [
+            models.Index(fields=['client', '-last_seen']),
+        ]
+
+    def __str__(self):
+        label = self.lead_email or self.visitor_uid[:12]
+        return f"Visitor {label} ({self.client.name})"
+
+
 class ChatSession(models.Model):
     TREND_CHOICES = [
         ('UP', 'Up'),
@@ -37,6 +96,9 @@ class ChatSession(models.Model):
     session_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, db_index=True)
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='sessions', null=True, blank=True)
     visitor_id = models.CharField(max_length=255, db_index=True)
+    # FK link to the persistent cross-session Visitor record (set on connect
+    # via the localStorage cf_visitor_<client_id> UUID from the widget).
+    visitor = models.ForeignKey('Visitor', on_delete=models.SET_NULL, null=True, blank=True, related_name='sessions', db_index=True)
 
     current_intent_ema = models.FloatField(default=0.0)
     current_budget_ema = models.FloatField(default=0.0)
