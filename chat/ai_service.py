@@ -237,14 +237,18 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     elif len(query_embedding) > 1024:
         query_embedding = query_embedding[:1024]
 
-    # 2. Similarity search filtered by client
-    chunk_qs = (
-        DocumentChunk.objects.filter(client=session.client)
-        if session.client else DocumentChunk.objects.all()
-    )
-    top_chunks = chunk_qs.annotate(
-        distance=CosineDistance('embedding', query_embedding)
-    ).order_by('distance')[:40]
+    # 2. Similarity search — STRICTLY scoped to the session's client.
+    # Never fall back to .all() — that would leak content across tenants.
+    if session.client_id:
+        chunk_qs = DocumentChunk.objects.filter(client_id=session.client_id)
+        top_chunks = chunk_qs.annotate(
+            distance=CosineDistance('embedding', query_embedding)
+        ).order_by('distance')[:40]
+    else:
+        # No client → no knowledge base. AI will rely solely on the system
+        # persona + conversation history. Log so we can detect mis-routing.
+        logger.warning(f'[ai] session {session.session_id} has no client_id — returning empty chunks')
+        top_chunks = DocumentChunk.objects.none()
 
     # 3. Build prompt — enrich behavior_matrix with human-readable browsing context
     #    so the AI can naturally reference what the visitor was looking at.

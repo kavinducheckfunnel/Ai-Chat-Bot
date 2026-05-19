@@ -314,7 +314,9 @@ export function generateEmbedCode(id, url, color, botName, format) {
 var C='${id}',B='${backend}';
 
 // ── Session persistence ──────────────────────────────────────────────
-var SK='__cf_sid__';
+// Client-scoped key so swapping the embed code from one client to another
+// (e.g. during testing) never reuses a session bound to the previous tenant.
+var SK='__cf_sid_'+C;
 var sid=sessionStorage.getItem(SK);
 if(!sid){sid='xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c=='x'?r:(r&3|8)).toString(16)});sessionStorage.setItem(SK,sid)}
 

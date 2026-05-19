@@ -256,6 +256,35 @@ class ChatConsumer(AsyncWebsocketConsumer):
             session_id=session_id,
             defaults={'client': client}
         )
+
+        # ── Cross-tenant safety: URL is authoritative ─────────────────────────
+        # If the existing session is bound to a DIFFERENT client than the URL,
+        # this is a stale session_id reused under a new embed code (developer
+        # testing, or sessionStorage carry-over from a prior tenant). Rebind
+        # the session to the URL's client and wipe any tenant-specific state
+        # so we never leak chat history / chunks / EMA across tenants.
+        if not created and client and session.client_id != client.id:
+            import logging as _log
+            _log.warning(
+                f'[consumers] session {session_id} tenant mismatch: '
+                f'db={session.client_id} url={client.id} — rebinding to URL client'
+            )
+            session.client = client
+            session.chat_history = []
+            session.page_visits = []
+            session.behavioral_context = {}
+            session.current_intent_ema = 0.0
+            session.current_budget_ema = 0.0
+            session.current_urgency_ema = 0.0
+            session.previous_intent_ema = 0.0
+            session.previous_budget_ema = 0.0
+            session.previous_urgency_ema = 0.0
+            session.message_count = 0
+            session.heat_score = 0.0
+            session.lead_email = ''
+            session.lead_phone = ''
+            session.save()
+
         # Increment monthly counter only on brand-new sessions
         if created and client:
             from users.models import TenantProfile

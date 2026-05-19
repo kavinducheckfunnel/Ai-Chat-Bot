@@ -212,7 +212,28 @@ RECENT CONVERSATION HISTORY
 {json.dumps(recent_history, indent=2)}
 """
 
-    user_prompt = f"User message: {user_message}"
+    # ── Build user prompt with high-salience opening instruction ───────────
+    # If this is the visitor's first message AND they have a clear browsing
+    # interest, inject an inline instruction right next to their message so
+    # the LLM can't ignore it. Rule 9 alone in the system prompt is too easy
+    # for the model to skip on short greetings like "hi".
+    bs = (behavior_matrix or {}).get('browsing_summary') or {}
+    msg_lower = (user_message or '').lower().strip()
+    is_greeting = msg_lower in {'hi', 'hello', 'hey', 'yo', 'sup', 'hii', 'helo', 'howdy'} or \
+                  any(msg_lower.startswith(g) for g in ['hi ', 'hello ', 'hey ', 'good morning', 'good evening', 'good afternoon'])
+
+    if bs.get('is_first_msg') and bs.get('top_interest') and is_greeting:
+        opening_hint = (
+            f"\n\n>>> SYSTEM HINT (MUST FOLLOW): This visitor's FIRST message is a greeting, "
+            f"and they were just looking at \"{bs['top_interest']}\" on the site "
+            f"({bs.get('top_interest_dwell', 0)}s dwell). "
+            f"Your reply MUST acknowledge this in a natural, friendly way — e.g. "
+            f"\"Hey! Saw you were checking out {bs['top_interest']} — anything you want to know?\". "
+            f"Do NOT give a generic greeting. Vary the wording, sound human, do not quote dwell time. <<<"
+        )
+        user_prompt = f"User message: {user_message}{opening_hint}"
+    else:
+        user_prompt = f"User message: {user_message}"
 
     return system_prompt, user_prompt
 
