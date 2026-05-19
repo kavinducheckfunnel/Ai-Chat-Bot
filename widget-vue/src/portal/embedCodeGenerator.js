@@ -165,68 +165,40 @@ export function generateEmbedCode(id, url, color, botName, format) {
   padding: 5px 0 7px; background: var(--cf-bg-elev); }
 #cf-pby a { color: rgba(255,255,255,0.3); text-decoration: none; }
 
-/* ── Lead modal — appears INSIDE chat window, not as full-screen overlay ── */
-#cf-lead-ov { --cf-accent: ${defaultColor};
-  --cf-lead-bg: #1a1f2e; --cf-lead-border: rgba(255,255,255,0.1);
-  --cf-lead-input-bg: #23293a; --cf-lead-input-border: rgba(255,255,255,0.12);
-  --cf-lead-title: #f1f5f9; --cf-lead-sub: #94a3b8; --cf-lead-text: #e2e8f0;
-  --cf-lead-placeholder: rgba(255,255,255,0.35);
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55); z-index: 2147483649;
-  display: none; align-items: center; justify-content: center;
-  padding: 24px; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-#cf-lead-ov.show { display: flex; animation: cf-fdin .2s ease; }
-@keyframes cf-fdin { from { opacity: 0; } to { opacity: 1; } }
-#cf-lead-box { background: var(--cf-lead-bg);
-  border: 1px solid var(--cf-lead-border);
-  border-radius: 20px; padding: 26px 22px 22px; width: 320px; max-width: calc(100vw - 48px);
-  position: relative; box-shadow: 0 20px 60px rgba(0,0,0,0.45);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  animation: cf-leadpop .25s cubic-bezier(.34,1.56,.64,1); }
-@keyframes cf-leadpop { from { opacity: 0; transform: translateY(8px) scale(.96); }
-  to { opacity: 1; transform: translateY(0) scale(1); } }
-#cf-lead-cls { position: absolute; top: 10px; right: 12px;
-  width: 26px; height: 26px; border-radius: 50%;
-  background: rgba(255,255,255,0.06); border: none;
-  font-size: 14px; cursor: pointer; color: #94a3b8; line-height: 1;
+/* ── Inline lead capture — slides up INSIDE the chat panel ─────── */
+#cf-lead { padding: 11px 14px 13px;
+  border-top: 1px solid var(--cf-border-soft);
+  background: var(--cf-bg-elev);
+  display: none; animation: cf-leadslide .28s cubic-bezier(.34,1.56,.64,1); }
+#cf-lead.show { display: block; }
+@keyframes cf-leadslide { from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); } }
+.cf-lead-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.cf-lead-ttl { font-size: 12.5px; font-weight: 600; color: var(--cf-text-strong); letter-spacing: -.1px; }
+#cf-lead-cls { background: transparent; border: none; color: var(--cf-text-muted);
+  cursor: pointer; padding: 0; font-size: 13px; line-height: 1;
   display: flex; align-items: center; justify-content: center;
-  transition: background .15s; }
-#cf-lead-cls:hover { background: rgba(255,255,255,0.12); color: var(--cf-lead-title); }
-.cf-lead-ico { font-size: 32px; text-align: center; margin-bottom: 8px; }
-.cf-lead-ttl { margin: 0 0 4px; font-size: 17px; font-weight: 700;
-  color: var(--cf-lead-title); text-align: center; letter-spacing: -.2px; }
-.cf-lead-sub { margin: 0 0 18px; font-size: 12.5px; color: var(--cf-lead-sub);
-  text-align: center; line-height: 1.5; }
-.cf-lead-inp { width: 100%; padding: 11px 14px; background: var(--cf-lead-input-bg);
-  border: 1px solid var(--cf-lead-input-border); border-radius: 10px;
-  font-size: 13px; color: var(--cf-lead-text); outline: none; box-sizing: border-box;
-  font-family: inherit; display: block; margin: 0 0 9px 0; line-height: 1.4;
+  width: 18px; height: 18px; }
+#cf-lead-cls:hover { color: var(--cf-text-strong); }
+.cf-lead-row { display: flex; gap: 6px; }
+.cf-lead-inp { flex: 1; padding: 8px 11px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 18px; font-size: 12.5px; color: var(--cf-text);
+  outline: none; box-sizing: border-box; font-family: inherit; line-height: 1.3;
   transition: border-color .15s, background .15s; }
-.cf-lead-inp:focus { border-color: var(--cf-accent); }
-.cf-lead-inp::placeholder { color: var(--cf-lead-placeholder); }
-.cf-lead-btn { width: 100%; padding: 11px; background: var(--cf-accent);
-  border: none; border-radius: 10px; font-size: 14px; font-weight: 600;
-  color: #fff; cursor: pointer; font-family: inherit; transition: opacity .15s;
-  margin-top: 4px; display: block; }
+.cf-lead-inp:focus { border-color: var(--cf-accent); background: rgba(255,255,255,0.07); }
+.cf-lead-inp::placeholder { color: rgba(255,255,255,0.30); }
+.cf-lead-btn { background: var(--cf-accent); border: none; border-radius: 18px;
+  padding: 0 14px; font-size: 12px; font-weight: 600; color: #fff;
+  cursor: pointer; font-family: inherit; transition: opacity .15s; white-space: nowrap; }
 .cf-lead-btn:hover:not(:disabled) { opacity: .88; }
 .cf-lead-btn:disabled { opacity: .5; cursor: not-allowed; }
 
-/* Lead modal — LIGHT theme override (matches widget light theme) */
-#cf-w[data-cf-theme="light"] ~ #cf-lead-ov,
-#cf-lead-ov.cf-light {
-  --cf-lead-bg: #ffffff;
-  --cf-lead-border: #e2e8f0;
-  --cf-lead-input-bg: #f8fafc;
-  --cf-lead-input-border: #e2e8f0;
-  --cf-lead-title: #0f172a;
-  --cf-lead-sub: #64748b;
-  --cf-lead-text: #1e293b;
-  --cf-lead-placeholder: #94a3b8;
-}
-#cf-lead-ov.cf-light { background: rgba(15,23,42,0.32); }
-#cf-lead-ov.cf-light #cf-lead-cls { background: #f1f5f9; color: #64748b; }
-#cf-lead-ov.cf-light #cf-lead-cls:hover { background: #e2e8f0; color: #1e293b; }
-#cf-lead-ov.cf-light #cf-lead-box { box-shadow: 0 20px 60px rgba(15,23,42,0.18); }
+/* Inline lead capture — LIGHT theme */
+#cf-w[data-cf-theme="light"] .cf-lead-inp { background: #f8fafc; border-color: #e2e8f0; color: #1e293b; }
+#cf-w[data-cf-theme="light"] .cf-lead-inp::placeholder { color: #94a3b8; }
+#cf-w[data-cf-theme="light"] .cf-lead-inp:focus { background: #ffffff; }
 
 /* ── LIGHT THEME OVERRIDES (applied when data-cf-theme="light" on #cf-w) ── */
 #cf-w[data-cf-theme="light"] {
@@ -264,18 +236,7 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-w[data-cf-theme="light"] .cf-typ span { background: #94a3b8; }
 </style>`
 
-  const html = `<div id="cf-lead-ov">
-  <div id="cf-lead-box">
-    <button id="cf-lead-cls">&#10005;</button>
-    <div class="cf-lead-ico">&#128236;</div>
-    <p class="cf-lead-ttl">Stay in touch</p>
-    <p class="cf-lead-sub">Leave your contact and we'll follow up with a personalised answer.</p>
-    <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="Your email address"/>
-    <input class="cf-lead-inp" id="cf-lead-ph" type="tel" placeholder="Phone number (optional)"/>
-    <button class="cf-lead-btn" id="cf-lead-sb">Send my details</button>
-  </div>
-</div>
-<div id="cf-w" data-cf-theme="dark">
+  const html = `<div id="cf-w" data-cf-theme="dark">
 <div id="cf-win" role="dialog" aria-label="Chat with ${name}">
 <div id="cf-head">
 <div class="cf-av" id="cf-av">&#9889;</div>
@@ -284,6 +245,16 @@ export function generateEmbedCode(id, url, color, botName, format) {
 </div>
 <div id="cf-msgs"><div class="cf-ai">&#128075; Hi! How can I help you today?</div></div>
 <div id="cf-imgprev"><div class="cf-prev-wrap"><img class="cf-prev-thumb" id="cf-pt" src="" alt=""/><button class="cf-prev-rm" id="cf-prm">&#10005;</button></div></div>
+<div id="cf-lead">
+  <div class="cf-lead-head">
+    <span class="cf-lead-ttl">Want a personalised follow-up?</span>
+    <button id="cf-lead-cls" aria-label="Dismiss">&#10005;</button>
+  </div>
+  <div class="cf-lead-row">
+    <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="your@email.com"/>
+    <button class="cf-lead-btn" id="cf-lead-sb">Send</button>
+  </div>
+</div>
 <div id="cf-foot">
 <input id="cf-fi" type="file" accept="image/*" style="display:none">
 <button class="cf-mb" id="cf-ib" style="display:none" title="Attach image">
@@ -335,23 +306,13 @@ var $=function(id){return document.getElementById(id)};
 // ── Live config — applied on load + every 60 seconds ─────────────────
 function applyConfig(cfg){
   if(!cfg)return;
-  var w=$('cf-w'),lead=$('cf-lead-ov');
-  if(cfg.chatbot_color){
-    if(w)w.style.setProperty('--cf-accent',cfg.chatbot_color);
-    if(lead)lead.style.setProperty('--cf-accent',cfg.chatbot_color);
-  }
+  var w=$('cf-w');
+  if(cfg.chatbot_color&&w)w.style.setProperty('--cf-accent',cfg.chatbot_color);
   if(cfg.chatbot_name){
     var hn=$('cf-hn');if(hn)hn.textContent=cfg.chatbot_name;
     var win=$('cf-win');if(win)win.setAttribute('aria-label','Chat with '+cfg.chatbot_name);
   }
-  if(cfg.chatbot_theme){
-    if(w)w.setAttribute('data-cf-theme',cfg.chatbot_theme);
-    // Apply matching theme class to lead modal (sibling order can't rely on CSS ~)
-    if(lead){
-      if(cfg.chatbot_theme==='light')lead.classList.add('cf-light');
-      else lead.classList.remove('cf-light');
-    }
-  }
+  if(cfg.chatbot_theme&&w)w.setAttribute('data-cf-theme',cfg.chatbot_theme);
   if(cfg.voice_input_enabled)$('cf-vb').style.display='flex';else $('cf-vb').style.display='none';
   if(cfg.image_input_enabled)$('cf-ib').style.display='flex';else $('cf-ib').style.display='none';
   if(cfg.cta_message)liveCtaMsg=cfg.cta_message;
@@ -385,14 +346,14 @@ function renderMd(text){
   return out.join('')
 }
 
-// ── Lead capture ─────────────────────────────────────────────────────
-function showLead(){if(leadDone)return;$('cf-lead-ov').classList.add('show')}
-function dismissLead(){$('cf-lead-ov').classList.remove('show');leadDone=true;localStorage.setItem(LEAD_KEY,'1')}
+// ── Lead capture (inline slide-up inside chat panel) ─────────────────
+function showLead(){if(leadDone)return;$('cf-lead').classList.add('show')}
+function dismissLead(){$('cf-lead').classList.remove('show');leadDone=true;localStorage.setItem(LEAD_KEY,'1')}
 function submitLead(){
-  var em=$('cf-lead-em').value.trim();if(!em)return;
-  $('cf-lead-sb').disabled=true;$('cf-lead-sb').textContent='Saving…';
+  var em=($('cf-lead-em').value||'').trim();if(!em)return;
+  $('cf-lead-sb').disabled=true;$('cf-lead-sb').textContent='…';
   fetch(B+'/api/chat/lead/',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({session_id:sid,email:em,phone:$('cf-lead-ph').value.trim()||null})
+    body:JSON.stringify({session_id:sid,email:em,phone:null})
   }).catch(function(){}).finally(function(){
     dismissLead();bubble('<p>✅ Thanks! We\\'ll be in touch soon.</p>','ai')})}
 
@@ -446,7 +407,6 @@ function connect(){
       bubble(renderMd(d.message),'ai');chime();
       var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action'];
       if(AUTO_OPEN.indexOf(d.source)>=0&&!isOpen)toggleOpen();
-      msgCount++;if(msgCount>=2&&!leadDone)setTimeout(showLead,1500)
     }}catch(x){}};
   ws.onerror=function(){rmDots();busy=false};
   ws.onclose=function(){ws=null;sentVisitorMeta=false}}
@@ -464,6 +424,8 @@ function send(){
   var msg=text||'[User sent an image]';
   bubble(escHtml(msg),'me');
   $('cf-inp').value='';$('cf-sb').disabled=true;busy=true;dots();
+  // Track user-message count for inline lead capture trigger (after 3 user msgs)
+  msgCount++;if(msgCount>=3&&!leadDone)setTimeout(showLead,1500);
   var pl=JSON.stringify({message:msg,behavior_matrix:behavior,page_visits:buildPageVisits()});
   if(ws&&ws.readyState===1){ws.send(pl)}
   else{connect();ws.addEventListener('open',function(){ws.send(pl)},{once:true})}}
@@ -718,7 +680,6 @@ $('cf-fi').onchange=function(){handleFile(this.files[0]);this.value=''};
 $('cf-prm').onclick=clearImg;
 $('cf-vb').onclick=toggleVoice;
 $('cf-lead-cls').onclick=dismissLead;
-$('cf-lead-ov').onclick=function(e){if(e.target===$('cf-lead-ov'))dismissLead()};
 $('cf-lead-sb').onclick=submitLead;
 $('cf-lead-em').addEventListener('keydown',function(e){if(e.key==='Enter')submitLead()});
 })();
