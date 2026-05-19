@@ -29,6 +29,8 @@ urlpatterns = [
     path('clients/<uuid:client_id>/suggest-cta/', admin_views.suggest_cta, name='admin-client-suggest-cta'),
     path('clients/<uuid:client_id>/activity/pages/', admin_views.activity_pages, name='admin-client-activity-pages'),
     path('clients/<uuid:client_id>/heatmap/', admin_views.page_heatmap, name='admin-client-heatmap'),
+    path('clients/<uuid:client_id>/visitors/', admin_views.client_visitors, name='admin-client-visitors'),
+    path('visitors/<str:visitor_uid>/', admin_views.visitor_detail, name='admin-visitor-detail'),
 
     # Sessions (CRUD + God View)
     path('sessions/<uuid:session_id>/', admin_views.session_detail, name='admin-session-detail'),

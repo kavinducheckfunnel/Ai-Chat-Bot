@@ -339,6 +339,16 @@ export function useAdminApi() {
     getSessionTimeline: (sessionId) =>
       apiFetch(`/api/admin/sessions/${sessionId}/timeline/`),
 
+    getClientVisitors: (clientId, params = {}) => {
+      const qs = new URLSearchParams(
+        Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))
+      ).toString()
+      return apiFetch(`/api/admin/clients/${clientId}/visitors/${qs ? '?' + qs : ''}`)
+    },
+
+    getVisitorDetail: (visitorUid, clientId) =>
+      apiFetch(`/api/admin/visitors/${visitorUid}/?client_id=${clientId}`),
+
     // ── Billing ──────────────────────────────────────────────────────────────
     getSubscription: () => apiFetch('/api/admin/billing/subscription/'),
 

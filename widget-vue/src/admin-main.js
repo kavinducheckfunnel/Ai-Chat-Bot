@@ -27,6 +27,7 @@ import PortalLiveView from './portal/PortalLiveView.vue'
 import PortalKanban from './portal/PortalKanban.vue'
 import PortalBilling from './portal/PortalBilling.vue'
 import PortalActivity from './portal/PortalActivity.vue'
+import PortalVisitors from './portal/PortalVisitors.vue'
 
 function getUser() {
   try { return JSON.parse(localStorage.getItem('cf_user') || 'null') } catch { return null }
@@ -76,6 +77,7 @@ const routes = [
       { path: 'settings', component: PortalSettings },
       { path: 'live', component: PortalLiveView },
       { path: 'activity', component: PortalActivity },
+      { path: 'visitors', component: PortalVisitors },
       { path: 'pipeline', component: PortalKanban },
       { path: 'billing', component: PortalBilling },
     ],

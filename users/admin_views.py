@@ -579,6 +579,198 @@ def suggest_cta(request, client_id):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def client_visitors(request, client_id):
+    """
+    List Visitors (cross-session identities) for a client, sorted by heat.
+
+    Each row aggregates across the visitor's sessions:
+      - lifetime sessions, messages, page views, time, clicks, ATC clicks
+      - latest known EMA scores + composite heat
+      - top product they've shown interest in
+      - lead info (if captured)
+      - device / location
+    """
+    from chat.models import Visitor, ChatSession
+    from django.db.models import Sum, Count, Max
+
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    try:
+        limit = max(10, min(int(request.query_params.get('limit', '50')), 200))
+    except ValueError:
+        limit = 50
+    days_raw = request.query_params.get('days', '').strip()
+    qs = Visitor.objects.filter(client=client)
+    if days_raw:
+        try:
+            days = max(1, min(int(days_raw), 365))
+            qs = qs.filter(last_seen__gte=timezone.now() - timedelta(days=days))
+        except ValueError:
+            pass
+
+    q = (request.query_params.get('q') or '').strip()
+    if q:
+        qs = qs.filter(Q(lead_email__icontains=q) | Q(visitor_uid__icontains=q))
+
+    # Latest EMA-based heat = 0.45 intent + 0.30 budget + 0.25 urgency
+    qs = qs.annotate(
+        composite_heat=(F('intent_ema') * 0.45 + F('budget_ema') * 0.30 + F('urgency_ema') * 0.25) * 100,
+        sess_count=Count('sessions'),
+        last_session_at=Max('sessions__updated_at'),
+    ).order_by('-composite_heat', '-last_seen')
+
+    data = []
+    for v in qs[:limit]:
+        # Lifetime stats from session relation (computed at query time)
+        stats = ChatSession.objects.filter(visitor_obj=v).aggregate(
+            messages=Sum('message_count'),
+        )
+        # Sum page_views and time from each session's data (JSONField → Python aggregate)
+        total_pages = 0
+        total_time = 0
+        for s in ChatSession.objects.filter(visitor_obj=v).only('page_visits', 'behavioral_context'):
+            total_pages += len(s.page_visits or [])
+            total_time += (s.behavioral_context or {}).get('time_on_site', 0) or 0
+
+        data.append({
+            'visitor_uid': v.visitor_uid,
+            'first_seen': v.first_seen.isoformat(),
+            'last_seen': v.last_seen.isoformat(),
+            'last_session_at': v.last_session_at.isoformat() if v.last_session_at else None,
+            'total_sessions': v.sess_count,
+            'total_messages': stats['messages'] or 0,
+            'total_page_views': total_pages,
+            'total_time_seconds': total_time,
+            'intent_ema': round(v.intent_ema, 3),
+            'budget_ema': round(v.budget_ema, 3),
+            'urgency_ema': round(v.urgency_ema, 3),
+            'heat_score': round(min(v.composite_heat or 0, 100), 1),
+            'lead_email': v.lead_email,
+            'lead_phone': v.lead_phone,
+            'lead_name': v.lead_name,
+            'top_interest_title': v.top_interest_title,
+            'top_interest_url': v.top_interest_url,
+            'device': v.device,
+            'os': v.os,
+            'browser': v.browser,
+            'country': v.country,
+            'city': v.city,
+            'country_code': v.country_code,
+        })
+
+    return Response({'visitors': data, 'count': len(data)})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def visitor_detail(request, visitor_uid):
+    """
+    Full detail for one visitor — every session they've had with this tenant,
+    every event, every chat message, all unified.
+
+    Query param: client_id (required) for tenancy check.
+    """
+    from chat.models import Visitor, ChatSession
+    from analytics.models import AnalyticEvent
+    from django.db.models import Q as _Q
+
+    client_id = request.query_params.get('client_id', '').strip()
+    if not client_id:
+        return Response({'detail': 'client_id required.'}, status=400)
+
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    try:
+        visitor = Visitor.objects.get(visitor_uid=visitor_uid, client=client)
+    except Visitor.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    sessions_qs = ChatSession.objects.filter(visitor_obj=visitor).order_by('-updated_at')
+    session_session_ids = [str(s.session_id) for s in sessions_qs]
+
+    # All events for any of this visitor's sessions
+    events = (
+        AnalyticEvent.objects
+        .filter(session_id__in=session_session_ids)
+        .order_by('-created_at')[:500]
+    )
+
+    timeline = []
+    for ev in events:
+        timeline.append({
+            'event_type': ev.event_type,
+            'page_url': ev.page_url,
+            'payload': ev.payload,
+            'created_at': ev.created_at.isoformat(),
+            'session_id': ev.session_id,
+        })
+    for s in sessions_qs:
+        for pv in (s.page_visits or []):
+            timeline.append({
+                'event_type': 'page_view',
+                'page_url': pv.get('url', ''),
+                'payload': {
+                    'page_title': pv.get('title', ''),
+                    'duration_seconds': pv.get('duration_seconds', 0),
+                },
+                'created_at': pv.get('visited_at', ''),
+                'session_id': str(s.session_id),
+            })
+        for msg in (s.chat_history or []):
+            timeline.append({
+                'event_type': 'chat_user' if msg.get('role') == 'user' else 'chat_ai',
+                'page_url': '',
+                'payload': {'message': (msg.get('message') or msg.get('content') or '')[:300]},
+                'created_at': msg.get('timestamp', ''),
+                'session_id': str(s.session_id),
+            })
+
+    timeline = [t for t in timeline if t.get('created_at')]
+    timeline.sort(key=lambda x: x.get('created_at') or '')
+
+    sessions_summary = [{
+        'session_id': str(s.session_id),
+        'created_at': s.created_at.isoformat(),
+        'updated_at': s.updated_at.isoformat(),
+        'message_count': len(s.chat_history or []),
+        'page_count': len(s.page_visits or []),
+        'heat_score': s.heat_score,
+        'kanban_state': s.kanban_state,
+    } for s in sessions_qs]
+
+    return Response({
+        'visitor_uid': visitor.visitor_uid,
+        'first_seen': visitor.first_seen.isoformat(),
+        'last_seen': visitor.last_seen.isoformat(),
+        'lead_email': visitor.lead_email,
+        'lead_phone': visitor.lead_phone,
+        'lead_name': visitor.lead_name,
+        'intent_ema': round(visitor.intent_ema, 3),
+        'budget_ema': round(visitor.budget_ema, 3),
+        'urgency_ema': round(visitor.urgency_ema, 3),
+        'device': visitor.device,
+        'os': visitor.os,
+        'browser': visitor.browser,
+        'country': visitor.country,
+        'city': visitor.city,
+        'country_code': visitor.country_code,
+        'top_interest_title': visitor.top_interest_title,
+        'top_interest_url': visitor.top_interest_url,
+        'sessions': sessions_summary,
+        'timeline': timeline[-200:],
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def activity_pages(request, client_id):
     """
     Returns the list of pages where visitors generated click events,
