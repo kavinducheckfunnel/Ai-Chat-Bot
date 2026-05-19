@@ -69,9 +69,22 @@ def build_browsing_context(session):
             'is_product': _is_product(url),
         })
 
-    # Top interest = longest-dwelled product page (≥10s)
-    products = [p for p in pages if p['is_product'] and p['dwell_seconds'] >= 10]
-    top_interest = max(products, key=lambda p: p['dwell_seconds'], default=None)
+    # Top interest = most-recently-viewed product page (any dwell ≥ 1s).
+    # Earlier we required ≥ 10s, but real visitors browse quickly (2-4s per
+    # page is common on ecommerce). Strict threshold killed personalization
+    # for fast browsers. Now: prefer longest dwell, but fall back to most
+    # recent product if no product has long dwell.
+    products = [p for p in pages if p['is_product'] and p['dwell_seconds'] >= 1]
+    if products:
+        # Sort by dwell desc; ties broken by recency (later in list = more recent)
+        products_sorted = sorted(
+            enumerate(products),
+            key=lambda kv: (kv[1]['dwell_seconds'], kv[0]),
+            reverse=True,
+        )
+        top_interest = products_sorted[0][1]
+    else:
+        top_interest = None
 
     # Human-readable signals from behavioral_context
     ctx = session.behavioral_context or {}
@@ -109,8 +122,13 @@ def build_browsing_context(session):
     ) * 100
     heat_level = 'HIGH' if heat > 60 else 'MEDIUM' if heat > 30 else 'LOW'
 
-    # First message detection — controls whether AI should open with browsing reference
-    is_first_msg = not bool(session.chat_history)
+    # First message detection — based on the user's own messages only, not
+    # bot greetings or auto-fired triggers (exit_intent / abandoned_form etc.
+    # that fired BEFORE the visitor said anything). Without this, the AI
+    # would think it's mid-conversation even when the visitor's first words
+    # have just arrived.
+    user_msgs = [m for m in (session.chat_history or []) if m.get('role') == 'user']
+    is_first_msg = len(user_msgs) == 0
 
     return {
         'pages': pages,
