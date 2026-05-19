@@ -97,6 +97,86 @@ def widget_config(request, client_id):
     })
 
 
+def _generate_personalised_cta(session, client, trigger_type):
+    """
+    Build a tailor-made CTA message via the LLM, reflecting what THIS specific
+    visitor was looking at when the trigger fired. Returns None if the visitor
+    has no meaningful browsing context (falls back to the static template).
+
+    Cached per (session, trigger_type) for 5 min — re-fires within that window
+    reuse the cached message instead of calling the LLM again. This keeps cost
+    bounded while still feeling personal.
+    """
+    if not client or not session:
+        return None
+    try:
+        from django.core.cache import cache
+        cache_key = f'cta_{session.session_id}_{trigger_type}'
+        cached = cache.get(cache_key)
+        if cached:
+            return cached
+
+        from chat.ai_service import build_browsing_context, _build_llm
+        from langchain_core.messages import SystemMessage, HumanMessage
+
+        ctx = build_browsing_context(session)
+        # Need a real interest hook for personalisation to be meaningful
+        if not ctx.get('top_interest') and not ctx.get('signals'):
+            return None
+
+        # Compose a tight, one-shot LLM prompt
+        pages_summary = ', '.join(
+            f"{p['title']} ({p['dwell_seconds']}s)"
+            for p in (ctx.get('pages') or [])[-5:]
+        ) or 'general browsing'
+        signals_summary = '; '.join(ctx.get('signals') or []) or 'none'
+        top = ctx.get('top_interest') or 'a product'
+
+        trigger_intent = {
+            'exit_intent': 'they are about to leave the site',
+            'pricing_hesitation': 'they have visited pricing multiple times without acting',
+            'abandoned_form': 'they started filling a form but stopped',
+            'deep_engagement': 'they have engaged deeply (long time, deep scroll)',
+            'high_intent_action': 'they have shown strong intent signals',
+            'add_to_cart_help': 'they just added something to cart',
+            'rage_click_help': 'they are showing signs of frustration',
+        }.get(trigger_type, 'they need a nudge')
+
+        discount_hint = (
+            f"Available discount code: {client.discount_code}." if client.discount_code else ''
+        )
+
+        system_prompt = (
+            "You are writing a single short CTA chat message (1 sentence, max 25 words, "
+            "max 150 characters). It must reference what the visitor was JUST looking at "
+            "and gently nudge them. Sound human and warm, never pushy. No emojis except "
+            "one optional at the end. Return ONLY the message text — no quotes, no preamble."
+        )
+        user_prompt = (
+            f"Website: {client.domain_url or client.name}\n"
+            f"Visitor's primary interest: {top}\n"
+            f"Recent pages: {pages_summary}\n"
+            f"Behavioral signals: {signals_summary}\n"
+            f"Intent heat: {ctx.get('heat_level', 'LOW')}\n"
+            f"Trigger context: {trigger_intent}\n"
+            f"{discount_hint}\n\n"
+            f"Write the CTA message now."
+        )
+
+        llm, _ = _build_llm(client)
+        result = llm.invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
+        text = result.content if hasattr(result, 'content') else str(result)
+        text = text.strip().strip('"').strip("'").strip()
+        if not text or len(text) > 280:
+            return None
+
+        cache.set(cache_key, text, 300)  # 5 min
+        return text
+    except Exception as e:
+        logger.warning(f'[trigger] personalised CTA failed: {e}')
+        return None
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def trigger_event(request):
@@ -131,8 +211,14 @@ def trigger_event(request):
     if not client:
         return Response({'status': 'ignored', 'reason': 'no client'})
 
-    # Build message based on trigger type
-    if trigger_type == 'exit_intent':
+    # ── Try LLM-generated personalised CTA first ─────────────────────────
+    # If the visitor has clear browsing context (top interest + EMA signals),
+    # ask the LLM for a tailor-made CTA referencing what THEY specifically
+    # were doing. Falls through to the static template below on any failure.
+    personalised_msg = _generate_personalised_cta(session, client, trigger_type)
+    if personalised_msg:
+        fomo_msg = personalised_msg
+    elif trigger_type == 'exit_intent':
         fomo_msg = (
             client.fomo_offer_text
             or (

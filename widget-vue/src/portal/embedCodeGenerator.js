@@ -89,8 +89,9 @@ export function generateEmbedCode(id, url, color, botName, format) {
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
 #cf-msgs::-webkit-scrollbar { width: 4px; }
 #cf-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-.cf-ai, .cf-me { padding: 10px 14px; border-radius: 18px; font-size: 14px;
-  line-height: 1.55; max-width: 84%; animation: cf-mi .2s ease; word-break: break-word; }
+.cf-ai, .cf-me { padding: 11px 16px; border-radius: 18px; font-size: 14px;
+  line-height: 1.55; max-width: 82%; animation: cf-mi .2s ease; word-break: break-word; }
+.cf-me { padding: 11px 18px; }  /* extra horizontal padding on user bubble */
 @keyframes cf-mi { from { opacity: 0; transform: translateY(7px); }
   to { opacity: 1; transform: translateY(0); } }
 .cf-ai { background: var(--cf-bubble-ai); color: var(--cf-text);
@@ -166,33 +167,37 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-pby a { color: rgba(255,255,255,0.3); text-decoration: none; }
 
 /* ── Inline lead capture — slides up INSIDE the chat panel ─────── */
-#cf-lead { padding: 11px 14px 13px;
+#cf-lead { padding: 13px 14px 14px;
   border-top: 1px solid var(--cf-border-soft);
   background: var(--cf-bg-elev);
   display: none; animation: cf-leadslide .28s cubic-bezier(.34,1.56,.64,1); }
 #cf-lead.show { display: block; }
 @keyframes cf-leadslide { from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); } }
-.cf-lead-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.cf-lead-ttl { font-size: 12.5px; font-weight: 600; color: var(--cf-text-strong); letter-spacing: -.1px; }
-#cf-lead-cls { background: transparent; border: none; color: var(--cf-text-muted);
-  cursor: pointer; padding: 0; font-size: 13px; line-height: 1;
+.cf-lead-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.cf-lead-ttl { font-size: 13px; font-weight: 600; color: var(--cf-text-strong); letter-spacing: -.1px; }
+#cf-lead-cls { background: rgba(255,255,255,0.06); border: none; color: var(--cf-text-muted);
+  cursor: pointer; padding: 0; font-size: 11px; line-height: 1;
   display: flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; }
-#cf-lead-cls:hover { color: var(--cf-text-strong); }
-.cf-lead-row { display: flex; gap: 6px; }
-.cf-lead-inp { flex: 1; padding: 8px 11px;
+  width: 22px; height: 22px; border-radius: 50%;
+  transition: background .15s; }
+#cf-lead-cls:hover { background: rgba(255,255,255,0.12); color: var(--cf-text-strong); }
+.cf-lead-row { display: flex; gap: 7px; align-items: stretch; }
+.cf-lead-inp { flex: 1; padding: 10px 13px; height: 38px;
   background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 18px; font-size: 12.5px; color: var(--cf-text);
+  border-radius: 19px; font-size: 13px; color: var(--cf-text);
   outline: none; box-sizing: border-box; font-family: inherit; line-height: 1.3;
   transition: border-color .15s, background .15s; }
 .cf-lead-inp:focus { border-color: var(--cf-accent); background: rgba(255,255,255,0.07); }
 .cf-lead-inp::placeholder { color: rgba(255,255,255,0.30); }
-.cf-lead-btn { background: var(--cf-accent); border: none; border-radius: 18px;
-  padding: 0 14px; font-size: 12px; font-weight: 600; color: #fff;
-  cursor: pointer; font-family: inherit; transition: opacity .15s; white-space: nowrap; }
-.cf-lead-btn:hover:not(:disabled) { opacity: .88; }
+.cf-lead-btn { background: var(--cf-accent); border: none; border-radius: 19px;
+  padding: 0 20px; height: 38px; min-width: 78px;
+  font-size: 13px; font-weight: 600; color: #fff;
+  cursor: pointer; font-family: inherit; transition: opacity .15s, transform .1s;
+  white-space: nowrap; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center; }
+.cf-lead-btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
 .cf-lead-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Inline lead capture — LIGHT theme */
@@ -586,16 +591,27 @@ document.addEventListener('click',function(e){
   }
 });
 
-// Form tracking
+// Form tracking — IGNORE the widget's own inputs (they were causing
+// abandoned_form to fire constantly when the visitor focused our own
+// chat input or lead-capture email field but didn't type immediately).
+// Also rate-limit: fire once per session, never repeat.
 var formAt=0;
+var abandonedFired=false;
+function isWidgetInput(el){
+  return !!(el&&el.closest&&(el.closest('#cf-w')||el.closest('#cf-lead-ov')));
+}
 document.addEventListener('focusin',function(e){
   if(!e.target.matches('input:not([type="hidden"]):not([type="submit"]):not([type="button"]),textarea,select'))return;
+  if(isWidgetInput(e.target))return;
   formAt=Date.now();if(!behavior.formFocused)behavior.formFocused=true;
 });
 document.addEventListener('focusout',function(e){
   if(!e.target.matches('input:not([type="hidden"]):not([type="submit"]):not([type="button"]),textarea,select'))return;
+  if(isWidgetInput(e.target))return;
+  if(abandonedFired)return;
   if(Date.now()-formAt>=4000&&!(e.target.value||'').trim()){
-    behavior.formAbandoned=true;flush(true);fireTrigger('abandoned_form');
+    behavior.formAbandoned=true;abandonedFired=true;
+    flush(true);fireTrigger('abandoned_form');
   }
 });
 

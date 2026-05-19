@@ -269,14 +269,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         # Upsert the persistent Visitor record (one human = one Visitor across
         # multiple sessions). visitor_uid comes from localStorage in the widget.
+        #
+        # visitor_meta fires on WebSocket open — BEFORE any chat message — so
+        # the ChatSession often doesn't exist yet at this point. We must
+        # ensure it exists so the visitor↔session link can be created. We
+        # take client_id from self (set during WS connect from the URL) rather
+        # than from a stale session lookup.
         visitor_uid = (data.get('visitor_uid') or '').strip()[:64]
-        if visitor_uid:
+        if visitor_uid and self.client_id:
             from .models import Visitor
-            session = ChatSession.objects.filter(session_id=self.session_id).select_related('client').first()
-            if session and session.client_id:
-                visitor, created = Visitor.objects.get_or_create(
+            from users.models import Client
+            try:
+                client = Client.objects.get(id=self.client_id)
+            except (Client.DoesNotExist, ValueError, ValidationError):
+                client = None
+
+            if client:
+                visitor, _ = Visitor.objects.get_or_create(
                     visitor_uid=visitor_uid,
-                    client_id=session.client_id,
+                    client=client,
                     defaults={
                         'device': data.get('device') or '',
                         'os': data.get('os') or '',
@@ -288,11 +299,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         'ip': data.get('ip') or '',
                     },
                 )
-                # Link session to visitor + bump session counter on creation
+
+                # Ensure session exists, then link it to the visitor
+                session, sess_created = ChatSession.objects.get_or_create(
+                    session_id=self.session_id,
+                    defaults={'client': client, 'visitor_obj': visitor},
+                )
                 if session.visitor_obj_id != visitor.id:
                     session.visitor_obj = visitor
                     session.save(update_fields=['visitor_obj'])
-                    # Increment lifetime session count once per link
+                    Visitor.objects.filter(pk=visitor.pk).update(
+                        total_sessions=models.F('total_sessions') + 1,
+                    )
+                if sess_created:
                     Visitor.objects.filter(pk=visitor.pk).update(
                         total_sessions=models.F('total_sessions') + 1,
                     )
