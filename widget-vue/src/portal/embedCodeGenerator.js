@@ -90,15 +90,15 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-msgs::-webkit-scrollbar { width: 4px; }
 #cf-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
-.cf-ai, .cf-me { padding: 11px 15px; border-radius: 18px; font-size: 14px;
-  line-height: 1.55; max-width: 84%; animation: cf-mi .22s ease; word-break: break-word;
+.cf-ai, .cf-me { padding: 13px 18px; border-radius: 20px; font-size: 14px;
+  line-height: 1.5; max-width: 82%; animation: cf-mi .22s ease; word-break: break-word;
   box-shadow: 0 1px 2px rgba(0,0,0,0.18); }
 @keyframes cf-mi { from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); } }
 .cf-ai { background: var(--cf-bubble-ai); color: var(--cf-text);
-  align-self: flex-start; border-bottom-left-radius: 5px; border: 1px solid var(--cf-border-soft); }
+  align-self: flex-start; border-bottom-left-radius: 6px; border: 1px solid var(--cf-border-soft); }
 .cf-me { background: var(--cf-accent); color: #fff;
-  align-self: flex-end; border-bottom-right-radius: 5px; }
+  align-self: flex-end; border-bottom-right-radius: 6px; }
 .cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 14px;
   object-fit: cover; display: block; border: 1px solid rgba(255,255,255,0.08); }
 
@@ -111,8 +111,8 @@ export function generateEmbedCode(id, url, color, botName, format) {
 .cf-ai a:hover { color: #c4b5fd; }
 .cf-ai strong { color: var(--cf-text-strong); font-weight: 700; }
 
-/* ── Reactions — crisp 24px circular icon chips, clearly visible against bubble bg ── */
-.cf-rxn { display: flex; gap: 6px; margin-top: 8px; margin-bottom: -2px; }
+/* ── Reactions — crisp 26px circular icon chips, clearly visible against bubble bg ── */
+.cf-rxn { display: flex; gap: 6px; margin-top: 10px; }
 .cf-rb {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.12);
