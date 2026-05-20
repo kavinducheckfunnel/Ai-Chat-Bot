@@ -99,18 +99,27 @@ if (( ${#ENV_PATHS[@]} > 0 )); then
 fi
 
 # 4. systemd units
+# Pass absolute paths directly to tar — it strips the leading `/` itself
+# (you'll see a benign "Removing leading /" warning). The glob is expanded
+# by bash into the array IN A SCOPE WHERE /etc/... resolves, then passed
+# verbatim to tar. We can't glob-expand inside `tar -C / etc/...` args
+# because bash tries to expand relative to cwd (which is the daily/ dir).
 SYSTEMD_FILES=(/etc/systemd/system/checkfunnel-*.service)
 if [[ -e "${SYSTEMD_FILES[0]}" ]]; then
-    tar -czf systemd.tar.gz -C / etc/systemd/system/checkfunnel-*.service 2>/dev/null || true
-    log "  ✔ systemd.tar.gz"
+    tar -czf systemd.tar.gz --transform='s|^/||' "${SYSTEMD_FILES[@]}"
+    log "  ✔ systemd.tar.gz ($(du -h systemd.tar.gz | cut -f1))"
 fi
 
 # 5. nginx site config (anything mentioning checkfunnel)
-if compgen -G "/etc/nginx/sites-available/*checkfunnel*" > /dev/null \
-   || compgen -G "/etc/nginx/conf.d/*checkfunnel*" > /dev/null; then
-    tar -czf nginx.tar.gz -C / \
-        $(ls /etc/nginx/sites-available/*checkfunnel* /etc/nginx/conf.d/*checkfunnel* 2>/dev/null | sed 's|^/||') 2>/dev/null || true
-    log "  ✔ nginx.tar.gz"
+NGINX_FILES=(/etc/nginx/sites-available/*checkfunnel* /etc/nginx/conf.d/*checkfunnel*)
+# Bash leaves unexpanded globs literal — filter to real files only.
+NGINX_REAL=()
+for f in "${NGINX_FILES[@]}"; do
+    [[ -f "$f" ]] && NGINX_REAL+=("$f")
+done
+if (( ${#NGINX_REAL[@]} > 0 )); then
+    tar -czf nginx.tar.gz --transform='s|^/||' "${NGINX_REAL[@]}"
+    log "  ✔ nginx.tar.gz ($(du -h nginx.tar.gz | cut -f1))"
 fi
 
 # 6. Media uploads if present
