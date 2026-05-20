@@ -70,40 +70,55 @@ add_action( 'wp_footer', 'checkfunnel_widget' );`:""),ce=fe(()=>o.value?`${Qs.re
   padding: 0; line-height: 1; }
 #cf-xb:hover { background: rgba(255,255,255,0.12); color: var(--cf-text-strong); }
 
-/* ── Messages — exact old-code layout: simple flex, reactions inside bubble ── */
-#cf-msgs { flex: 1; overflow-y: auto; padding: 14px;
-  display: flex; flex-direction: column; gap: 9px; background: var(--cf-bg);
+/* ── Messages — clean conversation UI, reactions as crisp icon chips inside the bubble ── */
+#cf-msgs { flex: 1; overflow-y: auto; padding: 16px 14px;
+  display: flex; flex-direction: column; gap: 10px; background: var(--cf-bg);
   min-height: 180px; max-height: 340px;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
 #cf-msgs::-webkit-scrollbar { width: 4px; }
 #cf-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
-.cf-ai, .cf-me { padding: 10px 14px; border-radius: 18px; font-size: 14px;
-  line-height: 1.55; max-width: 84%; animation: cf-mi .2s ease; word-break: break-word; }
-@keyframes cf-mi { from { opacity: 0; transform: translateY(7px); }
+.cf-ai, .cf-me { padding: 11px 15px; border-radius: 18px; font-size: 14px;
+  line-height: 1.55; max-width: 84%; animation: cf-mi .22s ease; word-break: break-word;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18); }
+@keyframes cf-mi { from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); } }
 .cf-ai { background: var(--cf-bubble-ai); color: var(--cf-text);
-  align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--cf-border-soft); }
+  align-self: flex-start; border-bottom-left-radius: 5px; border: 1px solid var(--cf-border-soft); }
 .cf-me { background: var(--cf-accent); color: #fff;
-  align-self: flex-end; border-bottom-right-radius: 4px; }
-.cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 12px;
+  align-self: flex-end; border-bottom-right-radius: 5px; }
+.cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 14px;
   object-fit: cover; display: block; border: 1px solid rgba(255,255,255,0.08); }
 
-.cf-ai ol { margin: 5px 0 6px 0; padding-left: 18px; list-style-type: decimal; }
-.cf-ai li { margin-bottom: 5px; color: var(--cf-text); line-height: 1.5; display: list-item; }
-.cf-ai p { margin: 0 0 5px 0; color: var(--cf-text); }
+.cf-ai ol { margin: 6px 0 4px 0; padding-left: 20px; list-style-type: decimal; }
+.cf-ai li { margin-bottom: 6px; color: var(--cf-text); line-height: 1.5; display: list-item; }
+.cf-ai li:last-child { margin-bottom: 2px; }
+.cf-ai p { margin: 0 0 6px 0; color: var(--cf-text); }
 .cf-ai p:last-child { margin-bottom: 0; }
 .cf-ai a { color: #a5b4fc; text-decoration: underline; font-weight: 500; word-break: break-word; }
 .cf-ai a:hover { color: #c4b5fd; }
 .cf-ai strong { color: var(--cf-text-strong); font-weight: 700; }
 
-/* ── Reactions — small pill buttons INSIDE the AI bubble, below the text ── */
-.cf-rxn { display: flex; gap: 4px; margin-top: 5px; }
-.cf-rb { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 20px; padding: 2px 8px; font-size: 11px; cursor: pointer;
-  transition: all .15s; color: rgba(255,255,255,0.45); }
-.cf-rb:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.75); }
-.cf-rb.on { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
+/* ── Reactions — crisp 24px circular icon chips, clearly visible against bubble bg ── */
+.cf-rxn { display: flex; gap: 6px; margin-top: 8px; margin-bottom: -2px; }
+.cf-rb {
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 50%;
+  width: 26px; height: 26px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, border-color .15s, transform .12s;
+  color: rgba(255,255,255,0.85);
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+.cf-rb:hover { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.2); transform: translateY(-1px); }
+.cf-rb.on { background: rgba(99,102,241,0.25); border-color: rgba(99,102,241,0.55); }
 
 /* ── Typing ── */
 .cf-typ { align-self: flex-start; background: var(--cf-bubble-ai);
@@ -246,9 +261,9 @@ add_action( 'wp_footer', 'checkfunnel_widget' );`:""),ce=fe(()=>o.value?`${Qs.re
 #cf-w[data-cf-theme="light"] .cf-ai li { color: #1e293b; }
 #cf-w[data-cf-theme="light"] .cf-ai strong { color: #0f172a; }
 #cf-w[data-cf-theme="light"] .cf-ai a { color: #4338ca; }
-#cf-w[data-cf-theme="light"] .cf-rb { background: #e2e8f0; border-color: #cbd5e1; color: #475569; }
-#cf-w[data-cf-theme="light"] .cf-rb:hover { background: #cbd5e1; color: #1e293b; }
-#cf-w[data-cf-theme="light"] .cf-rb.on { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #4338ca; }
+#cf-w[data-cf-theme="light"] .cf-rb { background: #ffffff; border-color: #d8dee9; }
+#cf-w[data-cf-theme="light"] .cf-rb:hover { background: #f1f5f9; border-color: #94a3b8; }
+#cf-w[data-cf-theme="light"] .cf-rb.on { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.55); }
 #cf-w[data-cf-theme="light"] .cf-typ { background: #f1f5f9; border-color: #e2e8f0; }
 #cf-w[data-cf-theme="light"] .cf-typ span { background: #94a3b8; }
 </style>`,p=`<div id="cf-w" data-cf-theme="dark">
