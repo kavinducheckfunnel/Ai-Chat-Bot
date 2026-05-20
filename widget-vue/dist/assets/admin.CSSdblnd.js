@@ -81,7 +81,7 @@ add_action( 'wp_footer', 'checkfunnel_widget' );`:""),ce=fe(()=>o.value?`${Qs.re
 /* All chat-message selectors are scoped to #cf-w so they beat the universal
    #cf-w * { padding: 0 } reset on specificity — without this prefix, the
    reset wins and bubble padding silently collapses to 0. */
-#cf-w .cf-ai, #cf-w .cf-me { padding: 14px 20px; border-radius: 20px; font-size: 14px;
+#cf-w .cf-ai, #cf-w .cf-me { padding: 12px 17px; border-radius: 19px; font-size: 14px;
   line-height: 1.5; max-width: 82%; animation: cf-mi .22s ease; word-break: break-word;
   box-shadow: 0 1px 2px rgba(0,0,0,0.18); }
 @keyframes cf-mi { from { opacity: 0; transform: translateY(6px); }
