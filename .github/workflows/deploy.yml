@@ -77,11 +77,11 @@ jobs:
         # Outside the VPS — confirms nginx → daphne path is alive too.
         run: |
           for i in {1..10}; do
-            if curl -fsS --max-time 5 "https://ai.checkfunnels.com/health/" | grep -q '"status"'; then
-              echo "✔ Public /health/ OK"
+            if curl -fsS --max-time 5 "https://ai.checkfunnels.com/api/health/" | grep -q '"status"'; then
+              echo "✔ Public /api/health/ OK"
               exit 0
             fi
             sleep 3
           done
-          echo "✘ Public /health/ never returned OK"
+          echo "✘ Public /api/health/ never returned OK"
           exit 1

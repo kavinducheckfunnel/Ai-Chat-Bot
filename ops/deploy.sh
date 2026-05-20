@@ -22,7 +22,10 @@ set -Eeuo pipefail
 
 PROJECT_ROOT="${PROJECT_ROOT:-/var/www/checkfunnel}"
 LOCK_FILE="/tmp/checkfunnel-deploy.lock"
-HEALTH_URL="${HEALTH_URL:-http://localhost:8000/health/}"
+# Hit the public URL through nginx — Django enforces SECURE_SSL_REDIRECT and
+# ALLOWED_HOSTS, so localhost:8000 over plain HTTP gets 301'd / 400'd. Going
+# through nginx on the same VPS also validates the proxy path is up.
+HEALTH_URL="${HEALTH_URL:-https://ai.checkfunnels.com/api/health/}"
 SERVICES="checkfunnel-daphne checkfunnel-celery checkfunnel-celerybeat"
 
 ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
