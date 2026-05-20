@@ -322,7 +322,7 @@ onMounted(async () => {
 /* Left panel */
 .tenant-list-panel {
   width: 260px; flex-shrink: 0;
-  background: #111; border: 1px solid var(--cf-border-subtle); border-radius: 14px;
+  background: var(--cf-bg-surface-raised); border: 1px solid var(--cf-border-subtle); border-radius: 14px;
   display: flex; flex-direction: column; overflow: hidden;
 }
 .panel-header { padding: 14px; border-bottom: 1px solid var(--cf-border-subtle); }
@@ -364,7 +364,7 @@ onMounted(async () => {
 
 /* Right panel */
 .permissions-panel {
-  flex: 1; background: #111; border: 1px solid var(--cf-border-subtle); border-radius: 14px;
+  flex: 1; background: var(--cf-bg-surface-raised); border: 1px solid var(--cf-border-subtle); border-radius: 14px;
   overflow-y: auto; padding: 24px;
 }
 .empty-prompt { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 14px; }

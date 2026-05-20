@@ -448,6 +448,7 @@ import { ref, computed, onMounted, watch, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 import { useToast } from '../composables/useToast'
+import { generateEmbedCode } from '../portal/embedCodeGenerator'
 
 const route = useRoute()
 const api = useAdminApi()
@@ -513,17 +514,33 @@ const settingsForm = ref({
   fomo_countdown_seconds: 600,
 })
 
-const embedCode = computed(() =>
-  client.value
-    ? `<script src="${WIDGET_URL}?client_id=${client.value.id}"><\/script>`
-    : ''
-)
+// Use the SAME generator as the tenant portal (PortalSettings) so the
+// snippet copied here is byte-identical to what the tenant sees — same
+// inline CSS, same chat persistence, same behavior tracking, same bug
+// fixes. Previously this returned the OLD external <script src=...> tag
+// which delivered a completely different (older) widget to whoever pasted
+// from the super admin side.
+const embedCode = computed(() => {
+  if (!client.value) return ''
+  return generateEmbedCode(
+    client.value.id,
+    WIDGET_URL,
+    client.value.chatbot_color || '#6366f1',
+    client.value.chatbot_name || 'AI Assistant',
+    // no format → raw HTML+CSS+JS snippet (for WPCode plugin paste)
+  )
+})
 
-const phpSnippet = computed(() =>
-  client.value
-    ? `<?php\nfunction checkfunnel_widget() {\n    echo '<script src="${WIDGET_URL}?client_id=${client.value.id}"><\\/script>';\n}\nadd_action( 'wp_footer', 'checkfunnel_widget' );`
-    : ''
-)
+const phpSnippet = computed(() => {
+  if (!client.value) return ''
+  return generateEmbedCode(
+    client.value.id,
+    WIDGET_URL,
+    client.value.chatbot_color || '#6366f1',
+    client.value.chatbot_name || 'AI Assistant',
+    'wordpress',  // wraps the snippet in functions.php hook
+  )
+})
 
 const webhookUrl = computed(() =>
   client.value

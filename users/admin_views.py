@@ -1004,6 +1004,42 @@ def session_detail(request, session_id):
             if field in request.data:
                 setattr(session, field, request.data[field])
         session.save()
+
+        # ── Live-broadcast the change to all connected dashboards ────────
+        # Without this, dragging a kanban card updated the DB but the admin
+        # dashboard + tenant dashboard kept showing the old column until a
+        # full page reload (and analytics like kanban_breakdown / hot_count
+        # stayed stale). The chat consumer already publishes session_update
+        # events to ADMIN_GROUP on every message — we mirror the same payload
+        # here so kanban moves use the exact same realtime channel.
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                payload = {
+                    'session_id': str(session.session_id),
+                    'visitor_id': session.visitor_id,
+                    'heat_score': session.heat_score,
+                    'conversation_state': session.conversation_state,
+                    'kanban_state': session.kanban_state,
+                    'message_count': session.message_count,
+                    'intent_ema': round(session.current_intent_ema, 3),
+                    'budget_ema': round(session.current_budget_ema, 3),
+                    'urgency_ema': round(session.current_urgency_ema, 3),
+                    'lead_email': session.lead_email,
+                    'takeover_active': session.takeover_active,
+                    'client_id': str(session.client_id) if session.client_id else None,
+                    'updated_at': session.updated_at.isoformat(),
+                }
+                async_to_sync(channel_layer.group_send)(
+                    'admin_dashboard',
+                    {'type': 'session_update', 'data': payload},
+                )
+        except Exception:
+            pass  # Broadcast failure must never fail the PATCH itself
+
         return Response({'detail': 'Updated.'})
 
     return Response({
