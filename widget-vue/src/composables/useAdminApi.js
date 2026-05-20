@@ -415,6 +415,39 @@ export function useAdminApi() {
     }),
     getOpenRouterModels: () => apiFetch('/api/admin/platform-config/models/'),
 
+    // ── Backups (superadmin) ─────────────────────────────────────────
+    // Powers /admin/backups. The list endpoint returns snapshots grouped
+    // by tier (daily/weekly/monthly), the status endpoint returns the
+    // header strip data (latest run, disk usage, retention counts).
+    getBackups:       () => apiFetch('/api/admin/backups/'),
+    getBackupStatus:  () => apiFetch('/api/admin/backups/status/'),
+    triggerBackup:    () => apiFetch('/api/admin/backups/trigger/', { method: 'POST', body: '{}' }),
+    deleteBackup:     (tier, date) => apiFetch(`/api/admin/backups/${tier}/${date}/`, { method: 'DELETE' }),
+
+    // Auth-protected download: fetch with Bearer header, then trigger an
+    // <a download> click via Blob. This works for any reasonably-sized
+    // file (the browser holds the blob in RAM, so don't expect to download
+    // 10GB this way — but our backups are ~5-50MB right now).
+    async downloadBackupFile(tier, date, filename) {
+      const token = localStorage.getItem('cf_access_token') || ''
+      const url   = `${API_BASE}/api/admin/backups/${tier}/${date}/${encodeURIComponent(filename)}/`
+      const resp  = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      if (!resp.ok) {
+        throw new Error(`Download failed (${resp.status})`)
+      }
+      const blob  = await resp.blob()
+      const obj   = URL.createObjectURL(blob)
+      const a     = document.createElement('a')
+      a.href      = obj
+      a.download  = `checkfunnel-${tier}-${date}-${filename}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      // Free the blob URL on next tick — leaving it briefly bound lets
+      // some browsers actually finish persisting the download.
+      setTimeout(() => URL.revokeObjectURL(obj), 1000)
+    },
+
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {
       const token = localStorage.getItem('cf_access_token')

@@ -48,6 +48,17 @@ urlpatterns = [
     path('leads/', admin_views.leads_list, name='admin-leads'),
     path('leads/export/', admin_views.leads_export, name='admin-leads-export'),
 
+    # Backup management (superadmin only — enforced inside views via IsSuperAdmin)
+    path('backups/',                                admin_views.list_backups,         name='admin-backups-list'),
+    path('backups/status/',                         admin_views.backup_status,        name='admin-backups-status'),
+    path('backups/trigger/',                        admin_views.trigger_backup,       name='admin-backups-trigger'),
+    # Filename allowlist enforced inside the view; matched here against the
+    # exact set of names ops/backup.sh writes so anything else 404s before
+    # we even hit Python.
+    path('backups/<slug:tier>/<slug:date>/<str:filename>/',
+         admin_views.download_backup_file,                                            name='admin-backups-download'),
+    path('backups/<slug:tier>/<slug:date>/',         admin_views.delete_backup,       name='admin-backups-delete'),
+
     # Billing
     path('billing/subscription/', billing_views.get_subscription, name='billing-subscription'),
     path('billing/checkout/', billing_views.create_checkout_session, name='billing-checkout'),

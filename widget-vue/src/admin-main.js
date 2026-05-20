@@ -20,6 +20,7 @@ import AdminClientInsights from './admin/AdminClientInsights.vue'
 import AdminClientHeatmap from './admin/AdminClientHeatmap.vue'
 import AdminVisitors from './admin/AdminVisitors.vue'
 import AdminInsights from './admin/AdminInsights.vue'
+import AdminBackups from './admin/AdminBackups.vue'
 
 import PortalLayout from './portal/PortalLayout.vue'
 import OnboardingWizard from './portal/OnboardingWizard.vue'
@@ -68,6 +69,7 @@ const routes = [
       { path: 'tenants', component: TenantManagement, meta: { superadminOnly: true } },
       { path: 'superadmin', component: SuperAdminDashboard, meta: { superadminOnly: true } },
       { path: 'permissions', component: PermissionsManager, meta: { superadminOnly: true } },
+      { path: 'backups', component: AdminBackups, meta: { superadminOnly: true } },
     ],
   },
 

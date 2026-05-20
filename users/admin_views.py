@@ -2927,3 +2927,181 @@ def openrouter_models(request):
     models.sort(key=lambda m: (float(m['pricing']['prompt']) > 0, m['name'].lower()))
 
     return Response({'models': models, 'total': len(models)})
+
+
+# ─── Backup management (superadmin only) ──────────────────────────────────────
+# Powers the /admin/backups page. Lists snapshots written by ops/backup.sh,
+# streams individual files for download, triggers ad-hoc backups, deletes
+# snapshots. Every action writes to AuditLog. Path inputs are validated by
+# users.backup_admin against allowlists before any filesystem call.
+
+def _audit_backup(actor, action_key, target_label='', notes='', ip=''):
+    """Lightweight audit-log writer for backup operations.
+
+    The AuditLog model has a `choices` constraint on `action` but Django
+    only enforces it at form / serializer level, not at the DB. We save
+    BACKUP_* strings directly so we don't need a migration to extend the
+    enum every time we add an action."""
+    try:
+        from .models import AuditLog
+        AuditLog.objects.create(
+            actor=actor,
+            action=action_key,
+            target_type='backup',
+            target_label=target_label[:255],
+            ip_address=ip or None,
+            notes=notes[:5000] if notes else '',
+        )
+    except Exception as e:
+        logger.warning(f'[backup_admin] AuditLog write failed: {e}')
+
+
+def _client_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    if xff:
+        return xff.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '')
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperAdmin])
+def list_backups(request):
+    """Enumerate every snapshot across daily/weekly/monthly tiers."""
+    from .backup_admin import list_all_backups
+    data = list_all_backups()
+    _audit_backup(
+        actor=request.user,
+        action_key='BACKUP_LIST_VIEWED',
+        target_label='all snapshots',
+        ip=_client_ip(request),
+    )
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperAdmin])
+def backup_status(request):
+    """Top-of-page status strip — latest run, disk usage, retention counts."""
+    from .backup_admin import backup_status as _status
+    return Response(_status())
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperAdmin])
+def download_backup_file(request, tier, date, filename):
+    """Stream a single backup artifact. The path is validated against an
+    allowlist before any FS access — see backup_admin._safe_file_in_snapshot."""
+    from django.http import FileResponse, Http404
+    from .backup_admin import _safe_file_in_snapshot, SENSITIVE_FILES
+
+    path = _safe_file_in_snapshot(tier, date, filename)
+    if not path:
+        raise Http404('Backup file not found or path rejected.')
+
+    size = path.stat().st_size
+
+    _audit_backup(
+        actor=request.user,
+        action_key='BACKUP_FILE_DOWNLOADED',
+        target_label=f'{tier}/{date}/{filename}',
+        ip=_client_ip(request),
+        notes=f'size={size} sensitive={filename in SENSITIVE_FILES}',
+    )
+
+    # FileResponse uses sendfile or chunked iteration — never loads into RAM.
+    # Content-Type=application/octet-stream forces the browser to download
+    # instead of trying to render db.dump or .tar.gz inline.
+    response = FileResponse(
+        path.open('rb'),
+        as_attachment=True,
+        filename=f'checkfunnel-{tier}-{date}-{filename}',
+        content_type='application/octet-stream',
+    )
+    response['Content-Length'] = size
+    response['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([IsSuperAdmin])
+def trigger_backup(request):
+    """Fire /usr/local/bin/checkfunnel-backup.sh in the background.
+
+    Fire-and-forget — the script writes to /var/log/checkfunnel-backup.log
+    and produces a new daily/<today> directory once complete. UI polls
+    backup_status() to detect completion (latest_date == today).
+
+    We deliberately don't capture stdout/stderr or wait for the subprocess
+    so the HTTP response can return in <50ms even though the actual work
+    takes 20-60s. The script is idempotent — running it multiple times
+    just overwrites today's snapshot.
+    """
+    import subprocess
+    script = '/usr/local/bin/checkfunnel-backup.sh'
+    if not os.path.isfile(script):
+        return Response(
+            {'detail': 'Backup script not installed on this host.'},
+            status=503,
+        )
+    try:
+        # Detach: stdin/out/err redirected to /dev/null, new session so a
+        # SIGHUP to daphne doesn't kill the backup mid-flight.
+        subprocess.Popen(
+            ['nohup', script],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as e:
+        logger.error(f'[trigger_backup] Failed to spawn: {e}')
+        return Response({'detail': str(e)}, status=500)
+
+    _audit_backup(
+        actor=request.user,
+        action_key='BACKUP_TRIGGERED',
+        target_label='manual',
+        ip=_client_ip(request),
+    )
+    return Response({'status': 'started', 'detail': 'Backup running in background.'}, status=202)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsSuperAdmin])
+def delete_backup(request, tier, date):
+    """Remove a snapshot directory. Cannot delete the most recent one
+    (safety — that's the most likely-needed restore point)."""
+    import shutil
+    from .backup_admin import _safe_snapshot_dir, BACKUP_ROOT, _DATE_RE
+
+    snap = _safe_snapshot_dir(tier, date)
+    if not snap:
+        return Response({'detail': 'Snapshot not found.'}, status=404)
+
+    # Refuse to delete the most recent snapshot in this tier — disaster
+    # recovery should always have a fallback.
+    tier_dir = BACKUP_ROOT / tier
+    other_dates = sorted(
+        c.name for c in tier_dir.iterdir()
+        if c.is_dir() and _DATE_RE.match(c.name)
+    )
+    if other_dates and other_dates[-1] == date:
+        return Response(
+            {'detail': 'Refusing to delete the most recent snapshot in this tier.'},
+            status=400,
+        )
+
+    snap_size = sum(p.stat().st_size for p in snap.iterdir() if p.is_file())
+    try:
+        shutil.rmtree(snap)
+    except Exception as e:
+        return Response({'detail': f'Delete failed: {e}'}, status=500)
+
+    _audit_backup(
+        actor=request.user,
+        action_key='BACKUP_DELETED',
+        target_label=f'{tier}/{date}',
+        ip=_client_ip(request),
+        notes=f'size_bytes={snap_size}',
+    )
+    return Response({'status': 'deleted', 'tier': tier, 'date': date})
