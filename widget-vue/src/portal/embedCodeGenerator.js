@@ -90,30 +90,33 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-msgs::-webkit-scrollbar { width: 4px; }
 #cf-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
-.cf-ai, .cf-me { padding: 13px 18px; border-radius: 20px; font-size: 14px;
+/* All chat-message selectors are scoped to #cf-w so they beat the universal
+   #cf-w * { padding: 0 } reset on specificity — without this prefix, the
+   reset wins and bubble padding silently collapses to 0. */
+#cf-w .cf-ai, #cf-w .cf-me { padding: 14px 20px; border-radius: 20px; font-size: 14px;
   line-height: 1.5; max-width: 82%; animation: cf-mi .22s ease; word-break: break-word;
   box-shadow: 0 1px 2px rgba(0,0,0,0.18); }
 @keyframes cf-mi { from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); } }
-.cf-ai { background: var(--cf-bubble-ai); color: var(--cf-text);
+#cf-w .cf-ai { background: var(--cf-bubble-ai); color: var(--cf-text);
   align-self: flex-start; border-bottom-left-radius: 6px; border: 1px solid var(--cf-border-soft); }
-.cf-me { background: var(--cf-accent); color: #fff;
+#cf-w .cf-me { background: var(--cf-accent); color: #fff;
   align-self: flex-end; border-bottom-right-radius: 6px; }
-.cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 14px;
+#cf-w .cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 14px;
   object-fit: cover; display: block; border: 1px solid rgba(255,255,255,0.08); }
 
-.cf-ai ol { margin: 6px 0 4px 0; padding-left: 20px; list-style-type: decimal; }
-.cf-ai li { margin-bottom: 6px; color: var(--cf-text); line-height: 1.5; display: list-item; }
-.cf-ai li:last-child { margin-bottom: 2px; }
-.cf-ai p { margin: 0 0 6px 0; color: var(--cf-text); }
-.cf-ai p:last-child { margin-bottom: 0; }
-.cf-ai a { color: #a5b4fc; text-decoration: underline; font-weight: 500; word-break: break-word; }
-.cf-ai a:hover { color: #c4b5fd; }
-.cf-ai strong { color: var(--cf-text-strong); font-weight: 700; }
+#cf-w .cf-ai ol { margin: 6px 0 4px 0; padding-left: 20px; list-style-type: decimal; }
+#cf-w .cf-ai li { margin-bottom: 6px; color: var(--cf-text); line-height: 1.5; display: list-item; }
+#cf-w .cf-ai li:last-child { margin-bottom: 2px; }
+#cf-w .cf-ai p { margin: 0 0 6px 0; color: var(--cf-text); }
+#cf-w .cf-ai p:last-child { margin-bottom: 0; }
+#cf-w .cf-ai a { color: #a5b4fc; text-decoration: underline; font-weight: 500; word-break: break-word; }
+#cf-w .cf-ai a:hover { color: #c4b5fd; }
+#cf-w .cf-ai strong { color: var(--cf-text-strong); font-weight: 700; }
 
 /* ── Reactions — crisp 26px circular icon chips, clearly visible against bubble bg ── */
-.cf-rxn { display: flex; gap: 6px; margin-top: 10px; }
-.cf-rb {
+#cf-w .cf-rxn { display: flex; gap: 6px; margin-top: 10px; }
+#cf-w .cf-rb {
   background: rgba(255,255,255,0.07);
   border: 1px solid rgba(255,255,255,0.12);
   border-radius: 50%;
@@ -129,13 +132,13 @@ export function generateEmbedCode(id, url, color, botName, format) {
   color: rgba(255,255,255,0.85);
   font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
 }
-.cf-rb:hover { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.2); transform: translateY(-1px); }
-.cf-rb.on { background: rgba(99,102,241,0.25); border-color: rgba(99,102,241,0.55); }
+#cf-w .cf-rb:hover { background: rgba(255,255,255,0.13); border-color: rgba(255,255,255,0.2); transform: translateY(-1px); }
+#cf-w .cf-rb.on { background: rgba(99,102,241,0.25); border-color: rgba(99,102,241,0.55); }
 
-/* ── Typing ── */
-.cf-typ { align-self: flex-start; background: var(--cf-bubble-ai);
-  border: 1px solid var(--cf-border-soft); border-radius: 18px;
-  border-bottom-left-radius: 4px; padding: 11px 15px; display: flex; gap: 5px; align-items: center; }
+/* ── Typing — also scoped to win over the universal padding reset ── */
+#cf-w .cf-typ { align-self: flex-start; background: var(--cf-bubble-ai);
+  border: 1px solid var(--cf-border-soft); border-radius: 20px;
+  border-bottom-left-radius: 6px; padding: 13px 16px; display: flex; gap: 5px; align-items: center; }
 .cf-typ span { width: 7px; height: 7px; background: #475569; border-radius: 50%;
   display: inline-block; animation: cf-bop 1.3s infinite ease-in-out; }
 .cf-typ span:nth-child(2) { animation-delay: .18s; }
