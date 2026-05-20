@@ -236,7 +236,38 @@ class ChatConsumer(AsyncWebsocketConsumer):
         the widget accumulates pages across navigations and resends the full
         list on every WebSocket open. Without this, the AI only ever sees
         page_visits from the very first save and misses everything after.
+
+        ── ORDER MATTERS ────────────────────────────────────────────────
+        visitor_meta fires on WebSocket open — BEFORE any chat message —
+        so the ChatSession typically doesn't exist yet on the first connect.
+        We must ENSURE the session exists FIRST, otherwise the page_visits
+        UPDATE silently no-ops and we lose every page the visitor browsed
+        before they chatted. This was the "only last page in heatmap" bug:
+        Page A's visit was sent, the session didn't exist, the update did
+        nothing, the session was created later with empty page_visits.
         """
+        page_visits = data.get('page_visits') or []
+        visitor_uid = (data.get('visitor_uid') or '').strip()[:64]
+
+        # ── 1. Resolve the client from the URL (authoritative) ───────────
+        from users.models import Client
+        client = None
+        if self.client_id:
+            try:
+                client = Client.objects.get(id=self.client_id)
+            except (Client.DoesNotExist, ValueError, ValidationError):
+                client = None
+
+        # ── 2. Ensure the ChatSession exists BEFORE we touch its fields ──
+        # Seed with the page_visits we already have so even a one-page
+        # visitor who never chats still leaves a footprint.
+        if client:
+            ChatSession.objects.get_or_create(
+                session_id=self.session_id,
+                defaults={'client': client, 'page_visits': page_visits},
+            )
+
+        # ── 3. Identity: only fill nulls (first save) ────────────────────
         identity_update = {}
         identity_map = {
             'country': 'visitor_country',
@@ -253,68 +284,44 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if val:
                 identity_update[field] = val
 
-        # Identity: only fill nulls (first save)
         if identity_update:
             ChatSession.objects.filter(
                 session_id=self.session_id,
                 visitor_country__isnull=True,
             ).update(**identity_update)
 
-        # page_visits: always overwrite with latest accumulated snapshot
-        page_visits = data.get('page_visits') or []
+        # ── 4. page_visits — always overwrite with latest snapshot ───────
         if page_visits:
             ChatSession.objects.filter(session_id=self.session_id).update(
                 page_visits=page_visits
             )
 
-        # Upsert the persistent Visitor record (one human = one Visitor across
-        # multiple sessions). visitor_uid comes from localStorage in the widget.
-        #
-        # visitor_meta fires on WebSocket open — BEFORE any chat message — so
-        # the ChatSession often doesn't exist yet at this point. We must
-        # ensure it exists so the visitor↔session link can be created. We
-        # take client_id from self (set during WS connect from the URL) rather
-        # than from a stale session lookup.
-        visitor_uid = (data.get('visitor_uid') or '').strip()[:64]
-        if visitor_uid and self.client_id:
+        # ── 5. Upsert persistent Visitor record + link to session ────────
+        if visitor_uid and client:
             from .models import Visitor
-            from users.models import Client
-            try:
-                client = Client.objects.get(id=self.client_id)
-            except (Client.DoesNotExist, ValueError, ValidationError):
-                client = None
 
-            if client:
-                visitor, _ = Visitor.objects.get_or_create(
-                    visitor_uid=visitor_uid,
-                    client=client,
-                    defaults={
-                        'device': data.get('device') or '',
-                        'os': data.get('os') or '',
-                        'browser': data.get('browser') or '',
-                        'country': data.get('country') or '',
-                        'city': data.get('city') or '',
-                        'country_code': data.get('country_code') or '',
-                        'timezone': data.get('timezone') or '',
-                        'ip': data.get('ip') or '',
-                    },
-                )
+            visitor, _ = Visitor.objects.get_or_create(
+                visitor_uid=visitor_uid,
+                client=client,
+                defaults={
+                    'device': data.get('device') or '',
+                    'os': data.get('os') or '',
+                    'browser': data.get('browser') or '',
+                    'country': data.get('country') or '',
+                    'city': data.get('city') or '',
+                    'country_code': data.get('country_code') or '',
+                    'timezone': data.get('timezone') or '',
+                    'ip': data.get('ip') or '',
+                },
+            )
 
-                # Ensure session exists, then link it to the visitor
-                session, sess_created = ChatSession.objects.get_or_create(
-                    session_id=self.session_id,
-                    defaults={'client': client, 'visitor_obj': visitor},
+            session = ChatSession.objects.filter(session_id=self.session_id).first()
+            if session and session.visitor_obj_id != visitor.id:
+                session.visitor_obj = visitor
+                session.save(update_fields=['visitor_obj'])
+                Visitor.objects.filter(pk=visitor.pk).update(
+                    total_sessions=models.F('total_sessions') + 1,
                 )
-                if session.visitor_obj_id != visitor.id:
-                    session.visitor_obj = visitor
-                    session.save(update_fields=['visitor_obj'])
-                    Visitor.objects.filter(pk=visitor.pk).update(
-                        total_sessions=models.F('total_sessions') + 1,
-                    )
-                if sess_created:
-                    Visitor.objects.filter(pk=visitor.pk).update(
-                        total_sessions=models.F('total_sessions') + 1,
-                    )
 
     @database_sync_to_async
     def save_page_visits(self, session_id, page_visits):

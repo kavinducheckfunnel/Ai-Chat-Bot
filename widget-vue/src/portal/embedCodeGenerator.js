@@ -82,50 +82,40 @@ export function generateEmbedCode(id, url, color, botName, format) {
   padding: 0; line-height: 1; }
 #cf-xb:hover { background: rgba(255,255,255,0.12); color: var(--cf-text-strong); }
 
-/* ── Messages ── */
-#cf-msgs { flex: 1; overflow-y: auto; padding: 16px 14px;
-  display: flex; flex-direction: column; gap: 2px; background: var(--cf-bg);
+/* ── Messages — exact old-code layout: simple flex, reactions inside bubble ── */
+#cf-msgs { flex: 1; overflow-y: auto; padding: 14px;
+  display: flex; flex-direction: column; gap: 9px; background: var(--cf-bg);
   min-height: 180px; max-height: 340px;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
 #cf-msgs::-webkit-scrollbar { width: 4px; }
 #cf-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
-/* Message wrapper — owns alignment + stacks bubble above reactions */
-.cf-wrap { display: flex; flex-direction: column; max-width: 82%;
-  animation: cf-mi .22s ease; margin-top: 8px; }
-.cf-wrap-ai { align-self: flex-start; align-items: flex-start; }
-.cf-wrap-me { align-self: flex-end; align-items: flex-end; }
-.cf-wrap:first-child { margin-top: 0; }
-
-@keyframes cf-mi { from { opacity: 0; transform: translateY(6px); }
+.cf-ai, .cf-me { padding: 10px 14px; border-radius: 18px; font-size: 14px;
+  line-height: 1.55; max-width: 84%; animation: cf-mi .2s ease; word-break: break-word; }
+@keyframes cf-mi { from { opacity: 0; transform: translateY(7px); }
   to { opacity: 1; transform: translateY(0); } }
-
-.cf-ai, .cf-me { padding: 11px 15px; border-radius: 18px;
-  font-size: 14px; line-height: 1.55; word-break: break-word; }
 .cf-ai { background: var(--cf-bubble-ai); color: var(--cf-text);
-  border-bottom-left-radius: 5px; border: 1px solid var(--cf-border-soft); }
+  align-self: flex-start; border-bottom-left-radius: 4px; border: 1px solid var(--cf-border-soft); }
 .cf-me { background: var(--cf-accent); color: #fff;
-  border-bottom-right-radius: 5px; }
-.cf-img-msg { max-width: 180px; border-radius: 14px;
+  align-self: flex-end; border-bottom-right-radius: 4px; }
+.cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 12px;
   object-fit: cover; display: block; border: 1px solid rgba(255,255,255,0.08); }
 
-.cf-ai ol { margin: 6px 0 4px 0; padding-left: 22px; list-style-type: decimal; }
-.cf-ai li { margin-bottom: 8px; color: var(--cf-text); line-height: 1.55; display: list-item; padding-left: 4px; }
-.cf-ai li:last-child { margin-bottom: 0; }
-.cf-ai p { margin: 0 0 7px 0; color: var(--cf-text); }
+.cf-ai ol { margin: 5px 0 6px 0; padding-left: 18px; list-style-type: decimal; }
+.cf-ai li { margin-bottom: 5px; color: var(--cf-text); line-height: 1.5; display: list-item; }
+.cf-ai p { margin: 0 0 5px 0; color: var(--cf-text); }
 .cf-ai p:last-child { margin-bottom: 0; }
 .cf-ai a { color: #a5b4fc; text-decoration: underline; font-weight: 500; word-break: break-word; }
 .cf-ai a:hover { color: #c4b5fd; }
 .cf-ai strong { color: var(--cf-text-strong); font-weight: 700; }
 
-/* ── Reactions — appear BELOW the AI bubble, slightly indented ── */
-.cf-rxn { display: flex; gap: 4px; margin-top: 5px; padding-left: 4px; }
-.cf-rb { background: transparent; border: 1px solid rgba(255,255,255,0.10);
-  border-radius: 20px; padding: 2px 9px; font-size: 11px; cursor: pointer;
-  transition: all .15s; color: rgba(255,255,255,0.35);
-  line-height: 1.6; }
-.cf-rb:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.18); }
-.cf-rb.on { background: rgba(99,102,241,0.18); border-color: rgba(99,102,241,0.45); color: #a5b4fc; }
+/* ── Reactions — small pill buttons INSIDE the AI bubble, below the text ── */
+.cf-rxn { display: flex; gap: 4px; margin-top: 5px; }
+.cf-rb { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+  transition: all .15s; color: rgba(255,255,255,0.45); }
+.cf-rb:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.75); }
+.cf-rb.on { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
 
 /* ── Typing ── */
 .cf-typ { align-self: flex-start; background: var(--cf-bubble-ai);
@@ -268,9 +258,9 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-w[data-cf-theme="light"] .cf-ai li { color: #1e293b; }
 #cf-w[data-cf-theme="light"] .cf-ai strong { color: #0f172a; }
 #cf-w[data-cf-theme="light"] .cf-ai a { color: #4338ca; }
-#cf-w[data-cf-theme="light"] .cf-rb { background: transparent; border-color: rgba(0,0,0,0.12); color: rgba(0,0,0,0.4); }
-#cf-w[data-cf-theme="light"] .cf-rb:hover { background: rgba(0,0,0,0.04); color: #1e293b; border-color: rgba(0,0,0,0.2); }
-#cf-w[data-cf-theme="light"] .cf-rb.on { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.45); color: #4338ca; }
+#cf-w[data-cf-theme="light"] .cf-rb { background: #e2e8f0; border-color: #cbd5e1; color: #475569; }
+#cf-w[data-cf-theme="light"] .cf-rb:hover { background: #cbd5e1; color: #1e293b; }
+#cf-w[data-cf-theme="light"] .cf-rb.on { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.4); color: #4338ca; }
 #cf-w[data-cf-theme="light"] .cf-typ { background: #f1f5f9; border-color: #e2e8f0; }
 #cf-w[data-cf-theme="light"] .cf-typ span { background: #94a3b8; }
 </style>`
@@ -282,7 +272,7 @@ export function generateEmbedCode(id, url, color, botName, format) {
 <div class="cf-hi"><div class="cf-hn" id="cf-hn">${name}</div><div class="cf-hs"><span class="cf-dot"></span>Online</div></div>
 <button id="cf-xb" aria-label="Close">&#10005;</button>
 </div>
-<div id="cf-msgs"><div class="cf-wrap cf-wrap-ai"><div class="cf-ai">&#128075; Hi! How can I help you today?</div></div></div>
+<div id="cf-msgs"><div class="cf-ai">&#128075; Hi! How can I help you today?</div></div>
 <div id="cf-imgprev"><div class="cf-prev-wrap"><img class="cf-prev-thumb" id="cf-pt" src="" alt=""/><button class="cf-prev-rm" id="cf-prm">&#10005;</button></div></div>
 <div id="cf-lead">
   <div class="cf-lead-head">
@@ -413,41 +403,33 @@ function submitLead(){
 // ── Chime ────────────────────────────────────────────────────────────
 function chime(){if(!isOpen)return;try{var a=new(window.AudioContext||window.webkitAudioContext)();[[880,0],[1100,.14],[1320,.26]].forEach(function(t){var o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.type='sine';o.frequency.value=t[0];var st=a.currentTime+t[1];g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(.09,st+.04);g.gain.exponentialRampToValueAtTime(.001,st+.38);o.start(st);o.stop(st+.38)});setTimeout(function(){a.close()},1400)}catch(e){}}
 
-// ── DOM helpers ──────────────────────────────────────────────────────
-// Each message is a .cf-wrap (handles flex alignment) containing the
-// bubble and — for AI messages — a reaction row BELOW the bubble.
+// ── DOM helpers — EXACT old-code structure: simple divs, reactions inside the AI bubble ──
 function renderBubble(html,who){
-  var wrap=document.createElement('div');
-  wrap.className='cf-wrap '+(who==='me'?'cf-wrap-me':'cf-wrap-ai');
+  var d=document.createElement('div');
   if(who==='img'){
-    var img=document.createElement('img');
-    img.className='cf-img-msg';img.src=html;img.alt='image';
-    wrap.classList.remove('cf-wrap-ai');wrap.classList.add('cf-wrap-me');
-    wrap.appendChild(img);
+    d.innerHTML='<img class="cf-img-msg" src="'+html+'" alt="image"/>';
+    $('cf-msgs').appendChild(d.firstChild);
   }else{
-    var b=document.createElement('div');
-    b.className=who==='ai'?'cf-ai':'cf-me';
-    b.innerHTML=html;
-    wrap.appendChild(b);
+    d.className=who==='ai'?'cf-ai':'cf-me';
+    d.innerHTML=html;
     if(who==='ai'){
       var rx=document.createElement('div');rx.className='cf-rxn';
       ['\\uD83D\\uDC4D','\\uD83D\\uDC4E'].forEach(function(e){
-        var rb=document.createElement('button');rb.className='cf-rb';rb.textContent=e;
-        rb.onclick=function(){
-          rb.classList.toggle('on');
-          Array.from(rx.children).forEach(function(x){if(x!==rb)x.classList.remove('on')});
+        var b=document.createElement('button');b.className='cf-rb';b.textContent=e;
+        b.onclick=function(){
+          b.classList.toggle('on');
+          Array.from(rx.children).forEach(function(x){if(x!==b)x.classList.remove('on')});
         };
-        rx.appendChild(rb);
+        rx.appendChild(b);
       });
-      wrap.appendChild(rx);
+      d.appendChild(rx);
     }
+    $('cf-msgs').appendChild(d);
   }
-  $('cf-msgs').appendChild(wrap);
   $('cf-msgs').scrollTop=9999;
 }
 function bubble(html,who){
   renderBubble(html,who);
-  // Persist (skip transient '[User sent an image]' duplicate already handled)
   msgLog.push({who:who,html:html});
   persistMsgs();
 }
