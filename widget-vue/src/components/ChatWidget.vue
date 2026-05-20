@@ -28,36 +28,40 @@
         <div
           v-for="(msg, index) in chatMessages"
           :key="index"
-          :class="['cf-msg', msg.sender === 'user' ? 'cf-msg-user' : 'cf-msg-ai']"
-          :style="msg.sender === 'user' ? { background: branding.chatbot_color || '#6366f1' } : {}"
+          :class="['cf-msg-wrap', msg.sender === 'user' ? 'cf-msg-wrap-user' : 'cf-msg-wrap-ai']"
         >
-          <template v-if="msg.type === 'text'">
-            <div v-if="msg.sender === 'ai'" v-html="renderMarkdown(msg.text)" class="markdown-body"></div>
-            <div v-else>{{ msg.text }}</div>
-            <!-- Emoji reactions (AI messages only) -->
-            <div v-if="msg.sender === 'ai' && msg.text" class="msg-reactions">
-              <button
-                class="reaction-btn"
-                :class="{ active: msg.reaction === '👍' }"
-                @click="react(index, '👍')"
-                title="Helpful"
-              >👍</button>
-              <button
-                class="reaction-btn"
-                :class="{ active: msg.reaction === '👎' }"
-                @click="react(index, '👎')"
-                title="Not helpful"
-              >👎</button>
-            </div>
-          </template>
-          <template v-else-if="msg.type === 'image'">
-            <img :src="msg.src" class="chat-image" alt="Sent image" />
-          </template>
-          <template v-else-if="msg.type === 'typing'">
-            <div class="typing-indicator">
-              <span></span><span></span><span></span>
-            </div>
-          </template>
+          <div
+            :class="['cf-msg', msg.sender === 'user' ? 'cf-msg-user' : 'cf-msg-ai']"
+            :style="msg.sender === 'user' ? { background: branding.chatbot_color || '#6366f1' } : {}"
+          >
+            <template v-if="msg.type === 'text'">
+              <div v-if="msg.sender === 'ai'" v-html="renderMarkdown(msg.text)" class="markdown-body"></div>
+              <div v-else>{{ msg.text }}</div>
+            </template>
+            <template v-else-if="msg.type === 'image'">
+              <img :src="msg.src" class="chat-image" alt="Sent image" />
+            </template>
+            <template v-else-if="msg.type === 'typing'">
+              <div class="typing-indicator">
+                <span></span><span></span><span></span>
+              </div>
+            </template>
+          </div>
+          <!-- Emoji reactions below AI bubbles only -->
+          <div v-if="msg.sender === 'ai' && msg.type === 'text' && msg.text" class="msg-reactions">
+            <button
+              class="reaction-btn"
+              :class="{ active: msg.reaction === '👍' }"
+              @click="react(index, '👍')"
+              title="Helpful"
+            >👍</button>
+            <button
+              class="reaction-btn"
+              :class="{ active: msg.reaction === '👎' }"
+              @click="react(index, '👎')"
+              title="Not helpful"
+            >👎</button>
+          </div>
         </div>
       </div>
 
@@ -211,9 +215,23 @@ const isTyping    = ref(false)
 const inputValue  = ref('')
 const widgetRoot  = ref(null)
 const branding    = ref({ chatbot_name: 'AI Assistant', chatbot_color: '#6366f1', chatbot_theme: 'dark', chatbot_logo_url: null, voice_input_enabled: false, image_input_enabled: false })
-const chatMessages = ref([
-  { type: 'text', text: "Hi! 👋 I'm your AI Assistant. How can I help you today?", sender: 'ai' },
-])
+
+// ── Chat history persistence across page navigations ────────────────────────
+// sessionId from useTracker is stored in sessionStorage, so it stays the same
+// for the whole browser tab session even when the user navigates between pages.
+const MSGS_KEY = `cf_msgs_${sessionId}`
+const INITIAL_MSG = { type: 'text', text: "Hi! 👋 I'm your AI Assistant. How can I help you today?", sender: 'ai' }
+
+function loadSavedMessages() {
+  try {
+    const raw = sessionStorage.getItem(MSGS_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : null
+  } catch { return null }
+}
+
+const chatMessages = ref(loadSavedMessages() || [INITIAL_MSG])
 const messagesContainer  = ref(null)
 const fileInput          = ref(null)
 const userMessageCount   = ref(0)
@@ -474,10 +492,15 @@ async function submitLead() {
   chatMessages.value.push({ type: 'text', text: "✅ Thanks! We'll be in touch soon.", sender: 'ai', reaction: null })
 }
 
-// ── Auto-scroll ───────────────────────────────────────────────────────────────
-watch(chatMessages, async () => {
+// ── Auto-scroll + persist messages ───────────────────────────────────────────
+watch(chatMessages, async (msgs) => {
   await nextTick()
   if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+  // Persist to sessionStorage (exclude transient typing indicator)
+  try {
+    const toSave = msgs.filter(m => m.type !== 'typing')
+    sessionStorage.setItem(MSGS_KEY, JSON.stringify(toSave))
+  } catch {}
 }, { deep: true })
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
@@ -660,10 +683,10 @@ onBeforeUnmount(() => {
 #cf-chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 16px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 4px;
   background: #111111;
   min-height: 200px;
   max-height: 360px;
@@ -673,49 +696,58 @@ onBeforeUnmount(() => {
 #cf-chat-messages::-webkit-scrollbar { width: 4px; }
 #cf-chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
-.cf-msg {
-  padding: 11px 15px;
-  border-radius: 18px;
-  max-width: 84%;
-  word-wrap: break-word;
-  font-size: 14px;
-  line-height: 1.55;
+/* Message wrapper handles alignment and groups bubble + reactions */
+.cf-msg-wrap {
+  display: flex;
+  flex-direction: column;
+  max-width: 82%;
   animation: cf-msg-in 0.22s ease;
 }
+.cf-msg-wrap-user { align-self: flex-end; align-items: flex-end; margin-top: 6px; }
+.cf-msg-wrap-ai   { align-self: flex-start; align-items: flex-start; margin-top: 6px; }
+
 @keyframes cf-msg-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+.cf-msg {
+  padding: 10px 14px;
+  border-radius: 18px;
+  word-wrap: break-word;
+  font-size: 13.5px;
+  line-height: 1.55;
 }
 .cf-msg-user {
   color: white;
-  align-self: flex-end;
-  border-bottom-right-radius: 4px;
+  border-bottom-right-radius: 5px;
 }
 .cf-msg-ai {
   background: #1e2433;
   color: #e2e8f0;
-  align-self: flex-start;
-  border-bottom-left-radius: 4px;
+  border-bottom-left-radius: 5px;
   border: 1px solid rgba(255,255,255,0.06);
 }
 
-/* ── Emoji reactions ────────────────────────────────────────────────── */
+/* ── Emoji reactions — below the AI bubble, outside it ─────────────── */
 .msg-reactions {
   display: flex;
   gap: 4px;
-  margin-top: 6px;
+  margin-top: 5px;
+  padding-left: 2px;
 }
 .reaction-btn {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.05);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 20px;
   padding: 2px 8px;
-  font-size: 12px;
+  font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.4);
+  line-height: 1.6;
 }
-.reaction-btn:hover { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.8); }
+.reaction-btn:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.75); }
 .reaction-btn.active { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.4); color: #a5b4fc; }
 
 /* ── Chat image ─────────────────────────────────────────────────────── */
@@ -909,6 +941,7 @@ onBeforeUnmount(() => {
   background: #f8fafc !important;
   scrollbar-color: rgba(0,0,0,0.15) transparent !important;
 }
+#cf-chat-container[data-cf-theme="light"] .cf-msg-wrap { /* alignment handled by base CSS */ }
 #cf-chat-container[data-cf-theme="light"] .cf-msg-ai {
   background: #ffffff !important;
   color: #1e293b !important;
@@ -937,8 +970,8 @@ onBeforeUnmount(() => {
 }
 #cf-chat-container[data-cf-theme="light"] .reaction-btn {
   background: rgba(0,0,0,0.04) !important;
-  border-color: rgba(0,0,0,0.08) !important;
-  color: rgba(0,0,0,0.4) !important;
+  border-color: rgba(0,0,0,0.09) !important;
+  color: rgba(0,0,0,0.38) !important;
 }
 #cf-chat-container[data-cf-theme="light"] .reaction-btn:hover {
   background: rgba(0,0,0,0.08) !important;
@@ -1020,10 +1053,11 @@ onBeforeUnmount(() => {
     padding: 12px 14px !important;
   }
   #cf-chat-messages {
-    padding: 12px 14px !important;
+    padding: 10px 10px !important;
+    max-height: calc(85vh - 140px) !important;
   }
-  #cf-input-area {
-    padding: 10px 14px !important;
+  #cf-chat-input-area {
+    padding: 10px 12px !important;
   }
 }
 </style>
