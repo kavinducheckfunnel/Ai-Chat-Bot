@@ -8,17 +8,35 @@ from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from users.models import Client
-from scraper.models import DocumentChunk
+from scraper.models import DocumentChunk, WebhookEvent
 
 logger = logging.getLogger(__name__)
 
 
+def _log_event(client, source, event_type, resource_id, resource_title):
+    """
+    Create a WebhookEvent audit row in `queued` state. The Celery task that
+    actually does the re-embedding updates this row to done / failed via
+    _mark_event_status (called from scraper/tasks.py).
+    """
+    return WebhookEvent.objects.create(
+        client=client,
+        source=source,
+        event_type=event_type[:60],
+        resource_id=str(resource_id)[:64] if resource_id else '',
+        resource_title=(resource_title or '')[:300],
+        status='queued',
+    )
+
+
 # ── Shared async re-embed helper ─────────────────────────────────────────────
 
-def _queue_product_update(client, product_id, title, body_html, price, url):
+def _queue_product_update(client, product_id, title, body_html, price, url, event_id=None):
     """
     Mark the client as syncing and enqueue a Celery task to do the actual
     re-embedding asynchronously so the webhook response is instant.
+
+    event_id lets the task close the loop on the WebhookEvent audit row.
     """
     Client.objects.filter(pk=client.pk).update(
         ingestion_status='RUNNING',
@@ -26,7 +44,8 @@ def _queue_product_update(client, product_id, title, body_html, price, url):
     )
     from scraper.tasks import re_embed_product
     re_embed_product.delay(
-        str(client.pk), str(product_id), title, body_html, str(price), url
+        str(client.pk), str(product_id), title, body_html, str(price), url,
+        event_id,
     )
 
 
@@ -62,8 +81,9 @@ def shopify_webhook(request, client_id):
     if not (product_id and title):
         return Response({'status': 'skipped — missing id or title'}, status=400)
 
-    _queue_product_update(client, product_id, title, body_html, price, url)
-    return Response({'status': 'queued'}, status=202)
+    event = _log_event(client, 'shopify', 'product.update', product_id, title)
+    _queue_product_update(client, product_id, title, body_html, price, url, event.id)
+    return Response({'status': 'queued', 'event_id': event.id}, status=202)
 
 
 # ── WooCommerce ───────────────────────────────────────────────────────────────
@@ -102,8 +122,9 @@ def woocommerce_webhook(request, client_id):
     if not (product_id and title):
         return Response({'status': 'skipped — missing id or name'}, status=400)
 
-    _queue_product_update(client, product_id, title, body_html, price, url)
-    return Response({'status': 'queued'}, status=202)
+    event = _log_event(client, 'woocommerce', 'product.updated', product_id, title)
+    _queue_product_update(client, product_id, title, body_html, price, url, event.id)
+    return Response({'status': 'queued', 'event_id': event.id}, status=202)
 
 
 # ── WordPress ─────────────────────────────────────────────────────────────────
@@ -148,6 +169,9 @@ def wordpress_webhook(request, client_id):
         ingestion_status='RUNNING',
         updated_at=timezone.now(),
     )
+    event = _log_event(client, 'wordpress', 'post.save', post_id, title)
     from scraper.tasks import re_embed_wordpress_post
-    re_embed_wordpress_post.delay(str(client.pk), str(post_id), title, content_html, link)
-    return Response({'status': 'queued'}, status=202)
+    re_embed_wordpress_post.delay(
+        str(client.pk), str(post_id), title, content_html, link, event.id,
+    )
+    return Response({'status': 'queued', 'event_id': event.id}, status=202)

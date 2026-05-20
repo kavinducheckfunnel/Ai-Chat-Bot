@@ -1425,6 +1425,83 @@ def scrape_progress(request, client_id):
     })
 
 
+# ─── Webhook audit + secret management ───────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def webhook_events(request, client_id):
+    """
+    Powers the portal's "Real-time sync" panel.
+
+    Returns three things in one call:
+      1) the client's webhook_secret (for the tenant to paste into their
+         CMS) and the three ready-to-paste webhook URLs
+      2) latest 50 audit events (newest-first) so the tenant can SEE that
+         their CMS is actually pushing changes — not silently relying on
+         the daily safety-net crawl
+      3) 24h counters for the activity strip ("12 successful, 0 failed")
+    """
+    from scraper.models import WebhookEvent
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    events = list(
+        WebhookEvent.objects
+        .filter(client=client)
+        .order_by('-created_at')[:50]
+        .values(
+            'id', 'source', 'event_type', 'resource_id', 'resource_title',
+            'status', 'error_message', 'duration_ms', 'created_at',
+        )
+    )
+
+    from datetime import timedelta
+    last_24h = timezone.now() - timedelta(hours=24)
+    counts_24h = (
+        WebhookEvent.objects
+        .filter(client=client, created_at__gte=last_24h)
+        .values('status')
+        .annotate(count=Count('id'))
+    )
+    counters = {row['status']: row['count'] for row in counts_24h}
+
+    # Backend origin for building the paste-ready URLs. Same scheme as the
+    # Sync Now button's webhook URL in ClientDetail/PortalSettings.
+    backend = request.build_absolute_uri('/').rstrip('/')
+    base = f'{backend}/api/scraper/webhooks'
+
+    return Response({
+        'webhook_secret': client.webhook_secret or '',
+        'webhook_urls': {
+            'shopify':     f'{base}/shopify/{client.id}/',
+            'woocommerce': f'{base}/woocommerce/{client.id}/',
+            'wordpress':   f'{base}/wordpress/{client.id}/',
+        },
+        'events': [
+            {
+                'id': e['id'],
+                'source': e['source'],
+                'event_type': e['event_type'],
+                'resource_id': e['resource_id'],
+                'resource_title': e['resource_title'],
+                'status': e['status'],
+                'error_message': e['error_message'],
+                'duration_ms': e['duration_ms'],
+                'created_at': e['created_at'].isoformat() if e['created_at'] else None,
+            }
+            for e in events
+        ],
+        'counts_24h': {
+            'queued': counters.get('queued', 0),
+            'done':   counters.get('done',   0),
+            'failed': counters.get('failed', 0),
+        },
+    })
+
+
 # ─── Platform stats (superadmin only) ─────────────────────────────────────────
 
 @api_view(['GET'])

@@ -212,6 +212,16 @@ export function useAdminApi() {
 
     getScrapeProgress: (id) => apiFetch(`/api/admin/clients/${id}/scrape-progress/`),
 
+    // ── Webhooks (real-time sync) ────────────────────────────────────────
+    // Returns webhook_secret, ready-to-paste webhook URLs, 50 most recent
+    // audit events, and 24h success/failure counters in a single call —
+    // everything the Knowledge → Real-time sync panel needs.
+    getWebhookEvents: (id) => apiFetch(`/api/admin/clients/${id}/webhook-events/`),
+
+    // Rotates the secret; old value stops working immediately. UI should
+    // confirm before calling and copy the new secret to clipboard.
+    rotateWebhookSecret: (id) => apiFetch(`/api/admin/clients/${id}/rotate-secret/`, { method: 'POST' }),
+
     // ── Sessions ─────────────────────────────────────────────────────────
     getSession: (id) => apiFetch(`/api/admin/sessions/${id}/`),
 

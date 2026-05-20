@@ -6,8 +6,25 @@ from celery import shared_task
 logger = logging.getLogger(__name__)
 
 
+def _close_event(event_id, status, error='', started_at=None):
+    """
+    Mark a WebhookEvent row done / failed once the embedding task finishes.
+    Best-effort: never raises so it can't break the embedding task itself.
+    """
+    if not event_id:
+        return
+    try:
+        from scraper.models import WebhookEvent
+        update = {'status': status, 'error_message': (error or '')[:5000]}
+        if started_at is not None:
+            update['duration_ms'] = int((time.time() - started_at) * 1000)
+        WebhookEvent.objects.filter(pk=event_id).update(**update)
+    except Exception as e:
+        logger.warning(f'[_close_event] Could not update event {event_id}: {e}')
+
+
 @shared_task(bind=True, max_retries=3)
-def re_embed_product(self, client_id, product_id, title, body_html, price, url):
+def re_embed_product(self, client_id, product_id, title, body_html, price, url, event_id=None):
     """
     Re-embed a single product after a Shopify / WooCommerce webhook.
     Deletes old chunks for this product then creates a fresh one.
@@ -17,9 +34,11 @@ def re_embed_product(self, client_id, product_id, title, body_html, price, url):
     from scraper.ingestion import clean_html
     from scraper.embeddings import batch_embed_texts
 
+    started = time.time()
     try:
         client = Client.objects.get(pk=client_id)
     except Client.DoesNotExist:
+        _close_event(event_id, 'failed', 'Client not found', started)
         return
 
     try:
@@ -51,16 +70,18 @@ def re_embed_product(self, client_id, product_id, title, body_html, price, url):
             ingestion_status='DONE',
             updated_at=timezone.now(),
         )
+        _close_event(event_id, 'done', '', started)
         logger.info(f'[re_embed_product] Updated product {product_id} for client {client_id}')
 
     except Exception as exc:
         logger.error(f'[re_embed_product] Failed: {exc}')
         Client.objects.filter(pk=client_id).update(ingestion_status='FAILED')
+        _close_event(event_id, 'failed', str(exc), started)
         raise self.retry(exc=exc, countdown=30)
 
 
 @shared_task(bind=True, max_retries=3)
-def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link):
+def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link, event_id=None):
     """
     Re-embed a single WordPress post after a webhook update.
     Deletes old chunks for this post then re-chunks + re-embeds.
@@ -70,15 +91,18 @@ def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link)
     from scraper.ingestion import clean_html, _SPLITTER
     from scraper.embeddings import batch_embed_texts
 
+    started = time.time()
     try:
         client = Client.objects.get(pk=client_id)
     except Client.DoesNotExist:
+        _close_event(event_id, 'failed', 'Client not found', started)
         return
 
     try:
         text = f"Title: {title}\n\n{clean_html(content_html)}"
         splits = _SPLITTER.split_text(text)
         if not splits:
+            _close_event(event_id, 'done', '', started)
             return
 
         DocumentChunk.objects.filter(client=client, product_id=post_id).delete()
@@ -113,11 +137,13 @@ def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link)
             ingestion_status='DONE',
             updated_at=timezone.now(),
         )
+        _close_event(event_id, 'done', '', started)
         logger.info(f'[re_embed_wordpress_post] Re-embedded post {post_id} ({len(docs)} chunks)')
 
     except Exception as exc:
         logger.error(f'[re_embed_wordpress_post] Failed: {exc}')
         Client.objects.filter(pk=client_id).update(ingestion_status='FAILED')
+        _close_event(event_id, 'failed', str(exc), started)
         raise self.retry(exc=exc, countdown=30)
 
 
@@ -163,16 +189,22 @@ def scrape_client_website(self, client_id):
 @shared_task
 def auto_rescrape_stale_clients():
     """
-    Periodic task — runs every 3 hours via Celery Beat.
+    Periodic safety-net task — runs daily at 02:00 UTC via Celery Beat.
     Finds every active client whose knowledge base is stale (last scraped
-    more than 3 hours ago, or never scraped) and queues a fresh scrape.
+    > 24 hours ago, or never scraped) and queues a fresh full crawl.
+
+    Real-time changes are covered by per-platform webhooks
+    (see scraper/views.py). This task only catches what webhooks missed:
+    new pages on custom HTML sites, drift in deleted-but-still-embedded
+    chunks, tenants who haven't configured webhooks yet, etc.
+
     Skips clients currently being scraped (RUNNING) to avoid overlap.
     """
     from django.utils import timezone
     from datetime import timedelta
     from users.models import Client
 
-    threshold = timezone.now() - timedelta(hours=3)
+    threshold = timezone.now() - timedelta(hours=24)
 
     stale_clients = Client.objects.filter(
         is_active=True,

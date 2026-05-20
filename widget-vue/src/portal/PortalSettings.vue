@@ -246,6 +246,145 @@
           <span class="progress-text">Scanning pages…</span>
         </div>
       </div>
+
+      <!-- ─── Real-time sync (webhooks) ─────────────────────────────────── -->
+      <div class="section-card">
+        <h2 class="section-title">⚡ Real-time sync</h2>
+        <p class="section-sub">
+          Get content changes pushed to your chatbot the moment they happen on your site — no waiting for the daily safety-net crawl. Configure your CMS to call the webhook URL for your platform below.
+        </p>
+
+        <!-- 24h activity strip — shows webhooks are actually firing -->
+        <div class="wh-counters">
+          <div class="wh-counter wh-counter-done">
+            <span class="wh-counter-num">{{ webhook.counts_24h.done }}</span>
+            <span class="wh-counter-label">Successful (24h)</span>
+          </div>
+          <div class="wh-counter wh-counter-queued">
+            <span class="wh-counter-num">{{ webhook.counts_24h.queued }}</span>
+            <span class="wh-counter-label">In flight</span>
+          </div>
+          <div class="wh-counter wh-counter-failed">
+            <span class="wh-counter-num">{{ webhook.counts_24h.failed }}</span>
+            <span class="wh-counter-label">Failed</span>
+          </div>
+          <button class="wh-refresh" @click="loadWebhookData" :disabled="webhookLoading">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Refresh
+          </button>
+        </div>
+
+        <!-- Platform picker (decides which setup card to show) -->
+        <div class="wh-platform-tabs">
+          <button
+            v-for="p in webhookPlatforms" :key="p.id"
+            class="wh-platform-tab"
+            :class="{ active: webhookPlatform === p.id }"
+            @click="webhookPlatform = p.id"
+          >
+            <span class="wh-platform-icon" v-html="p.icon"></span>
+            {{ p.label }}
+          </button>
+        </div>
+
+        <!-- Per-platform setup card -->
+        <div v-if="webhookPlatform === 'wordpress'" class="wh-setup-card">
+          <p class="wh-setup-title">Install a webhook on WordPress (3 steps)</p>
+          <ol class="wh-steps">
+            <li>Install the free <strong>WP Webhooks</strong> plugin from the WordPress plugin directory.</li>
+            <li>Go to <strong>WP Webhooks → Send Data → Add new webhook URL</strong>. Choose triggers: <em>post created</em>, <em>post updated</em>, <em>post deleted</em>.</li>
+            <li>Paste the URL below into the webhook destination and the secret into the <em>Secret key</em> field.</li>
+          </ol>
+          <div class="wh-paste-row">
+            <span class="wh-paste-label">Webhook URL</span>
+            <code class="wh-paste-code">{{ webhook.webhook_urls.wordpress }}</code>
+            <button class="wh-copy" @click="copyText(webhook.webhook_urls.wordpress, 'wp-url')">
+              {{ copiedKey === 'wp-url' ? '✓' : 'Copy' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="webhookPlatform === 'woocommerce'" class="wh-setup-card">
+          <p class="wh-setup-title">Add a WooCommerce webhook</p>
+          <ol class="wh-steps">
+            <li>In WooCommerce → <strong>Settings → Advanced → Webhooks → Add webhook</strong>.</li>
+            <li>Set <strong>Topic</strong> to <em>Product updated</em> (repeat with <em>Product created</em> and <em>Product deleted</em> for full coverage).</li>
+            <li>Paste the URL below into <strong>Delivery URL</strong> and the secret into <strong>Secret</strong>.</li>
+          </ol>
+          <div class="wh-paste-row">
+            <span class="wh-paste-label">Delivery URL</span>
+            <code class="wh-paste-code">{{ webhook.webhook_urls.woocommerce }}</code>
+            <button class="wh-copy" @click="copyText(webhook.webhook_urls.woocommerce, 'wc-url')">
+              {{ copiedKey === 'wc-url' ? '✓' : 'Copy' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="webhookPlatform === 'shopify'" class="wh-setup-card">
+          <p class="wh-setup-title">Register a Shopify webhook</p>
+          <ol class="wh-steps">
+            <li>In Shopify Admin → <strong>Settings → Notifications → Webhooks → Create webhook</strong>.</li>
+            <li>Select event <em>Product update</em> (repeat with <em>Product creation</em> and <em>Product deletion</em>).</li>
+            <li>Paste the URL below into <strong>URL</strong>, format <strong>JSON</strong>, and use the secret as the <strong>shared secret</strong> in Notifications settings.</li>
+          </ol>
+          <div class="wh-paste-row">
+            <span class="wh-paste-label">URL</span>
+            <code class="wh-paste-code">{{ webhook.webhook_urls.shopify }}</code>
+            <button class="wh-copy" @click="copyText(webhook.webhook_urls.shopify, 'sh-url')">
+              {{ copiedKey === 'sh-url' ? '✓' : 'Copy' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="webhookPlatform === 'custom'" class="wh-setup-card">
+          <p class="wh-setup-title">Custom HTML or SaaS site</p>
+          <p class="wh-custom-note">
+            Webhooks aren't possible for static-HTML / Webflow / Squarespace sites without a backend. Your knowledge base will be refreshed by the daily safety-net crawl (runs at 02:00 UTC). Use <strong>Re-train</strong> above to force an immediate refresh anytime.
+          </p>
+        </div>
+
+        <!-- Webhook secret (shared across all platforms) -->
+        <div class="wh-secret-row">
+          <span class="wh-paste-label">Secret</span>
+          <code class="wh-paste-code wh-secret-code">
+            <template v-if="secretRevealed">{{ webhook.webhook_secret || '(none set yet — click Generate)' }}</template>
+            <template v-else>{{ webhook.webhook_secret ? maskedSecret : '(none set yet — click Generate)' }}</template>
+          </code>
+          <button class="wh-copy" @click="secretRevealed = !secretRevealed" :title="secretRevealed ? 'Hide' : 'Reveal'">
+            {{ secretRevealed ? 'Hide' : 'Reveal' }}
+          </button>
+          <button class="wh-copy" @click="copyText(webhook.webhook_secret, 'secret')" :disabled="!webhook.webhook_secret">
+            {{ copiedKey === 'secret' ? '✓' : 'Copy' }}
+          </button>
+          <button class="wh-rotate" @click="rotateSecret" :disabled="rotating">
+            {{ rotating ? '…' : (webhook.webhook_secret ? 'Rotate' : 'Generate') }}
+          </button>
+        </div>
+        <p class="wh-secret-help">
+          The secret signs every payload your CMS sends so we can verify it's really from you. Rotating invalidates the old one — paste the new value into your CMS immediately.
+        </p>
+
+        <!-- Recent activity -->
+        <div class="wh-activity">
+          <p class="wh-activity-title">Recent activity</p>
+          <div v-if="!webhook.events.length" class="wh-empty">
+            No webhook events yet. Once your CMS is configured above, updates will start landing here within seconds.
+          </div>
+          <div v-else class="wh-events-list">
+            <div
+              v-for="e in webhook.events.slice(0, 10)" :key="e.id"
+              class="wh-event"
+              :class="'wh-event-' + e.status"
+            >
+              <span class="wh-event-dot"></span>
+              <span class="wh-event-source">{{ e.source }}</span>
+              <span class="wh-event-title">{{ e.resource_title || e.resource_id || e.event_type }}</span>
+              <span class="wh-event-time">{{ formatRelativeTime(e.created_at) }}</span>
+              <span v-if="e.duration_ms != null" class="wh-event-dur">{{ e.duration_ms }}ms</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -923,6 +1062,92 @@ const scrapeStatusLabel = computed(() => {
   if (s === 'FAILED') return 'Training failed'
   return 'Not trained yet'
 })
+
+// ── Real-time sync (webhooks) ─────────────────────────────────────────────
+// Powers the "Real-time sync" panel under Knowledge: setup wizards per
+// CMS, secret reveal/rotate, and the 50-event audit log so tenants can
+// SEE webhooks landing instead of guessing whether they wired it up right.
+const webhookPlatform = ref('wordpress')
+const webhookLoading = ref(false)
+const rotating = ref(false)
+const secretRevealed = ref(false)
+const copiedKey = ref('')
+const webhook = ref({
+  webhook_secret: '',
+  webhook_urls: { shopify: '', woocommerce: '', wordpress: '' },
+  events: [],
+  counts_24h: { queued: 0, done: 0, failed: 0 },
+})
+
+const webhookPlatforms = [
+  { id: 'wordpress',   label: 'WordPress',   icon: '<span style="color:#21759B;font-weight:700;font-size:11px">WP</span>' },
+  { id: 'woocommerce', label: 'WooCommerce', icon: '<span style="color:#7F54B3;font-weight:700;font-size:11px">WC</span>' },
+  { id: 'shopify',     label: 'Shopify',     icon: '<span style="color:#95BF47;font-weight:700;font-size:11px">SH</span>' },
+  { id: 'custom',      label: 'Custom site', icon: '<span style="font-weight:700;font-size:11px">⚙️</span>' },
+]
+
+const maskedSecret = computed(() => {
+  const s = webhook.value.webhook_secret || ''
+  if (s.length < 12) return s
+  return s.slice(0, 4) + '••••••••••••' + s.slice(-4)
+})
+
+async function loadWebhookData() {
+  if (!props.client) return
+  webhookLoading.value = true
+  try {
+    const data = await api.getWebhookEvents(props.client.id)
+    if (data) webhook.value = data
+  } catch {} finally { webhookLoading.value = false }
+}
+
+async function rotateSecret() {
+  if (!props.client) return
+  // Generating-for-the-first-time doesn't need a confirm, but rotating an
+  // existing secret breaks any CMS that's already pointed at the old one.
+  if (webhook.value.webhook_secret && !confirm(
+    'Rotating the secret invalidates the current one immediately. Make sure you can update your CMS right after. Continue?'
+  )) return
+  rotating.value = true
+  try {
+    const data = await api.rotateWebhookSecret(props.client.id)
+    if (data?.webhook_secret) {
+      webhook.value.webhook_secret = data.webhook_secret
+      secretRevealed.value = true  // surface the new value so tenant can copy it
+      try { toast.success('New secret generated — paste it into your CMS.') } catch {}
+    }
+  } catch {
+    try { toast.error('Could not rotate secret. Try again.') } catch {}
+  } finally { rotating.value = false }
+}
+
+async function copyText(text, key) {
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedKey.value = key
+    setTimeout(() => { if (copiedKey.value === key) copiedKey.value = '' }, 1500)
+  } catch {}
+}
+
+function formatRelativeTime(iso) {
+  if (!iso) return ''
+  try {
+    const diff = Date.now() - new Date(iso).getTime()
+    const s = Math.floor(diff / 1000)
+    if (s < 60)    return `${s}s ago`
+    const m = Math.floor(s / 60)
+    if (m < 60)    return `${m}m ago`
+    const h = Math.floor(m / 60)
+    if (h < 24)    return `${h}h ago`
+    const d = Math.floor(h / 24)
+    return `${d}d ago`
+  } catch { return '' }
+}
+
+// Refresh activity when the tenant flips to the Knowledge tab and on first mount
+watch(activeTab, (tab) => { if (tab === 'knowledge') loadWebhookData() })
+watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true })
 </script>
 
 <style scoped>
@@ -1459,5 +1684,142 @@ const scrapeStatusLabel = computed(() => {
   margin-top: 6px;
   font-size: 12px;
   color: #f87171;
+}
+
+/* ── Real-time sync panel ────────────────────────────────────────────── */
+.wh-counters {
+  display: flex; align-items: center; gap: 10px; margin: 16px 0 20px;
+}
+.wh-counter {
+  flex: 1; display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 14px; border-radius: 10px;
+  background: var(--cf-bg-input); border: 1px solid var(--cf-border-subtle);
+}
+.wh-counter-num   { font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+.wh-counter-label { font-size: 11px; color: var(--cf-text-muted); }
+.wh-counter-done   .wh-counter-num { color: #4ade80; }
+.wh-counter-queued .wh-counter-num { color: #a5b4fc; }
+.wh-counter-failed .wh-counter-num { color: #f87171; }
+.wh-refresh {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--cf-bg-input); border: 1px solid var(--cf-border-default);
+  color: var(--cf-text-secondary); border-radius: 8px;
+  padding: 8px 12px; font-size: 12px; font-weight: 500; cursor: pointer;
+  font-family: inherit; transition: background 0.15s;
+}
+.wh-refresh:hover:not(:disabled) { background: var(--cf-bg-ghost-hover); color: var(--cf-text-primary); }
+.wh-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.wh-platform-tabs {
+  display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap;
+}
+.wh-platform-tab {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--cf-bg-input); border: 1px solid var(--cf-border-default);
+  color: var(--cf-text-secondary); border-radius: 8px;
+  padding: 8px 14px; font-size: 13px; font-weight: 500;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.wh-platform-tab:hover { color: var(--cf-text-primary); border-color: var(--cf-border-strong); }
+.wh-platform-tab.active {
+  background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.4);
+  color: #a5b4fc;
+}
+.wh-platform-icon { display: inline-flex; align-items: center; }
+
+.wh-setup-card {
+  background: var(--cf-bg-input); border: 1px solid var(--cf-border-subtle);
+  border-radius: 12px; padding: 16px; margin-bottom: 14px;
+}
+.wh-setup-title { font-size: 14px; font-weight: 600; color: var(--cf-text-primary); margin-bottom: 10px; }
+.wh-steps {
+  margin: 0 0 14px 0; padding-left: 22px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.wh-steps li { font-size: 13px; color: var(--cf-text-secondary); line-height: 1.55; }
+.wh-steps li strong { color: var(--cf-text-primary); }
+.wh-steps li em { color: #a5b4fc; font-style: normal; }
+
+.wh-custom-note { font-size: 13px; color: var(--cf-text-secondary); line-height: 1.6; }
+
+.wh-paste-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--cf-bg-page); border: 1px solid var(--cf-border-subtle);
+  border-radius: 8px; padding: 8px 10px; margin-bottom: 8px;
+}
+.wh-paste-label {
+  font-size: 11px; font-weight: 700; color: var(--cf-text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+}
+.wh-paste-code {
+  flex: 1; font-family: 'Fira Mono', 'JetBrains Mono', monospace;
+  font-size: 12px; color: #a5b4fc; word-break: break-all;
+}
+.wh-secret-code { color: var(--cf-text-primary); }
+.wh-copy, .wh-rotate {
+  background: var(--cf-bg-ghost-hover); border: 1px solid var(--cf-border-default);
+  color: var(--cf-text-primary); border-radius: 6px;
+  padding: 4px 10px; font-size: 11.5px; font-weight: 500;
+  cursor: pointer; font-family: inherit; transition: background 0.15s;
+  white-space: nowrap;
+}
+.wh-copy:hover:not(:disabled) { background: var(--cf-border-default); }
+.wh-copy:disabled { opacity: 0.4; cursor: not-allowed; }
+.wh-rotate {
+  background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.30); color: #fca5a5;
+}
+.wh-rotate:hover:not(:disabled) { background: rgba(239,68,68,0.18); }
+
+.wh-secret-row {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--cf-bg-page); border: 1px solid var(--cf-border-subtle);
+  border-radius: 8px; padding: 8px 10px; margin-top: 4px;
+}
+.wh-secret-help {
+  font-size: 11.5px; color: var(--cf-text-muted); line-height: 1.5;
+  margin-top: 8px; margin-bottom: 20px;
+}
+
+.wh-activity { border-top: 1px solid var(--cf-border-subtle); padding-top: 16px; }
+.wh-activity-title {
+  font-size: 11px; font-weight: 700; color: var(--cf-text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 10px;
+}
+.wh-empty {
+  background: var(--cf-bg-input); border: 1px dashed var(--cf-border-default);
+  border-radius: 8px; padding: 16px; text-align: center;
+  font-size: 12.5px; color: var(--cf-text-muted); line-height: 1.5;
+}
+.wh-events-list { display: flex; flex-direction: column; gap: 4px; }
+.wh-event {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; background: var(--cf-bg-input);
+  border: 1px solid var(--cf-border-subtle); border-radius: 7px;
+  font-size: 12.5px;
+}
+.wh-event-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.wh-event-done   .wh-event-dot { background: #4ade80; }
+.wh-event-queued .wh-event-dot { background: #a5b4fc; animation: wh-pulse 1.2s infinite ease-in-out; }
+.wh-event-failed .wh-event-dot { background: #f87171; }
+@keyframes wh-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.wh-event-source {
+  font-size: 10.5px; font-weight: 700; color: var(--cf-text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
+}
+.wh-event-title {
+  flex: 1; min-width: 0; color: var(--cf-text-primary);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.wh-event-time { color: var(--cf-text-muted); font-size: 11.5px; white-space: nowrap; }
+.wh-event-dur  { color: var(--cf-text-muted); font-size: 11px; font-family: monospace; }
+
+@media (max-width: 768px) {
+  .wh-counters { flex-wrap: wrap; }
+  .wh-counter  { min-width: calc(33.33% - 8px); }
+  .wh-refresh  { width: 100%; justify-content: center; }
+  .wh-paste-row, .wh-secret-row { flex-wrap: wrap; }
+  .wh-paste-code { width: 100%; }
 }
 </style>

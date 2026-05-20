@@ -231,10 +231,15 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'chat.tasks.archive_long_sessions',
         'schedule': crontab(hour='3', minute='0'),
     },
-    # Auto-rescrape stale client knowledge bases every 3 hours
+    # Auto-rescrape stale client knowledge bases — daily safety net at 02:00 UTC.
+    # Real-time changes are covered by per-platform webhooks
+    # (POST /api/scraper/webhooks/{shopify,woocommerce,wordpress}/<client>/).
+    # This daily full crawl exists to catch anything webhooks missed: new
+    # pages on custom HTML sites, drift in deleted-but-still-embedded chunks,
+    # tenants who haven't configured webhooks yet, etc.
     'auto-rescrape-stale-clients': {
         'task': 'scraper.tasks.auto_rescrape_stale_clients',
-        'schedule': crontab(minute='0', hour='*/3'),
+        'schedule': crontab(minute='0', hour='2'),
     },
 }
 

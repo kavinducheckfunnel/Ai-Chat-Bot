@@ -24,6 +24,7 @@ urlpatterns = [
     path('clients/<uuid:client_id>/scrape/', admin_views.trigger_scrape, name='admin-client-scrape'),
     path('clients/<uuid:client_id>/scrape-progress/', admin_views.scrape_progress, name='admin-client-scrape-progress'),
     path('clients/<uuid:client_id>/rotate-secret/', admin_views.rotate_webhook_secret, name='admin-client-rotate-secret'),
+    path('clients/<uuid:client_id>/webhook-events/', admin_views.webhook_events, name='admin-client-webhook-events'),
     path('clients/<uuid:client_id>/assign-tenant/', admin_views.assign_client_to_tenant, name='admin-client-assign-tenant'),
     path('clients/<uuid:client_id>/analytics/export/', admin_views.analytics_export, name='admin-client-analytics-export'),
     path('clients/<uuid:client_id>/suggest-cta/', admin_views.suggest_cta, name='admin-client-suggest-cta'),
