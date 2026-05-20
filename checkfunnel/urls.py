@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
-from . import widget_views
+from . import widget_views, health_views
 
 urlpatterns = [
     path('django-admin/', admin.site.urls),
@@ -10,4 +10,6 @@ urlpatterns = [
     path('api/admin/', include('users.urls')),
     # Widget JS bundle — embeddable on any site
     path('widget/widget.js', widget_views.serve_widget_js, name='widget-js'),
+    # CI/CD + uptime monitor pings this. Returns 200 only when DB + cache OK.
+    path('health/', health_views.health, name='health'),
 ]

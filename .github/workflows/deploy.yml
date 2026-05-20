@@ -1,0 +1,87 @@
+name: Deploy
+
+# Triggers on:
+#   - any push to main (auto-deploy after merge)
+#   - manual run via "Run workflow" button (workflow_dispatch)
+#
+# The actual heavy lifting (backup, git pull, migrate, restart, health check,
+# rollback) is done by /usr/local/bin/checkfunnel-deploy.sh on the VPS itself.
+# Keeping deploy logic on the server means we can also trigger it manually
+# from an SSH session without GitHub being involved, and it doesn't rely on
+# GitHub-runner state.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Prevent concurrent deploys — if a second push lands while one is running,
+# cancel the older one rather than queueing (newer commit is what we want).
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          # Need write access so we can push the rebuilt widget-vue/dist back.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'widget-vue/package-lock.json'
+
+      - name: Install widget-vue deps
+        run: cd widget-vue && npm ci --no-audit --no-fund
+
+      - name: Build widget-vue (admin SPA + widget.js)
+        run: cd widget-vue && npm run build
+
+      - name: Commit rebuilt dist if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add widget-vue/dist
+          if git diff --cached --quiet; then
+            echo "dist unchanged — nothing to commit"
+          else
+            git commit -m "ci: rebuild widget-vue/dist [skip ci]"
+            git push origin HEAD:main
+          fi
+
+      - name: Install SSH key for VPS
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy on VPS
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -o StrictHostKeyChecking=accept-new \
+              "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+              "/usr/local/bin/checkfunnel-deploy.sh"
+
+      - name: Verify public health endpoint
+        # Outside the VPS — confirms nginx → daphne path is alive too.
+        run: |
+          for i in {1..10}; do
+            if curl -fsS --max-time 5 "https://ai.checkfunnels.com/health/" | grep -q '"status"'; then
+              echo "✔ Public /health/ OK"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "✘ Public /health/ never returned OK"
+          exit 1

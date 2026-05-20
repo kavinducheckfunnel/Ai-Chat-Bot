@@ -174,3 +174,69 @@ class ChatSession(models.Model):
 
     def __str__(self):
         return str(self.session_id)
+
+
+class LLMCallLog(models.Model):
+    """
+    One row per LLM API call. Foundation for MLOps observability:
+      - cost dashboard (sum cost_usd by client / day / model)
+      - fallback monitoring (count where fallback_from != '')
+      - quality regressions (group by prompt_hash, compare reactions)
+      - rate-limit hotspots (filter status='rate_limited')
+      - BYOK vs platform spend split (group by is_byok)
+
+    Written by chat.ai_service._invoke_with_fallback after every llm.invoke().
+    Best-effort: logging failure must never bubble up and break a chat reply,
+    so writes are wrapped in try/except in the call site.
+    """
+    STATUS_CHOICES = [
+        ('ok',            'OK'),
+        ('rate_limited',  'Rate Limited'),
+        ('error',         'Error'),
+        ('fallback_used', 'Fallback Used'),  # ok ultimately, but not on primary model
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    # Nullable so platform-only calls (no client context) still log.
+    client  = models.ForeignKey('users.Client', null=True, blank=True,
+                                on_delete=models.SET_NULL, related_name='llm_calls')
+    session = models.ForeignKey('chat.ChatSession', null=True, blank=True,
+                                on_delete=models.SET_NULL, related_name='llm_calls')
+
+    # Identity of the call
+    model    = models.CharField(max_length=120)   # e.g. 'openai/gpt-4o-mini'
+    provider = models.CharField(max_length=20)    # 'openrouter' | 'openai' | 'anthropic'
+    is_byok  = models.BooleanField(default=False)
+
+    # Performance
+    latency_ms        = models.IntegerField()
+    prompt_tokens     = models.IntegerField(null=True, blank=True)
+    completion_tokens = models.IntegerField(null=True, blank=True)
+    total_tokens      = models.IntegerField(null=True, blank=True)
+
+    # Estimated cost in USD. For BYOK calls the cost lands on the tenant;
+    # for platform calls it's our P&L. Cost is computed at write-time from
+    # a static price table per model + token usage.
+    cost_usd = models.DecimalField(max_digits=10, decimal_places=6, default=0)
+
+    # Outcome
+    status        = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ok')
+    fallback_from = models.CharField(max_length=120, blank=True)
+    error_message = models.TextField(blank=True)
+
+    # Stable hash of the system prompt — used for prompt A/B testing later.
+    prompt_hash = models.CharField(max_length=16, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['client',   '-created_at']),
+            models.Index(fields=['status',   '-created_at']),
+            models.Index(fields=['model',    '-created_at']),
+            models.Index(fields=['is_byok',  '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.model} {self.status} {self.latency_ms}ms'

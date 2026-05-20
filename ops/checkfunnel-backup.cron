@@ -1,0 +1,11 @@
+# Checkfunnel daily backup — runs 03:00 UTC every day.
+# Drops to /etc/cron.d/checkfunnel-backup
+#
+# Why 03:00 UTC: one hour after the daily safety-net rescrape (02:00 UTC)
+# completes, so the backup captures the freshest knowledge base.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+MAILTO=""
+
+0 3 * * * root /usr/local/bin/checkfunnel-backup.sh >> /var/log/checkfunnel-backup.log 2>&1

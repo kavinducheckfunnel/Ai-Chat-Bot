@@ -201,18 +201,126 @@ def _build_llm(client):
     return _make_openrouter_llm(primary_model, api_key), False
 
 
+# Cost estimation table — USD per 1M tokens (prompt, completion).
+# Source: published OpenRouter / Anthropic / OpenAI pricing as of 2026-Q2.
+# Conservative defaults for unknown models so cost is never wildly off.
+# Single source of truth referenced by _log_llm_call() below.
+_MODEL_PRICING_PER_1M = {
+    'openai/gpt-4o':                  (2.50, 10.00),
+    'openai/gpt-4o-mini':             (0.15,  0.60),
+    'openai/gpt-4.1':                 (2.00,  8.00),
+    'openai/gpt-4.1-mini':            (0.40,  1.60),
+    'anthropic/claude-3-5-sonnet':    (3.00, 15.00),
+    'anthropic/claude-3-5-haiku':     (1.00,  5.00),
+    'anthropic/claude-3-haiku':       (0.25,  1.25),
+    'google/gemini-2.0-flash-001':    (0.10,  0.40),
+    'google/gemini-pro-1.5':          (1.25,  5.00),
+    'meta-llama/llama-3.3-70b-instruct': (0.59, 0.79),
+}
+_DEFAULT_PRICE = (1.00, 3.00)  # fallback for unknown models
+
+
+def _estimate_cost(model, prompt_tokens, completion_tokens):
+    """Compute USD cost from a model id + token counts. Lookup is exact-match
+    on the model string (no normalisation) since the table uses canonical
+    OpenRouter ids."""
+    if not (prompt_tokens or completion_tokens):
+        return 0
+    p_rate, c_rate = _MODEL_PRICING_PER_1M.get(model, _DEFAULT_PRICE)
+    cost = (prompt_tokens or 0) * p_rate / 1_000_000 + (completion_tokens or 0) * c_rate / 1_000_000
+    return round(cost, 6)
+
+
+def _log_llm_call(*, client, model, provider, is_byok, latency_ms,
+                  result=None, status='ok', fallback_from='', error_message='',
+                  system_prompt_hash=''):
+    """
+    Write an LLMCallLog row. Best-effort — any exception here is swallowed
+    so logging issues never bubble up and break a chat reply.
+    """
+    try:
+        from chat.models import LLMCallLog
+
+        prompt_t = completion_t = total_t = None
+        if result is not None:
+            try:
+                meta = getattr(result, 'response_metadata', {}) or {}
+                usage = meta.get('token_usage') or meta.get('usage') or {}
+                prompt_t     = usage.get('prompt_tokens') or usage.get('input_tokens')
+                completion_t = usage.get('completion_tokens') or usage.get('output_tokens')
+                total_t      = usage.get('total_tokens')
+                if total_t is None and (prompt_t or completion_t):
+                    total_t = (prompt_t or 0) + (completion_t or 0)
+            except Exception:
+                pass
+
+        cost = _estimate_cost(model, prompt_t or 0, completion_t or 0) if not is_byok else 0
+
+        LLMCallLog.objects.create(
+            client=client,
+            model=model[:120],
+            provider=provider,
+            is_byok=is_byok,
+            latency_ms=int(latency_ms),
+            prompt_tokens=prompt_t,
+            completion_tokens=completion_t,
+            total_tokens=total_t,
+            cost_usd=cost,
+            status=status,
+            fallback_from=fallback_from[:120],
+            error_message=(error_message or '')[:5000],
+            prompt_hash=system_prompt_hash[:16],
+        )
+    except Exception as e:
+        logger.warning(f'[ai] LLMCallLog write failed: {e}')
+
+
+def _hash_messages(messages):
+    """Short stable hash of the system prompt for prompt A/B grouping."""
+    try:
+        import hashlib
+        sys = next((m.content for m in messages if isinstance(m, SystemMessage)), '')
+        return hashlib.md5(sys.encode('utf-8', 'replace')).hexdigest()[:16]
+    except Exception:
+        return ''
+
+
 def _invoke_with_fallback(messages, client):
     """
     Invoke the LLM. For platform (non-BYOK) requests, walk the fallback chain
     on 429 rate-limit errors so users never see an error message.
+
+    Every llm.invoke() — successful or failed — writes an LLMCallLog row
+    so the MLOps dashboards can break down cost, latency, fallback rate,
+    and BYOK vs platform spend without sampling.
     """
     from openai import RateLimitError
 
     llm, is_byok = _build_llm(client)
+    prompt_hash = _hash_messages(messages)
 
     if is_byok:
         # BYOK — use their key directly, no fallback
-        return llm.invoke(messages)
+        model = getattr(llm, 'model_name', None) or getattr(client, 'ai_model', '') or ''
+        provider = (getattr(client, 'ai_provider', None) or 'openrouter') if client else 'openrouter'
+        start = time.time()
+        try:
+            result = llm.invoke(messages)
+            _log_llm_call(
+                client=client, model=model, provider=provider, is_byok=True,
+                latency_ms=(time.time() - start) * 1000,
+                result=result, status='ok',
+                system_prompt_hash=prompt_hash,
+            )
+            return result
+        except Exception as e:
+            _log_llm_call(
+                client=client, model=model, provider=provider, is_byok=True,
+                latency_ms=(time.time() - start) * 1000,
+                status='error', error_message=str(e),
+                system_prompt_hash=prompt_hash,
+            )
+            raise
 
     # Platform — try primary model then static fallbacks
     api_key, primary_model = _get_platform_config()
@@ -220,16 +328,38 @@ def _invoke_with_fallback(messages, client):
     last_exc = None
     for i, model in enumerate(fallback_chain):
         llm = _make_openrouter_llm(model, api_key)
+        start = time.time()
         try:
             result = llm.invoke(messages)
+            latency = (time.time() - start) * 1000
             if i > 0:
                 logger.info(f'[ai] Rate-limited on primary, succeeded with fallback: {model}')
+            _log_llm_call(
+                client=client, model=model, provider='openrouter', is_byok=False,
+                latency_ms=latency, result=result,
+                status='fallback_used' if i > 0 else 'ok',
+                fallback_from=fallback_chain[0] if i > 0 else '',
+                system_prompt_hash=prompt_hash,
+            )
             return result
         except RateLimitError as e:
+            latency = (time.time() - start) * 1000
             logger.warning(f'[ai] 429 on {model}, trying next fallback. err={e}')
+            _log_llm_call(
+                client=client, model=model, provider='openrouter', is_byok=False,
+                latency_ms=latency,
+                status='rate_limited', error_message=str(e),
+                system_prompt_hash=prompt_hash,
+            )
             last_exc = e
             time.sleep(0.5 * (i + 1))
         except Exception as e:
+            _log_llm_call(
+                client=client, model=model, provider='openrouter', is_byok=False,
+                latency_ms=(time.time() - start) * 1000,
+                status='error', error_message=str(e),
+                system_prompt_hash=prompt_hash,
+            )
             raise e  # non-rate-limit errors bubble up immediately
 
     raise last_exc  # all fallbacks exhausted
