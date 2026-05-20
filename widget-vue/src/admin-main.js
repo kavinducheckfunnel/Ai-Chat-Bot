@@ -16,6 +16,9 @@ import TenantManagement from './admin/TenantManagement.vue'
 import LeadManagement from './admin/LeadManagement.vue'
 import SuperAdminDashboard from './admin/Dashboard.vue'
 import PermissionsManager from './admin/PermissionsManager.vue'
+import AdminClientInsights from './admin/AdminClientInsights.vue'
+import AdminClientHeatmap from './admin/AdminClientHeatmap.vue'
+import AdminVisitors from './admin/AdminVisitors.vue'
 
 import PortalLayout from './portal/PortalLayout.vue'
 import OnboardingWizard from './portal/OnboardingWizard.vue'
@@ -54,6 +57,9 @@ const routes = [
       { path: '', component: LiveDashboard },
       { path: 'clients', component: ClientList },
       { path: 'clients/:id', component: ClientDetail },
+      { path: 'clients/:id/insights', component: AdminClientInsights },
+      { path: 'clients/:id/heatmap', component: AdminClientHeatmap },
+      { path: 'visitors', component: AdminVisitors },
       { path: 'kanban', component: KanbanView },
       { path: 'leads', component: LeadManagement },
       { path: 'godview/:id', component: GodView },

@@ -23,6 +23,14 @@
           </div>
         </div>
         <div class="header-actions">
+          <button class="jump-btn" @click="$router.push(`/admin/clients/${$route.params.id}/insights`)" title="Per-client metric deep dive">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Insights
+          </button>
+          <button class="jump-btn" @click="$router.push(`/admin/clients/${$route.params.id}/heatmap`)" title="Visitor activity heatmap">
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+            Heatmap
+          </button>
           <span class="ingestion-badge" :class="'ing-' + (client.ingestion_status || 'pending').toLowerCase()">
             {{ client.ingestion_status || 'PENDING' }}
           </span>
@@ -292,53 +300,17 @@
         </template>
       </div>
 
-      <!-- Settings Tab -->
-      <div v-if="activeTab === 'settings'" class="tab-content">
-        <div class="settings-card">
-          <h3 class="settings-section">Chatbot Branding</h3>
-          <div class="settings-grid">
-            <div class="field">
-              <label>Display Name</label>
-              <input v-model="settingsForm.chatbot_name" type="text" placeholder="AI Assistant" />
-            </div>
-            <div class="field">
-              <label>Theme Color</label>
-              <div class="color-field">
-                <input type="color" v-model="settingsForm.chatbot_color" class="color-picker" />
-                <input v-model="settingsForm.chatbot_color" type="text" class="color-text" />
-              </div>
-            </div>
-            <div class="field full">
-              <label>Logo URL (optional)</label>
-              <input v-model="settingsForm.chatbot_logo_url" type="url" placeholder="https://..." />
-            </div>
-          </div>
-
-          <h3 class="settings-section" style="margin-top: 24px;">FOMO Engine</h3>
-          <div class="settings-grid">
-            <div class="field full">
-              <label>Discount Code</label>
-              <input v-model="settingsForm.discount_code" type="text" placeholder="SAVE20" />
-              <p class="field-hint">Sent to high-intent visitors (heat score ≥ 75)</p>
-            </div>
-            <div class="field full">
-              <label>CTA Message</label>
-              <input v-model="settingsForm.cta_message" type="text" />
-            </div>
-            <div class="field">
-              <label>Countdown (seconds)</label>
-              <input v-model="settingsForm.fomo_countdown_seconds" type="number" min="60" max="3600" />
-            </div>
-          </div>
-
-          <div v-if="saveError" class="form-error">{{ saveError }}</div>
-          <div v-if="saveSuccess" class="form-success">Settings saved!</div>
-
-          <button class="save-btn" @click="saveSettings" :disabled="saving">
-            <div v-if="saving" class="mini-spinner white"></div>
-            <span v-else>Save Changes</span>
-          </button>
-        </div>
+      <!-- Settings Tab — full parity with tenant portal -->
+      <!--
+        Instead of duplicating ~1400 lines of PortalSettings, we render the
+        portal component directly. PortalSettings was already designed to
+        operate on any client passed via :client prop (it calls
+        api.updateClient(client.id, ...) which works cross-tenant for super
+        admin). Same source of truth, so any future setting added on the
+        tenant side automatically appears for super admin too — no drift.
+      -->
+      <div v-if="activeTab === 'settings'" class="tab-content settings-embed">
+        <PortalSettings :client="client" @client-updated="onClientUpdated" />
       </div>
 
       <!-- Sessions Tab -->
@@ -449,6 +421,7 @@ import { useRoute } from 'vue-router'
 import { useAdminApi, WIDGET_URL } from '../composables/useAdminApi'
 import { useToast } from '../composables/useToast'
 import { generateEmbedCode } from '../portal/embedCodeGenerator'
+import PortalSettings from '../portal/PortalSettings.vue'
 
 const route = useRoute()
 const api = useAdminApi()
@@ -460,9 +433,6 @@ const sessions = ref([])
 const loading = ref(true)
 const loadingSessions = ref(false)
 const scraping = ref(false)
-const saving = ref(false)
-const saveError = ref('')
-const saveSuccess = ref(false)
 const activeTab = ref('overview')
 const embedMethod = ref('plugin')
 const copiedKey = ref('')
@@ -505,14 +475,14 @@ const kanbanCols = {
   LOST:         { label: 'Lost',         color: '#EF4444' },
 }
 
-const settingsForm = ref({
-  chatbot_name: '',
-  chatbot_color: '#3B82F6',
-  chatbot_logo_url: '',
-  discount_code: '',
-  cta_message: '',
-  fomo_countdown_seconds: 600,
-})
+// Receive client updates from the embedded PortalSettings (covers branding,
+// integrations, CTA — everything tenant can edit). Merging into client.value
+// keeps the avatar/title/funnel section in sync without a full reload.
+function onClientUpdated(updated) {
+  if (updated && client.value) {
+    client.value = { ...client.value, ...updated }
+  }
+}
 
 // Use the SAME generator as the tenant portal (PortalSettings) so the
 // snippet copied here is byte-identical to what the tenant sees — same
@@ -569,14 +539,6 @@ async function loadClient() {
       flat[k] = (v && typeof v === 'object' && 'value' in v) ? v.value : v
     }
     analytics.value = flat
-    settingsForm.value = {
-      chatbot_name: clientData.chatbot_name || 'AI Assistant',
-      chatbot_color: clientData.chatbot_color || '#3B82F6',
-      chatbot_logo_url: clientData.chatbot_logo_url || '',
-      discount_code: clientData.discount_code || '',
-      cta_message: clientData.cta_message || '',
-      fomo_countdown_seconds: clientData.fomo_countdown_seconds || 600,
-    }
   } catch (e) {
     console.error(e)
   } finally {
@@ -642,22 +604,6 @@ function _startProgressPolling() {
       scrapeProgress.value = null
     }
   }, 2000)
-}
-
-async function saveSettings() {
-  saveError.value = ''
-  saveSuccess.value = false
-  saving.value = true
-  try {
-    const updated = await api.updateClient(route.params.id, settingsForm.value)
-    Object.assign(client.value, updated)
-    saveSuccess.value = true
-    setTimeout(() => saveSuccess.value = false, 3000)
-  } catch (e) {
-    saveError.value = e.message || 'Failed to save.'
-  } finally {
-    saving.value = false
-  }
 }
 
 async function viewSession(session) {
@@ -777,7 +723,22 @@ watch(sessionFilters, onFilterChange)
 .sf-toggle input { accent-color: #6366F1; cursor: pointer; }
 .sf-toggle:hover span { color: var(--cf-text-primary); }
 
-.detail-page { max-width: 1000px; }
+.detail-page { max-width: 1100px; }
+
+/* Embedded PortalSettings can have wider content (4 tabs + integrations form),
+   so let the Settings tab break out of the 1100px detail-page constraint. */
+.settings-embed { margin: 0 -8px; }
+
+/* Shortcut buttons in the header that jump to the per-client Insights and
+   Heatmap pages. Styled as compact secondary actions next to Sync Now. */
+.jump-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--cf-bg-surface); border: 1px solid var(--cf-border-default);
+  color: var(--cf-text-secondary); border-radius: 8px;
+  padding: 7px 12px; font-size: 13px; font-weight: 500;
+  cursor: pointer; font-family: inherit; transition: all 0.15s;
+}
+.jump-btn:hover { background: var(--cf-bg-ghost-hover); color: var(--cf-text-primary); border-color: var(--cf-border-strong); }
 
 .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .header-left { display: flex; align-items: center; gap: 16px; }

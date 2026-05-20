@@ -38,6 +38,11 @@
         Clients
       </router-link>
 
+      <router-link to="/admin/visitors" class="nav-item" :class="{ active: $route.path === '/admin/visitors' }" @click="$emit('close')">
+        <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Visitors
+      </router-link>
+
       <!-- Superadmin only -->
       <template v-if="isSuperAdmin">
         <p class="nav-section">Super Admin</p>
