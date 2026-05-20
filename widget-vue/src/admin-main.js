@@ -19,6 +19,7 @@ import PermissionsManager from './admin/PermissionsManager.vue'
 import AdminClientInsights from './admin/AdminClientInsights.vue'
 import AdminClientHeatmap from './admin/AdminClientHeatmap.vue'
 import AdminVisitors from './admin/AdminVisitors.vue'
+import AdminInsights from './admin/AdminInsights.vue'
 
 import PortalLayout from './portal/PortalLayout.vue'
 import OnboardingWizard from './portal/OnboardingWizard.vue'
@@ -60,6 +61,7 @@ const routes = [
       { path: 'clients/:id/insights', component: AdminClientInsights },
       { path: 'clients/:id/heatmap', component: AdminClientHeatmap },
       { path: 'visitors', component: AdminVisitors },
+      { path: 'insights', component: AdminInsights },
       { path: 'kanban', component: KanbanView },
       { path: 'leads', component: LeadManagement },
       { path: 'godview/:id', component: GodView },

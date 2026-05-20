@@ -43,6 +43,11 @@
         Visitors
       </router-link>
 
+      <router-link to="/admin/insights" class="nav-item" :class="{ active: $route.path === '/admin/insights' }" @click="$emit('close')">
+        <svg width="17" height="17" fill="none" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="20" x2="6" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Insights
+      </router-link>
+
       <!-- Superadmin only -->
       <template v-if="isSuperAdmin">
         <p class="nav-section">Super Admin</p>

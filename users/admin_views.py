@@ -7,7 +7,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.db.models import Avg, Count, DurationField, ExpressionWrapper, F, FloatField, Q, Sum
-from django.db.models.functions import TruncDate
+from django.db.models.functions import Coalesce, TruncDate
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -1468,12 +1468,67 @@ def platform_stats(request):
         for i in range(13, -1, -1)
     ]
 
+    # ── Lead capture + engagement aggregates (cross-client) ───────────────
+    # Used by /admin/insights to give super admin a single view of platform
+    # health without needing to drill into each tenant's analytics tab.
+    leads_captured = sessions_qs.exclude(lead_email='').exclude(lead_email__isnull=True).count()
+
+    msg_agg = sessions_qs.aggregate(
+        total_messages=Coalesce(Sum('message_count'), 0),
+    )
+    total_messages = msg_agg['total_messages'] or 0
+    avg_messages_per_session = round(total_messages / total_sessions, 1) if total_sessions else 0
+
+    # Kanban funnel breakdown across every tenant
+    kanban_raw = sessions_qs.values('kanban_state').annotate(count=Count('session_id'))
+    kanban_breakdown = {row['kanban_state']: row['count'] for row in kanban_raw}
+
+    # Channel breakdown (website / whatsapp / messenger / telegram)
+    channel_raw = sessions_qs.values('channel').annotate(count=Count('session_id'))
+    channel_breakdown = {row['channel'] or 'website': row['count'] for row in channel_raw}
+
+    # Conversation state funnel (where visitors are stuck)
+    conv_raw = sessions_qs.values('conversation_state').annotate(count=Count('session_id'))
+    conv_breakdown = {row['conversation_state']: row['count'] for row in conv_raw}
+
+    # Top 10 tenants by session count in the last 30 days — surfaces which
+    # clients are getting the most engagement so super admin can spot
+    # outliers (both successful and underused).
+    last_30d = timezone.now() - timedelta(days=30)
+    top_clients_raw = (
+        sessions_qs.filter(created_at__gte=last_30d)
+        .values('client__id', 'client__name')
+        .annotate(
+            sessions=Count('session_id'),
+            hot=Count('session_id', filter=Q(current_intent_ema__gte=0.5)),
+            leads=Count('session_id', filter=~Q(lead_email='') & ~Q(lead_email__isnull=True)),
+        )
+        .order_by('-sessions')[:10]
+    )
+    top_clients = [
+        {
+            'client_id': str(row['client__id']) if row['client__id'] else None,
+            'client_name': row['client__name'] or 'Unknown',
+            'sessions': row['sessions'],
+            'hot': row['hot'],
+            'leads': row['leads'],
+        }
+        for row in top_clients_raw
+    ]
+
     response = {
         'total_clients': total_clients,
         'active_clients': active_clients,
         'total_sessions': total_sessions,
+        'leads_captured': leads_captured,
+        'total_messages': total_messages,
+        'avg_messages_per_session': avg_messages_per_session,
         'heat_distribution': {'hot': hot_count, 'warm': warm_count, 'cold': cold_count},
+        'kanban_breakdown': kanban_breakdown,
+        'channel_breakdown': channel_breakdown,
+        'conversation_breakdown': conv_breakdown,
         'daily_trend': daily_trend,
+        'top_clients': top_clients,
     }
     if is_super:
         response['total_users'] = User.objects.count()
