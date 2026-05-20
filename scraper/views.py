@@ -29,6 +29,29 @@ def _log_event(client, source, event_type, resource_id, resource_title):
     )
 
 
+def _is_delete_topic(topic):
+    """
+    Detect whether a webhook topic header indicates a delete event.
+    Shopify: 'products/delete'
+    WooCommerce: 'product.deleted' or 'deleted.product'
+    """
+    if not topic:
+        return False
+    t = topic.lower()
+    return 'delete' in t or 'trash' in t
+
+
+def _queue_delete(client, source, event_type, resource_id, resource_title):
+    """
+    Log a delete event + queue the chunk-purge task. Mirrors the
+    _queue_product_update helper but for the destructive path.
+    """
+    from scraper.tasks import delete_chunks_for_resource
+    event = _log_event(client, source, event_type, resource_id, resource_title)
+    delete_chunks_for_resource.delay(str(client.pk), str(resource_id), event.id)
+    return event
+
+
 # ── Shared async re-embed helper ─────────────────────────────────────────────
 
 def _queue_product_update(client, product_id, title, body_html, price, url, event_id=None):
@@ -70,7 +93,16 @@ def shopify_webhook(request, client_id):
             return Response({'status': 'unauthorized'}, status=401)
 
     data = request.data
+    topic = request.headers.get('X-Shopify-Topic', '')
     product_id = data.get('id')
+
+    # ── DELETE branch — fire-and-purge ───────────────────────────────────
+    # Shopify only sends {id, ...} on products/delete (no title), so we
+    # gate on the topic header rather than the payload shape.
+    if _is_delete_topic(topic) and product_id:
+        event = _queue_delete(client, 'shopify', topic or 'products/delete', product_id, '')
+        return Response({'status': 'delete queued', 'event_id': event.id}, status=202)
+
     title = data.get('title', '')
     body_html = data.get('body_html', '')
     variants = data.get('variants', [])
@@ -81,7 +113,7 @@ def shopify_webhook(request, client_id):
     if not (product_id and title):
         return Response({'status': 'skipped — missing id or title'}, status=400)
 
-    event = _log_event(client, 'shopify', 'product.update', product_id, title)
+    event = _log_event(client, 'shopify', topic or 'product.update', product_id, title)
     _queue_product_update(client, product_id, title, body_html, price, url, event.id)
     return Response({'status': 'queued', 'event_id': event.id}, status=202)
 
@@ -109,7 +141,16 @@ def woocommerce_webhook(request, client_id):
             return Response({'status': 'unauthorized'}, status=401)
 
     data = request.data
+    topic = request.headers.get('X-WC-Webhook-Topic', '')
     product_id = data.get('id')
+
+    # ── DELETE branch ───────────────────────────────────────────────────
+    # WooCommerce sends a minimal {id} payload on product.deleted so we
+    # check the topic header. Trashing (Move to Trash) is also caught.
+    if _is_delete_topic(topic) and product_id:
+        event = _queue_delete(client, 'woocommerce', topic or 'product.deleted', product_id, '')
+        return Response({'status': 'delete queued', 'event_id': event.id}, status=202)
+
     title = data.get('name', '')
     body_html = data.get('description', '') or data.get('short_description', '')
     price = data.get('price', '0')
@@ -122,7 +163,7 @@ def woocommerce_webhook(request, client_id):
     if not (product_id and title):
         return Response({'status': 'skipped — missing id or name'}, status=400)
 
-    event = _log_event(client, 'woocommerce', 'product.updated', product_id, title)
+    event = _log_event(client, 'woocommerce', topic or 'product.updated', product_id, title)
     _queue_product_update(client, product_id, title, body_html, price, url, event.id)
     return Response({'status': 'queued', 'event_id': event.id}, status=202)
 
@@ -151,16 +192,37 @@ def wordpress_webhook(request, client_id):
             return Response({'status': 'unauthorized'}, status=401)
 
     data = request.data
-    # Some WP webhook plugins wrap the payload in {"post": {...}}
-    post_data = data.get('post', data)
+    # Some WP webhook plugins wrap the payload in {"post": {...}} or {"data": {...}}
+    post_data = data.get('post', data.get('data', data))
 
     post_id = post_data.get('id')
     if not post_id:
         return Response({'status': 'error', 'message': 'No post ID in payload'}, status=400)
 
+    # ── Delete / trash detection ────────────────────────────────────────
+    # WP webhook plugins vary — check payload meta fields, headers, and
+    # the post's own status. Any of these indicates "this content is gone".
+    action = (
+        data.get('action') or data.get('trigger') or data.get('event')
+        or data.get('webhook_event') or request.headers.get('X-WP-Action', '')
+    )
+    post_status = post_data.get('status') or post_data.get('post_status', '')
+    is_delete = (
+        _is_delete_topic(str(action))
+        or post_status in ('trash', 'deleted')
+    )
+
+    if is_delete:
+        title = (post_data.get('title') or {}).get('rendered', '') or post_data.get('post_title', '') or ''
+        event = _queue_delete(client, 'wordpress', str(action) or 'post.deleted', post_id, title)
+        return Response({'status': 'delete queued', 'event_id': event.id}, status=202)
+
     title = (post_data.get('title') or {}).get('rendered', '') or post_data.get('post_title', '')
     content_html = (post_data.get('content') or {}).get('rendered', '') or post_data.get('post_content', '')
     link = post_data.get('link', '') or post_data.get('guid', '')
+    # WP REST shape: post_data['type'] is 'post', 'page', or a custom post type.
+    # Falls back to 'post' for plugins that don't echo it.
+    post_type = post_data.get('type') or post_data.get('post_type') or 'post'
 
     if not title:
         return Response({'status': 'skipped — no title'}, status=400)
@@ -169,9 +231,10 @@ def wordpress_webhook(request, client_id):
         ingestion_status='RUNNING',
         updated_at=timezone.now(),
     )
-    event = _log_event(client, 'wordpress', 'post.save', post_id, title)
+    event_type_label = f'{post_type}.save'  # e.g. 'page.save' so the UI can show "Page"
+    event = _log_event(client, 'wordpress', event_type_label, post_id, title)
     from scraper.tasks import re_embed_wordpress_post
     re_embed_wordpress_post.delay(
-        str(client.pk), str(post_id), title, content_html, link, event.id,
+        str(client.pk), str(post_id), title, content_html, link, event.id, post_type,
     )
     return Response({'status': 'queued', 'event_id': event.id}, status=202)

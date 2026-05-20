@@ -241,6 +241,16 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'scraper.tasks.auto_rescrape_stale_clients',
         'schedule': crontab(minute='0', hour='2'),
     },
+    # Sitemap watcher — every 15 minutes. Polls each client's
+    # /sitemap.xml and queues a targeted re_embed_url for any URL whose
+    # <lastmod> is newer than its latest stored chunk. Gives near-real-time
+    # push semantics to sites with no native webhook story (Webflow,
+    # Squarespace, static HTML, Notion, etc). Cheap when nothing changed —
+    # a single sitemap fetch per client, no embedding work.
+    'watch-sitemaps-every-15min': {
+        'task': 'scraper.tasks.watch_sitemaps_for_changes',
+        'schedule': crontab(minute='*/15'),
+    },
 }
 
 # ─── Email (SMTP) ─────────────────────────────────────────────────────────────

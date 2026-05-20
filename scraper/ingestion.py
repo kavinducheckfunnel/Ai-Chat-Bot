@@ -240,6 +240,82 @@ def fetch_sitemap_urls(site_url, max_urls=300):
     return ordered[:max_urls]
 
 
+def fetch_sitemap_with_lastmod(site_url, max_urls=1000):
+    """
+    Like fetch_sitemap_urls() but preserves the <lastmod> for each entry.
+    Returns [(url, lastmod_iso_string_or_None), ...].
+
+    Used by the periodic sitemap watcher (scraper.tasks.watch_sitemaps_for_changes)
+    to detect which individual pages changed since their last embed without
+    triggering a full re-crawl. Skips binary/admin URLs the same way as the
+    plain helper, but does NOT prioritise products — we want every page.
+    """
+    base = site_url.rstrip('/')
+    sitemap_candidates = [
+        f'{base}/wp-sitemap.xml',
+        f'{base}/sitemap_index.xml',
+        f'{base}/sitemap.xml',
+        f'{base}/product-sitemap.xml',
+        f'{base}/post-sitemap.xml',
+    ]
+
+    entries = []  # list of (url, lastmod)
+
+    def _parse_urlset(root):
+        """Yield (url, lastmod) from a <urlset>."""
+        for url_el in root.findall(f'{{{_SITEMAP_NS}}}url'):
+            loc = url_el.find(f'{{{_SITEMAP_NS}}}loc')
+            if loc is None or not loc.text:
+                continue
+            lm_el = url_el.find(f'{{{_SITEMAP_NS}}}lastmod')
+            lastmod = lm_el.text.strip() if lm_el is not None and lm_el.text else None
+            yield loc.text.strip(), lastmod
+
+    for sm_url in sitemap_candidates:
+        try:
+            resp = requests.get(sm_url, headers=_HEADERS, timeout=10)
+            if resp.status_code != 200 or not resp.text.strip().startswith('<'):
+                continue
+            root = ET.fromstring(resp.text)
+
+            # Sitemap index → recurse into each sub-sitemap
+            sub_locs = root.findall(f'{{{_SITEMAP_NS}}}sitemap/{{{_SITEMAP_NS}}}loc')
+            if sub_locs:
+                for loc in sub_locs:
+                    try:
+                        sr = requests.get(loc.text.strip(), headers=_HEADERS, timeout=10)
+                        if sr.status_code == 200 and sr.text.strip().startswith('<'):
+                            sr_root = ET.fromstring(sr.text)
+                            entries.extend(_parse_urlset(sr_root))
+                    except Exception:
+                        pass
+            else:
+                entries.extend(_parse_urlset(root))
+
+            if entries:
+                logger.info(f'[fetch_sitemap_with_lastmod] {len(entries)} entries from {sm_url}')
+                break
+        except Exception as e:
+            logger.debug(f'[fetch_sitemap_with_lastmod] {sm_url}: {e}')
+
+    # Dedupe + skip binary/admin URLs (preserve order)
+    skip_exts = ('.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
+                 '.pdf', '.zip', '.css', '.js', '.xml', '.ico')
+    seen = set()
+    cleaned = []
+    for url, lastmod in entries:
+        if url in seen:
+            continue
+        if any(url.lower().endswith(e) for e in skip_exts):
+            continue
+        if any(pat in url for pat in _SKIP_URL_PATTERNS):
+            continue
+        seen.add(url)
+        cleaned.append((url, lastmod))
+
+    return cleaned[:max_urls]
+
+
 def fetch_pages_from_urls(urls, max_pages=150):
     """
     Scrape a list of URLs and return {title, content, url} dicts.

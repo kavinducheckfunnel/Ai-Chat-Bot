@@ -81,10 +81,14 @@ def re_embed_product(self, client_id, product_id, title, body_html, price, url, 
 
 
 @shared_task(bind=True, max_retries=3)
-def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link, event_id=None):
+def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link, event_id=None, post_type='post'):
     """
-    Re-embed a single WordPress post after a webhook update.
+    Re-embed a single WordPress post or page after a webhook update.
     Deletes old chunks for this post then re-chunks + re-embeds.
+
+    post_type is tagged into metadata.type so the inbox/timeline UI can
+    show "Page" vs "Post" labels and the AI can prioritise differently
+    when answering "what's on your About page" vs blog-content questions.
     """
     from users.models import Client
     from scraper.models import DocumentChunk
@@ -127,7 +131,7 @@ def re_embed_wordpress_post(self, client_id, post_id, title, content_html, link,
                 embedding=emb,
                 source_url=link,
                 product_id=post_id,
-                metadata={'title': title, 'type': 'post'},
+                metadata={'title': title, 'type': post_type or 'post'},
             ))
             time.sleep(0.5)
 
@@ -225,3 +229,214 @@ def auto_rescrape_stale_clients():
     for client in stale_clients:
         scrape_client_website.delay(str(client.id))
         logger.info(f'[auto_rescrape] Queued: {client.name} (last scraped: {client.last_scraped_at})')
+
+
+# ─── Phase 2: targeted single-URL re-embed (sitemap watcher uses this) ───────
+
+@shared_task(bind=True, max_retries=2)
+def re_embed_url(self, client_id, url, event_id=None):
+    """
+    Fetch a single page, clean it, chunk it, embed it, replace any prior
+    chunks for that source_url. Used by:
+      - the sitemap watcher when it sees a page's <lastmod> advance
+      - any future "this URL changed" webhook variant
+
+    Different from re_embed_wordpress_post in that we don't have a
+    post_id — chunks are identified by source_url instead.
+    """
+    from users.models import Client
+    from scraper.models import DocumentChunk
+    from scraper.ingestion import _fetch_url, clean_html, _SPLITTER
+    from scraper.embeddings import batch_embed_texts
+
+    started = time.time()
+    try:
+        client = Client.objects.get(pk=client_id)
+    except Client.DoesNotExist:
+        _close_event(event_id, 'failed', 'Client not found', started)
+        return
+
+    try:
+        html = _fetch_url(url)
+        if not html:
+            _close_event(event_id, 'failed', 'Fetch returned empty body', started)
+            return
+
+        title = ''
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, 'html.parser')
+            t = soup.find('title')
+            if t and t.text:
+                title = t.text.strip()[:200]
+        except Exception:
+            pass
+
+        text = clean_html(html)
+        if not text or len(text) < 80:
+            _close_event(event_id, 'done', 'Page too short to embed', started)
+            return
+
+        prefixed_text = f'Title: {title}\n\n{text}' if title else text
+        splits = _SPLITTER.split_text(prefixed_text)
+        if not splits:
+            _close_event(event_id, 'done', '', started)
+            return
+
+        # Replace prior chunks for THIS url. source_url is the natural key.
+        DocumentChunk.objects.filter(client=client, source_url=url).delete()
+
+        docs = []
+        for chunk in splits:
+            try:
+                embs = batch_embed_texts([chunk])
+                emb = embs[0] if embs else [0.0] * 1024
+            except Exception:
+                emb = [0.0] * 1024
+            if len(emb) < 1024:
+                emb = emb + [0.0] * (1024 - len(emb))
+            elif len(emb) > 1024:
+                emb = emb[:1024]
+            docs.append(DocumentChunk(
+                client=client,
+                content=chunk,
+                embedding=emb,
+                source_url=url,
+                metadata={'title': title, 'type': 'page', 'via': 'sitemap'},
+            ))
+            time.sleep(0.3)
+
+        DocumentChunk.objects.bulk_create(docs)
+        from django.utils import timezone
+        Client.objects.filter(pk=client_id).update(
+            ingestion_status='DONE',
+            updated_at=timezone.now(),
+        )
+        _close_event(event_id, 'done', '', started)
+        logger.info(f'[re_embed_url] Re-embedded {url} ({len(docs)} chunks) for client {client_id}')
+    except Exception as exc:
+        logger.error(f'[re_embed_url] Failed for {url}: {exc}')
+        _close_event(event_id, 'failed', str(exc), started)
+        raise self.retry(exc=exc, countdown=60)
+
+
+# ─── Phase 2: DELETE handler (Shopify/WC/WP product or post deleted) ─────────
+
+@shared_task
+def delete_chunks_for_resource(client_id, resource_id, event_id=None):
+    """
+    Remove all chunks for a resource (product / post / page) after the CMS
+    fired a delete webhook. Stops the AI from recommending products that
+    no longer exist or quoting pages that were taken down.
+
+    resource_id matches DocumentChunk.product_id which is reused across
+    products AND wordpress posts (both store their CMS id there).
+    """
+    from django.utils import timezone
+    from users.models import Client
+    from scraper.models import DocumentChunk
+
+    started = time.time()
+    try:
+        deleted, _ = DocumentChunk.objects.filter(
+            client_id=client_id,
+            product_id=str(resource_id),
+        ).delete()
+        Client.objects.filter(pk=client_id).update(updated_at=timezone.now())
+        _close_event(event_id, 'done', f'Deleted {deleted} chunk(s)', started)
+        logger.info(f'[delete_chunks_for_resource] Removed {deleted} chunk(s) for resource {resource_id}, client {client_id}')
+    except Exception as exc:
+        logger.error(f'[delete_chunks_for_resource] Failed: {exc}')
+        _close_event(event_id, 'failed', str(exc), started)
+
+
+# ─── Phase 2: sitemap-based change watcher (covers custom HTML sites) ────────
+
+@shared_task
+def watch_sitemaps_for_changes():
+    """
+    Periodic task — runs every 15 minutes via Celery Beat.
+
+    For every active client with a domain_url, fetches the site's sitemap
+    and compares each URL's <lastmod> against the most recent
+    DocumentChunk.created_at for the same source_url. Any URL whose
+    lastmod is newer (or that's never been embedded) gets a targeted
+    re_embed_url() — giving near-real-time push semantics to sites that
+    have no native webhook story (Webflow, Squarespace, static HTML,
+    Notion, etc.).
+
+    Lightweight: a single HTTP GET to sitemap.xml per client, no
+    embedding API call unless content actually changed.
+    """
+    from datetime import datetime
+    from users.models import Client
+    from scraper.ingestion import fetch_sitemap_with_lastmod
+    from scraper.models import DocumentChunk, WebhookEvent
+
+    clients = list(
+        Client.objects
+        .filter(is_active=True, domain_url__isnull=False)
+        .exclude(domain_url='')
+    )
+    if not clients:
+        return
+
+    logger.info(f'[watch_sitemaps] Checking {len(clients)} client(s) for sitemap changes.')
+
+    total_queued = 0
+    for client in clients:
+        try:
+            entries = fetch_sitemap_with_lastmod(client.domain_url, max_urls=500)
+        except Exception as e:
+            logger.warning(f'[watch_sitemaps] Sitemap fetch failed for {client.name}: {e}')
+            continue
+        if not entries:
+            continue
+
+        # Map current URLs → latest chunk created_at for this client
+        urls = [u for u, _ in entries]
+        existing = {
+            row['source_url']: row['latest']
+            for row in DocumentChunk.objects
+                .filter(client=client, source_url__in=urls)
+                .values('source_url')
+                .annotate(latest=models.Max('created_at'))
+        }
+
+        queued_for_client = 0
+        for url, lastmod in entries:
+            should_embed = False
+            if url not in existing:
+                # Never seen before
+                should_embed = True
+            elif lastmod:
+                try:
+                    # lastmod is ISO 8601 in sitemaps. fromisoformat handles
+                    # the common shapes; if it fails we conservatively skip.
+                    lm_dt = datetime.fromisoformat(lastmod.replace('Z', '+00:00'))
+                    if lm_dt > existing[url]:
+                        should_embed = True
+                except Exception:
+                    pass
+
+            if should_embed:
+                event = WebhookEvent.objects.create(
+                    client=client,
+                    source='sitemap',
+                    event_type='page.changed',
+                    resource_id='',
+                    resource_title=url[:300],
+                    status='queued',
+                )
+                re_embed_url.delay(str(client.id), url, event.id)
+                queued_for_client += 1
+                # Per-client safety cap so a freshly added giant site
+                # doesn't flood the embed queue in one tick.
+                if queued_for_client >= 25:
+                    break
+
+        if queued_for_client:
+            logger.info(f'[watch_sitemaps] Queued {queued_for_client} URL(s) for {client.name}.')
+            total_queued += queued_for_client
+
+    logger.info(f'[watch_sitemaps] Total queued this run: {total_queued}.')
