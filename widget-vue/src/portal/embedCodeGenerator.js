@@ -492,11 +492,23 @@ function connect(){
   ws=new WebSocket(B.replace(/^https/,'wss').replace(/^http/,'ws')+'/ws/chat/'+C+'/'+sid+'/');
   ws.onopen=function(){sendVisitorMeta()};
   ws.onmessage=function(e){rmDots();busy=false;$('cf-sb').disabled=!$('cf-inp').value.trim()&&!pendingImg;
-    try{var d=JSON.parse(e.data);if(d.type==='ai_message'&&d.message){
-      bubble(renderMd(d.message),'ai');chime();
-      var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action'];
-      if(AUTO_OPEN.indexOf(d.source)>=0&&!isOpen)toggleOpen();
-    }}catch(x){}};
+    try{
+      var d=JSON.parse(e.data);
+      // Server-pushed hot-lead trigger: visitor reached READY_TO_BUY / hot
+      // score and we still don't have their contact. Auto-opens the chat
+      // window if closed and pops the lead modal after a short delay so the
+      // visitor sees the AI confirmation first.
+      if(d.type==='lead_capture_required'&&!leadDone){
+        if(!isOpen)toggleOpen();
+        setTimeout(showLead,1200);
+        return;
+      }
+      if(d.type==='ai_message'&&d.message){
+        bubble(renderMd(d.message),'ai');chime();
+        var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action','lead_captured'];
+        if(AUTO_OPEN.indexOf(d.source)>=0&&!isOpen)toggleOpen();
+      }
+    }catch(x){}};
   ws.onerror=function(){rmDots();busy=false};
   ws.onclose=function(){ws=null;sentVisitorMeta=false}}
 

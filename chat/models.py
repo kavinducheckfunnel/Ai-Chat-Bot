@@ -169,6 +169,11 @@ class ChatSession(models.Model):
     hot_lead_email_sent = models.BooleanField(default=False)
     human_requested = models.BooleanField(default=False)
 
+    # Set true the first time we push a 'lead_capture_required' event to the
+    # widget so the modal doesn't re-pop on every subsequent AI reply.
+    # See chat.consumers.AsyncChatConsumer._maybe_prompt_lead_capture.
+    lead_capture_prompted = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

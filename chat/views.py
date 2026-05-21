@@ -302,34 +302,135 @@ def trigger_event(request):
 @permission_classes([AllowAny])
 def capture_lead(request):
     """
-    Called by the widget lead-capture modal to save visitor email/phone to the session.
+    Called by the widget lead-capture modal to save visitor email/phone to
+    the session.
+
+    Sales-enablement upgrades on top of the original save:
+      • Auto-promotes kanban_state → HOT_LEAD if heat or intent crossed the
+        threshold by the time the modal closes (the visitor providing
+        contact mid-conversation is itself a strong buying signal).
+      • Pushes an AI confirmation message into the chat ("Got it, our team
+        will reach you within X hours about <product>") so the visitor
+        sees the lead was captured — the QA report flagged "contact
+        capture is incomplete" because there was no visible confirmation.
+      • Broadcasts a session_update over the admin_dashboard channel so
+        the Kanban + Inbox refresh live without a reload.
+
     Body: { session_id, email, phone? }
     """
     session_id = request.data.get('session_id')
-    email = request.data.get('email', '').strip()
+    email = (request.data.get('email') or '').strip()
 
     if not session_id or not email:
         return Response({'error': 'session_id and email required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    phone = request.data.get('phone', '') or ''
+    phone = (request.data.get('phone') or '').strip()
 
-    updated = ChatSession.objects.filter(session_id=session_id).update(
-        lead_email=email,
-        lead_phone=phone or None,
-    )
-
-    if not updated:
-        return Response({'error': 'session not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    # Reload session for webhook payload
     try:
         session = ChatSession.objects.select_related('client').get(session_id=session_id)
-        client = session.client
-        if client:
+    except ChatSession.DoesNotExist:
+        return Response({'error': 'session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    session.lead_email = email
+    if phone:
+        session.lead_phone = phone
+
+    # ── Auto-promote to HOT_LEAD on lead capture when intent/heat is high ──
+    # Receiving the contact info itself is a strong intent signal — combined
+    # with EMA we promote so the tenant sees the right column on the Kanban
+    # without manual triage.
+    promoted = False
+    heat = session.heat_score or 0
+    intent = session.current_intent_ema or 0
+    if (heat >= 60 or intent >= 0.6) and (session.kanban_state or '').upper() in {'NEW', 'CONTACTED', 'QUALIFIED'}:
+        session.kanban_state = 'HOT_LEAD'
+        promoted = True
+
+    # ── Inject an in-chat confirmation so the visitor sees the lead saved ──
+    # Phrased to acknowledge urgency context when it's there, otherwise a
+    # plain "we'll be in touch" line. The 24h window is a safe default —
+    # tenants can override via client.sla_response_hours in a future migration.
+    top_interest = ''
+    try:
+        from chat.ai_service import build_browsing_context
+        bs = build_browsing_context(session)
+        top_interest = (bs or {}).get('top_interest', '') or ''
+    except Exception:
+        pass
+
+    urgent = (session.current_urgency_ema or 0) >= 0.7
+    if urgent and top_interest:
+        confirm_text = (
+            f"Got it — I've marked you as a priority lead for the {top_interest}. "
+            f"Our team will reach out shortly to confirm delivery details."
+        )
+    elif urgent:
+        confirm_text = (
+            "Got it — I've marked this as a priority lead. "
+            "Our team will reach out shortly to confirm delivery details."
+        )
+    elif top_interest:
+        confirm_text = (
+            f"Thanks! Your details are saved. Our team will reach out within "
+            f"24 hours about the {top_interest}."
+        )
+    else:
+        confirm_text = (
+            "Thanks! Your details are saved. Our team will be in touch within 24 hours."
+        )
+
+    history = session.chat_history or []
+    history.append({'role': 'ai', 'message': confirm_text, 'source': 'lead_captured'})
+    session.chat_history = history
+
+    session.save(update_fields=[
+        'lead_email', 'lead_phone', 'kanban_state', 'chat_history', 'updated_at',
+    ])
+
+    client = session.client
+
+    # ── Push the confirmation into the visitor's WebSocket ────────────────
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(f'chat_{session_id}', {
+            'type': 'chat_message',
+            'message': confirm_text,
+            'source': 'lead_captured',
+        })
+    except Exception:
+        pass  # widget might be closed — message is still in chat_history
+
+    # ── Broadcast session_update so admin dashboards refresh live ─────────
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)('admin_dashboard', {
+            'type': 'session_update',
+            'data': {
+                'session_id': str(session.session_id),
+                'visitor_id': session.visitor_id,
+                'heat_score': session.heat_score,
+                'conversation_state': session.conversation_state,
+                'kanban_state': session.kanban_state,
+                'message_count': session.message_count,
+                'lead_email': session.lead_email,
+                'lead_phone': session.lead_phone,
+                'takeover_active': session.takeover_active,
+                'client_id': str(session.client_id) if session.client_id else None,
+                'updated_at': session.updated_at.isoformat() if session.updated_at else None,
+            },
+        })
+    except Exception:
+        pass
+
+    # ── Outbound integrations (Slack + tenant webhook + HubSpot) ──────────
+    if client:
+        try:
             from chat.utils import fire_slack_notification, fire_outbound_webhook
+            badge = ':fire: HOT LEAD' if promoted or (session.kanban_state == 'HOT_LEAD') else ':mega: Lead captured'
             slack_text = (
-                f':mega: *Lead Captured on {client.name}*\n'
+                f'{badge} on *{client.name}*\n'
                 f'Email: {email}' + (f' · Phone: {phone}' if phone else '')
+                + (f'\nProduct interest: {top_interest}' if top_interest else '')
             )
             fire_slack_notification(client, slack_text)
             fire_outbound_webhook(client, 'lead_captured', {
@@ -337,18 +438,25 @@ def capture_lead(request):
                 'visitor_id': session.visitor_id,
                 'lead_email': email,
                 'lead_phone': phone or '',
+                'kanban_state': session.kanban_state,
+                'heat_score': session.heat_score,
+                'top_interest': top_interest,
             })
-    except Exception:
-        pass
+        except Exception:
+            pass
 
-    # Fire HubSpot sync asynchronously if client has integration configured
+    # Fire HubSpot sync asynchronously if the client has integration configured
     try:
         from users.tasks import sync_lead_to_hubspot
         sync_lead_to_hubspot.delay(str(session_id))
     except Exception:
         pass
 
-    return Response({'status': 'saved'})
+    return Response({
+        'status': 'saved',
+        'kanban_state': session.kanban_state,
+        'is_hot_lead': session.kanban_state == 'HOT_LEAD',
+    })
 
 
 @api_view(['GET'])

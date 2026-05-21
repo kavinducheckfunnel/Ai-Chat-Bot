@@ -109,11 +109,59 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.post_process(session)
 
     async def post_process(self, session):
-        """Persist heat score, check CTA trigger, broadcast to admin dashboard."""
+        """Persist heat score, check CTA trigger, broadcast to admin dashboard,
+        and prompt the visitor for contact details if the AI just hit
+        sales-close conditions but we don't have a lead yet."""
         updated = await self.refresh_and_persist_heat(session)
         if updated:
             await self._broadcast_session_update(updated)
             await self._check_cta_trigger(updated)
+            await self._maybe_prompt_lead_capture(updated)
+
+    async def _maybe_prompt_lead_capture(self, session):
+        """
+        Push a 'lead_capture_required' event to the widget when ALL of:
+          • visitor has NOT given email yet
+          • EITHER conversation_state is READY_TO_BUY
+            OR heat_score >= 75
+            OR kanban_state == 'HOT_LEAD'
+          • we haven't already prompted in this session (prompted_lead_capture flag)
+
+        The widget listens for this event and opens its lead modal
+        automatically. Without this signal, the modal only triggers on
+        the visitor's 3rd outbound message, which the QA flagged as
+        "contact capture incomplete" — by the time it fires the buying
+        moment has passed.
+        """
+        has_email = bool((session.lead_email or '').strip())
+        if has_email:
+            return
+        if getattr(session, 'lead_capture_prompted', False):
+            return
+
+        close_state = (session.conversation_state or '').upper() == 'READY_TO_BUY'
+        hot_kanban  = (session.kanban_state or '').upper() == 'HOT_LEAD'
+        hot_score   = (session.heat_score or 0) >= 75
+        if not (close_state or hot_kanban or hot_score):
+            return
+
+        # Mark the flag so we don't spam the modal every turn
+        await self._set_lead_capture_prompted(session.session_id)
+
+        try:
+            await self.send(text_data=json.dumps({
+                'type': 'lead_capture_required',
+                'reason': 'hot_lead',
+                'heat_score': session.heat_score,
+            }))
+        except Exception:
+            pass
+
+    @database_sync_to_async
+    def _set_lead_capture_prompted(self, session_id):
+        ChatSession.objects.filter(session_id=session_id).update(
+            lead_capture_prompted=True,
+        )
 
     @database_sync_to_async
     def refresh_and_persist_heat(self, session):

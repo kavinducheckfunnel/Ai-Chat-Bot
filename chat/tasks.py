@@ -57,12 +57,23 @@ def schedule_afk_nudge(self, session_id):
     })
 
 
-# Fallback rotation when no client config exists and AI generation isn't
-# requested — keeps idle visitors engaged without being repetitive.
-_NUDGE_MESSAGES = [
-    "Still there? I'm here to help if you have any questions!",
-    "Just checking in — can I help you find what you're looking for?",
-    "Take your time! Let me know if you'd like a recommendation.",
+# Generic fallback rotation — ONLY used when there's no client/browsing
+# context to personalise against. Even these are written to nudge the
+# visitor back toward a qualifying decision instead of being filler.
+_GENERIC_NUDGE_MESSAGES = [
+    "Still browsing? I can recommend something quick — what's caught your eye?",
+    "Want me to narrow it down for you? Just tell me size / budget / use-case.",
+    "Quick question — looking to buy soon, or still researching?",
+]
+
+# Context-aware nudge templates. {top_interest} gets replaced with the
+# visitor's most-dwelled product/page. The QA report flagged generic
+# "Still there?" / "Just checking in" as 2.5/10 — these address that by
+# referencing what the visitor was ACTUALLY looking at.
+_PERSONALISED_NUDGE_TEMPLATES = [
+    "Still thinking about {top_interest}? Happy to answer any quick questions.",
+    "Want me to check size / availability on {top_interest}?",
+    "Saw you were looking at {top_interest} — what would help you decide?",
 ]
 
 
@@ -73,7 +84,8 @@ def _build_nudge_message(session, client, cta_mode):
 
     cta_mode='ai'     → ask the LLM to write a personalised CTA referencing
                         the visitor's browsing context + EMA signals. Falls
-                        back to a rotated generic line if the LLM fails.
+                        back to a context-aware template if the LLM fails,
+                        and finally to a generic line.
     cta_mode='manual' → use client.cta_message verbatim. If the tenant left
                         cta_message blank, send nothing (we don't want to
                         accidentally fall back to AI text).
@@ -83,8 +95,7 @@ def _build_nudge_message(session, client, cta_mode):
         text = (client.cta_message or '').strip() if client else ''
         return text or None  # don't fire on empty manual text
 
-    # AI mode: use the same personaliser the behavior triggers use so the
-    # voice is consistent across in-flow and AFK CTAs.
+    # AI mode — try the personaliser first.
     try:
         from chat.views import _generate_personalised_cta
         personalised = _generate_personalised_cta(session, client, 'afk_nudge')
@@ -93,10 +104,22 @@ def _build_nudge_message(session, client, cta_mode):
     except Exception as e:
         logger.warning(f'[_build_nudge_message] AI generation failed: {e}')
 
-    # AI mode fallback — rotate generic lines so a tenant who hasn't
-    # supplied cta_message still gets a polite follow-up.
+    # Context-aware fallback — pull the visitor's top_interest if any.
     nudge_count = getattr(session, 'nudge_count', 0) or 0
-    return _NUDGE_MESSAGES[nudge_count % len(_NUDGE_MESSAGES)]
+    top_interest = ''
+    try:
+        from chat.ai_service import build_browsing_context
+        bs = build_browsing_context(session) or {}
+        top_interest = (bs.get('top_interest') or '').strip()
+    except Exception:
+        pass
+
+    if top_interest:
+        template = _PERSONALISED_NUDGE_TEMPLATES[nudge_count % len(_PERSONALISED_NUDGE_TEMPLATES)]
+        return template.format(top_interest=top_interest)
+
+    # No context at all — use the qualification-leaning generics.
+    return _GENERIC_NUDGE_MESSAGES[nudge_count % len(_GENERIC_NUDGE_MESSAGES)]
 
 
 @shared_task

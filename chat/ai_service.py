@@ -8,6 +8,12 @@ from scraper.embeddings import get_embeddings_model
 from .prompts import build_prompt, GEMINI_SCHEMA
 from .ema_engine import update_session_scores
 from .state_machine import update_session_state
+from .qualification import (
+    detect_qualification,
+    render_for_prompt as render_qualification,
+    URGENCY_KEYWORDS,
+    BUY_PHRASES,
+)
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -365,6 +371,71 @@ def _invoke_with_fallback(messages, client):
     raise last_exc  # all fallbacks exhausted
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Sales-enablement helpers — keyword-based score floors and kanban promotion
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _urgency_score_floor(user_message: str) -> float:
+    """
+    Belt-and-suspenders for urgency: even if the LLM under-scores a clear
+    urgency signal ("need it today!"), we floor urgency_score to 0.85 when
+    any urgency keyword appears. Returns 0.0 if no signal.
+
+    The keywords list lives in qualification.URGENCY_KEYWORDS so the same
+    detector powers both the qualification checklist and the score floor —
+    one source of truth.
+    """
+    if not user_message:
+        return 0.0
+    msg = user_message.lower()
+    for kw in URGENCY_KEYWORDS:
+        if kw in msg:
+            return 0.85
+    return 0.0
+
+
+def _intent_score_floor(user_message: str) -> float:
+    """
+    Same idea for buying intent: a phrase like "I'll take it" or "I'm
+    interested in buying" should floor intent at 0.9 regardless of what
+    the LLM returned.
+    """
+    if not user_message:
+        return 0.0
+    msg = user_message.lower()
+    for kw in BUY_PHRASES:
+        if kw in msg:
+            return 0.9
+    return 0.0
+
+
+def _maybe_promote_kanban(session) -> bool:
+    """
+    Auto-promote the kanban_state to HOT_LEAD or QUALIFIED when the
+    EMA/heat thresholds warrant it. Returns True if a change was made
+    so the caller can broadcast it.
+
+    Rules (most-aggressive wins):
+      • heat_score >= 75 OR (intent>=0.8 AND urgency>=0.7) → HOT_LEAD
+      • intent >= 0.6 AND state in NEW/CONTACTED → QUALIFIED
+    Never demotes — a tenant can manually revert via Kanban DnD.
+    """
+    current = (session.kanban_state or '').upper()
+    intent  = session.current_intent_ema or 0
+    urgency = session.current_urgency_ema or 0
+    heat    = session.heat_score or 0
+
+    HOT_STATES_REACHABLE = {'NEW', 'CONTACTED', 'QUALIFIED'}
+
+    if (heat >= 75 or (intent >= 0.8 and urgency >= 0.7)) and current in HOT_STATES_REACHABLE:
+        session.kanban_state = 'HOT_LEAD'
+        return True
+    if intent >= 0.6 and current == 'NEW':
+        session.kanban_state = 'QUALIFIED'
+        return True
+    return False
+
+
 def generate_ai_response(session, user_message, behavior_matrix, image_data=None):
     """
     Generate an AI response for a chat session.
@@ -412,6 +483,15 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         logger.warning(f'[ai] build_browsing_context failed: {e}')
         enriched_behavior = behavior_matrix or {}
 
+    # 3b. Build the qualification checklist — what's been answered vs missing.
+    # This is the single most important sales-enablement upgrade: without it
+    # the LLM has no idea what to ASK NEXT and slips back into Q/A mode.
+    try:
+        qualification_block = render_qualification(detect_qualification(session))
+    except Exception as e:
+        logger.warning(f'[ai] qualification detect failed: {e}')
+        qualification_block = ''
+
     system_prompt, user_prompt = build_prompt(
         session.conversation_state,
         top_chunks,
@@ -419,6 +499,7 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         session.chat_history,
         user_message,
         website_domain=client_domain,
+        qualification_block=qualification_block,
     )
     system_prompt += (
         '\n\nCRITICAL: You MUST return ONLY a valid raw JSON object matching this schema. '
@@ -477,15 +558,28 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         }
 
     # 6. Update EMA scores
+    # Floor the LLM-reported scores with keyword-based detectors so a clear
+    # "need it today!" can't be scored 0.4 by an under-confident model.
+    # The flooring is a MAX() against the LLM number — never decreases it.
+    raw_intent  = max(float(result.get('intent_score', 0.5)),  _intent_score_floor(user_message))
+    raw_budget  = float(result.get('budget_score', 0.5))
+    raw_urgency = max(float(result.get('urgency_score', 0.5)), _urgency_score_floor(user_message))
+
     update_session_scores(
         session,
-        raw_intent=result.get('intent_score', 0.5),
-        raw_budget=result.get('budget_score', 0.5),
-        raw_urgency=result.get('urgency_score', 0.5),
+        raw_intent=raw_intent,
+        raw_budget=raw_budget,
+        raw_urgency=raw_urgency,
     )
 
     # 7. Update conversation state machine
     update_session_state(session)
+
+    # 7b. Auto-promote kanban_state to HOT_LEAD / QUALIFIED when scores warrant
+    # it. Saves the field if changed so the dashboard reflects reality
+    # without a tenant having to drag the card manually.
+    if _maybe_promote_kanban(session):
+        session.save(update_fields=['kanban_state'])
 
     # 8. Persist chat history
     session.chat_history.append({'role': 'user', 'message': user_message or '[image]'})
