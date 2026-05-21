@@ -245,3 +245,76 @@ class LLMCallLog(models.Model):
 
     def __str__(self):
         return f'{self.model} {self.status} {self.latency_ms}ms'
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROMPT EDITOR
+#
+# Lets the super admin edit the live system prompt from the UI. One row per
+# editable slot in `PromptTemplate`; every save creates a new immutable
+# `PromptVersion`. The `active_version` pointer is what `chat.prompt_service`
+# resolves at runtime. The file constants in `chat.prompts` remain the
+# factory default — if no DB version is active (fresh install, DB error),
+# the file content is used.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PromptTemplate(models.Model):
+    """Catalog of editable prompt slots. Seeded once with the two slots we expose."""
+
+    SLUG_CHOICES = (
+        ('system_persona', 'System Persona'),
+        ('state_instructions', 'State Instructions'),
+    )
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    slug        = models.SlugField(max_length=64, unique=True, choices=SLUG_CHOICES)
+    description = models.TextField(blank=True)
+
+    # Pointer to the version currently in use. NULL only briefly during
+    # initial seed; the runtime resolver falls back to the file constant
+    # in that case.
+    active_version = models.ForeignKey(
+        'PromptVersion',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='active_for',
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['slug']
+
+    def __str__(self):
+        return f'PromptTemplate<{self.slug}>'
+
+
+class PromptVersion(models.Model):
+    """Immutable history. New row per save. Rollback = new row pointing back."""
+
+    id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    template    = models.ForeignKey(
+        PromptTemplate, on_delete=models.CASCADE, related_name='versions'
+    )
+    version     = models.PositiveIntegerField()  # monotonic per template (1, 2, 3, …)
+    body        = models.TextField()
+    notes       = models.CharField(max_length=500, blank=True)
+    created_by  = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='prompt_versions',
+    )
+    created_at  = models.DateTimeField(auto_now_add=True)
+
+    # True for the seed version that captures the file constants on first migration.
+    is_default  = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        unique_together = [('template', 'version')]
+        indexes = [
+            models.Index(fields=['template', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'PromptVersion<{self.template.slug} v{self.version}>'

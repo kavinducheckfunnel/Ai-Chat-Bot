@@ -1,5 +1,5 @@
 from django.urls import path
-from . import admin_views, billing_views
+from . import admin_views, billing_views, admin_prompts_views
 from rest_framework_simplejwt.views import TokenRefreshView
 
 urlpatterns = [
@@ -94,4 +94,15 @@ urlpatterns = [
     # Platform AI config (superadmin only)
     path('platform-config/', admin_views.platform_config, name='admin-platform-config'),
     path('platform-config/models/', admin_views.openrouter_models, name='admin-openrouter-models'),
+
+    # ── Prompt editor (super-admin only) ────────────────────────────────────
+    path('prompts/reauth/',                            admin_prompts_views.prompt_reauth,         name='admin-prompts-reauth'),
+    path('prompts/',                                   admin_prompts_views.prompt_list,           name='admin-prompts-list'),
+    path('prompts/<slug:slug>/',                       admin_prompts_views.prompt_detail,         name='admin-prompts-detail'),
+    path('prompts/<slug:slug>/versions/',              admin_prompts_views.prompt_versions,       name='admin-prompts-versions'),
+    path('prompts/<slug:slug>/versions/<uuid:version_id>/', admin_prompts_views.prompt_version_detail, name='admin-prompts-version-detail'),
+    path('prompts/<slug:slug>/preview/',               admin_prompts_views.prompt_preview,        name='admin-prompts-preview'),
+    path('prompts/<slug:slug>/save/',                  admin_prompts_views.prompt_save,           name='admin-prompts-save'),
+    path('prompts/<slug:slug>/rollback/',              admin_prompts_views.prompt_rollback,       name='admin-prompts-rollback'),
+    path('prompts/<slug:slug>/reset/',                 admin_prompts_views.prompt_reset,          name='admin-prompts-reset'),
 ]

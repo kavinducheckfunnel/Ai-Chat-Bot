@@ -43,17 +43,21 @@ function redirectToLogin() {
 }
 
 async function apiFetch(path, opts = {}) {
+  // Merge caller-provided headers WITH the auth-header set. Without this
+  // merge, any caller passing custom headers (e.g. X-Reauth-Token) would
+  // accidentally drop the Authorization header on retry-after-refresh.
+  const { headers: callerHeaders, ...rest } = opts
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: getHeaders(),
-    ...opts,
+    ...rest,
+    headers: { ...getHeaders(), ...(callerHeaders || {}) },
   })
   if (res.status === 401) {
     // Try to silently refresh the access token once
     const newToken = await tryRefreshToken()
     if (newToken) {
       const retryRes = await fetch(`${API_BASE}${path}`, {
-        headers: getHeaders(newToken),
-        ...opts,
+        ...rest,
+        headers: { ...getHeaders(newToken), ...(callerHeaders || {}) },
       })
       if (retryRes.status === 401) {
         redirectToLogin()
@@ -61,7 +65,10 @@ async function apiFetch(path, opts = {}) {
       }
       if (!retryRes.ok) {
         const err = await retryRes.json().catch(() => ({ detail: retryRes.statusText }))
-        throw new Error(err.detail || 'Request failed')
+        const e = new Error(err.detail || 'Request failed')
+        e.response = err
+        e.status = retryRes.status
+        throw e
       }
       if (retryRes.status === 204) return null
       return retryRes.json()
@@ -71,7 +78,10 @@ async function apiFetch(path, opts = {}) {
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Request failed')
+    const e = new Error(err.detail || 'Request failed')
+    e.response = err
+    e.status = res.status
+    throw e
   }
   if (res.status === 204) return null
   return res.json()
@@ -447,6 +457,36 @@ export function useAdminApi() {
       // some browsers actually finish persisting the download.
       setTimeout(() => URL.revokeObjectURL(obj), 1000)
     },
+
+    // ── Prompt editor (superadmin) ───────────────────────────────────────
+    // Powers /admin/prompts. Writes (save / rollback / reset) require a
+    // short-lived re-auth token issued by promptReauth() — pass it as the
+    // `reauthToken` arg and we'll attach it as X-Reauth-Token.
+    promptReauth: (password) => apiFetch('/api/admin/prompts/reauth/', {
+      method: 'POST', body: JSON.stringify({ password }),
+    }),
+    listPrompts:    ()     => apiFetch('/api/admin/prompts/'),
+    getPrompt:      (slug) => apiFetch(`/api/admin/prompts/${slug}/`),
+    getPromptVersions:      (slug)    => apiFetch(`/api/admin/prompts/${slug}/versions/`),
+    getPromptVersionDetail: (slug, vid) => apiFetch(`/api/admin/prompts/${slug}/versions/${vid}/`),
+    previewPrompt:  (slug, body) => apiFetch(`/api/admin/prompts/${slug}/preview/`, {
+      method: 'POST', body: JSON.stringify({ body }),
+    }),
+    savePrompt: (slug, body, notes, reauthToken) => apiFetch(`/api/admin/prompts/${slug}/save/`, {
+      method: 'POST',
+      headers: { 'X-Reauth-Token': reauthToken || '' },
+      body: JSON.stringify({ body, notes: notes || '' }),
+    }),
+    rollbackPrompt: (slug, versionId, reauthToken) => apiFetch(`/api/admin/prompts/${slug}/rollback/`, {
+      method: 'POST',
+      headers: { 'X-Reauth-Token': reauthToken || '' },
+      body: JSON.stringify({ version_id: versionId }),
+    }),
+    resetPrompt: (slug, reauthToken) => apiFetch(`/api/admin/prompts/${slug}/reset/`, {
+      method: 'POST',
+      headers: { 'X-Reauth-Token': reauthToken || '' },
+      body: '{}',
+    }),
 
     // ── WebSocket ────────────────────────────────────────────────────────
     connectAdminDashboard(onMessage) {

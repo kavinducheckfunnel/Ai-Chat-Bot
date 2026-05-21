@@ -21,6 +21,8 @@ import AdminClientHeatmap from './admin/AdminClientHeatmap.vue'
 import AdminVisitors from './admin/AdminVisitors.vue'
 import AdminInsights from './admin/AdminInsights.vue'
 import AdminBackups from './admin/AdminBackups.vue'
+import AdminPrompts from './admin/AdminPrompts.vue'
+import AdminPromptEditor from './admin/AdminPromptEditor.vue'
 
 import PortalLayout from './portal/PortalLayout.vue'
 import OnboardingWizard from './portal/OnboardingWizard.vue'
@@ -70,6 +72,8 @@ const routes = [
       { path: 'superadmin', component: SuperAdminDashboard, meta: { superadminOnly: true } },
       { path: 'permissions', component: PermissionsManager, meta: { superadminOnly: true } },
       { path: 'backups', component: AdminBackups, meta: { superadminOnly: true } },
+      { path: 'prompts', component: AdminPrompts, meta: { superadminOnly: true } },
+      { path: 'prompts/:slug', component: AdminPromptEditor, meta: { superadminOnly: true } },
     ],
   },
 

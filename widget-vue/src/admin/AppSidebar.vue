@@ -106,6 +106,7 @@ import { useRoute } from 'vue-router'
 import {
   Zap, PanelLeft, LayoutDashboard, Trello, Users, Building2,
   BarChart3, Shield, UserCheck, LogOut, ChevronsUpDown, Settings,
+  FileText,
 } from 'lucide-vue-next'
 import NavItem from './NavItem.vue'
 import Avatar from '@/components/ui/Avatar.vue'
@@ -144,5 +145,6 @@ const adminItems = [
   { to: '/admin/superadmin', label: 'Intelligence', icon: BarChart3 },
   { to: '/admin/tenants', label: 'Tenants', icon: Users },
   { to: '/admin/permissions', label: 'Permissions', icon: Shield },
+  { to: '/admin/prompts', label: 'System Prompts', icon: FileText },
 ]
 </script>
