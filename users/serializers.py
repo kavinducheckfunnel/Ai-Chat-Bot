@@ -19,7 +19,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'is_active', 'chatbot_name', 'chatbot_color', 'chatbot_logo_url',
             'chatbot_theme', 'primary_goal', 'onboarding_complete',
             'notification_email',
-            'discount_code', 'cta_message', 'fomo_offer_text', 'fomo_countdown_seconds',
+            'cta_mode', 'discount_code', 'cta_message', 'fomo_offer_text', 'fomo_countdown_seconds',
             'voice_input_enabled', 'image_input_enabled',
             'ingestion_status', 'total_pages_ingested', 'session_count',
             'created_at', 'updated_at',

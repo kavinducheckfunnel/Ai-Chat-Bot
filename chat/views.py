@@ -211,6 +211,15 @@ def trigger_event(request):
     if not client:
         return Response({'status': 'ignored', 'reason': 'no client'})
 
+    # ── Respect tenant's CTA strategy ────────────────────────────────────
+    # cta_mode picks ONE follow-up flow so we never send both an AI-generated
+    # behavior trigger AND a manual AFK nudge for the same visitor.
+    #   'ai'     → fire behavior CTA here AND also via AFK nudge
+    #   'manual' → skip behavior CTA; AFK nudge will send the saved text
+    #   'off'    → skip all CTAs
+    if getattr(client, 'cta_mode', 'ai') != 'ai':
+        return Response({'status': 'ignored', 'reason': f'cta_mode={client.cta_mode}'})
+
     # ── Try LLM-generated personalised CTA first ─────────────────────────
     # If the visitor has clear browsing context (top interest + EMA signals),
     # ask the LLM for a tailor-made CTA referencing what THEY specifically
@@ -253,11 +262,18 @@ def trigger_event(request):
     else:
         fomo_msg = "Hey! I noticed you've been exploring — can I help you with anything? 💬"
 
-    # Countdown hint only for closing-type triggers
+    # Countdown hint only when:
+    #   1) this is a closing-type trigger
+    #   2) there's an actual offer attached (discount_code OR fomo_offer_text)
+    #   3) the countdown is >= 60s so "expires in 0 minutes" never appears
+    # Without a real offer the urgency phrasing reads as fake — that's the
+    # "This offer expires in 0 minutes!" garbage the user reported.
     CLOSING_TRIGGERS = {'exit_intent', 'pricing_hesitation', 'high_intent_action'}
-    if trigger_type in CLOSING_TRIGGERS and client.fomo_countdown_seconds and client.fomo_countdown_seconds > 0:
-        mins = client.fomo_countdown_seconds // 60
-        fomo_msg += f" This offer expires in {mins} minutes!"
+    has_offer = bool(client.discount_code or client.fomo_offer_text)
+    seconds = client.fomo_countdown_seconds or 0
+    if trigger_type in CLOSING_TRIGGERS and has_offer and seconds >= 60:
+        mins = seconds // 60
+        fomo_msg += f" This offer expires in {mins} minute{'s' if mins != 1 else ''}!"
 
     # Persist to chat history; only mark closing_triggered for exit/pricing/high-intent
     history = session.chat_history or []

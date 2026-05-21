@@ -119,6 +119,21 @@ class Client(models.Model):
     notification_email = models.EmailField(blank=True, null=True)
 
     # FOMO / engagement
+    # cta_mode picks ONE follow-up strategy so we never send both:
+    #   'ai'     = AI-generated CTA from visitor behavior (LLM personalises
+    #              based on browsing context, EMA signals, heat level). Fires
+    #              on behavior triggers (pricing_hesitation, exit_intent, …)
+    #              AND as the AFK-nudge text after 2 min idle.
+    #   'manual' = use cta_message verbatim as the AFK-nudge text. Behavior
+    #              triggers do NOT fire standalone messages.
+    #   'off'    = no automated CTAs at all (AI replies still happen).
+    CTA_MODE_CHOICES = [
+        ('ai',     'AI-generated from behavior'),
+        ('manual', 'Manual message'),
+        ('off',    'Off — no automated CTAs'),
+    ]
+    cta_mode = models.CharField(max_length=10, choices=CTA_MODE_CHOICES, default='ai')
+
     discount_code = models.CharField(max_length=100, blank=True, null=True)
     cta_message = models.CharField(max_length=255, default="You're clearly ready — grab your exclusive discount:")
     fomo_offer_text = models.CharField(max_length=255, blank=True, null=True)

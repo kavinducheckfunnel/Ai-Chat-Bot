@@ -30,16 +30,15 @@ def schedule_afk_nudge(self, session_id):
     if session.last_visitor_message_at and session.last_visitor_message_at > cutoff:
         return  # Visitor is still active
 
-    # Build nudge message based on client config
+    # ── Respect cta_mode — tenant chose one CTA strategy ─────────────────
     client = session.client
-    nudge_message = "Still exploring? I can help you decide. What's holding you back?"
-    if client and client.cta_message:
-        nudge_message = client.cta_message
-    if client and client.discount_code and session.closing_triggered:
-        nudge_message = (
-            f"{client.cta_message or 'Ready to take the next step?'} "
-            f"Use code **{client.discount_code}** for an exclusive discount!"
-        )
+    cta_mode = getattr(client, 'cta_mode', 'ai') if client else 'ai'
+    if cta_mode == 'off':
+        return  # tenant turned off automated follow-ups entirely
+
+    nudge_message = _build_nudge_message(session, client, cta_mode)
+    if not nudge_message:
+        return  # AI generation failed and no manual text → skip silently
 
     # Append to chat history
     history = session.chat_history or []
@@ -58,12 +57,46 @@ def schedule_afk_nudge(self, session_id):
     })
 
 
-# Nudge messages rotate to avoid repetition across multiple fires
+# Fallback rotation when no client config exists and AI generation isn't
+# requested — keeps idle visitors engaged without being repetitive.
 _NUDGE_MESSAGES = [
     "Still there? I'm here to help if you have any questions!",
     "Just checking in — can I help you find what you're looking for?",
     "Take your time! Let me know if you'd like a recommendation.",
 ]
+
+
+def _build_nudge_message(session, client, cta_mode):
+    """
+    Build the text for an AFK follow-up nudge based on the tenant's chosen
+    CTA strategy. Returns None if no message should be sent.
+
+    cta_mode='ai'     → ask the LLM to write a personalised CTA referencing
+                        the visitor's browsing context + EMA signals. Falls
+                        back to a rotated generic line if the LLM fails.
+    cta_mode='manual' → use client.cta_message verbatim. If the tenant left
+                        cta_message blank, send nothing (we don't want to
+                        accidentally fall back to AI text).
+    cta_mode='off'    → caller already returned earlier.
+    """
+    if cta_mode == 'manual':
+        text = (client.cta_message or '').strip() if client else ''
+        return text or None  # don't fire on empty manual text
+
+    # AI mode: use the same personaliser the behavior triggers use so the
+    # voice is consistent across in-flow and AFK CTAs.
+    try:
+        from chat.views import _generate_personalised_cta
+        personalised = _generate_personalised_cta(session, client, 'afk_nudge')
+        if personalised:
+            return personalised
+    except Exception as e:
+        logger.warning(f'[_build_nudge_message] AI generation failed: {e}')
+
+    # AI mode fallback — rotate generic lines so a tenant who hasn't
+    # supplied cta_message still gets a polite follow-up.
+    nudge_count = getattr(session, 'nudge_count', 0) or 0
+    return _NUDGE_MESSAGES[nudge_count % len(_NUDGE_MESSAGES)]
 
 
 @shared_task
@@ -97,17 +130,13 @@ def check_afk_sessions():
     fired = 0
     for session in idle_sessions:
         client = session.client
-        nudge_index = session.nudge_count % len(_NUDGE_MESSAGES)
-        nudge_message = _NUDGE_MESSAGES[nudge_index]
+        cta_mode = getattr(client, 'cta_mode', 'ai') if client else 'ai'
+        if cta_mode == 'off':
+            continue  # tenant disabled automated follow-ups
 
-        # Override with client-specific message if configured
-        if client and client.discount_code and session.closing_triggered:
-            nudge_message = (
-                f"{client.cta_message or 'Ready to take the next step?'} "
-                f"Use code **{client.discount_code}** for an exclusive discount!"
-            )
-        elif client and client.cta_message:
-            nudge_message = client.cta_message
+        nudge_message = _build_nudge_message(session, client, cta_mode)
+        if not nudge_message:
+            continue  # manual mode with empty cta_message → skip silently
 
         history = session.chat_history or []
         history.append({'role': 'ai', 'message': nudge_message, 'source': 'afk_nudge'})

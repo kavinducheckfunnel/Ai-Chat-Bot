@@ -127,6 +127,37 @@
         </div>
 
         <div class="field">
+          <label>Follow-up CTA</label>
+          <p class="field-hint">
+            Sent as a follow-up if a visitor goes idle for 2 minutes (and on key behavior signals when AI mode is on). Pick one strategy — they won't fire together.
+          </p>
+          <div class="cta-mode-row">
+            <label class="cta-mode-opt" :class="{ active: form.cta_mode === 'ai' }">
+              <input type="radio" v-model="form.cta_mode" value="ai" />
+              <div class="cta-mode-body">
+                <span class="cta-mode-title">✨ AI-generated</span>
+                <span class="cta-mode-desc">Personalised from each visitor's browsing + intent signals.</span>
+              </div>
+            </label>
+            <label class="cta-mode-opt" :class="{ active: form.cta_mode === 'manual' }">
+              <input type="radio" v-model="form.cta_mode" value="manual" />
+              <div class="cta-mode-body">
+                <span class="cta-mode-title">📝 Manual message</span>
+                <span class="cta-mode-desc">Send the exact text you write below to every visitor.</span>
+              </div>
+            </label>
+            <label class="cta-mode-opt" :class="{ active: form.cta_mode === 'off' }">
+              <input type="radio" v-model="form.cta_mode" value="off" />
+              <div class="cta-mode-body">
+                <span class="cta-mode-title">⛔ Off</span>
+                <span class="cta-mode-desc">No automated follow-ups. AI still replies to direct messages.</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Manual CTA text input — only relevant when manual is selected -->
+        <div v-if="form.cta_mode === 'manual'" class="field">
           <label>
             CTA message
             <button class="suggest-cta-btn" @click="suggestCtaFromBehavior" :disabled="ctaSuggesting" type="button">
@@ -858,6 +889,7 @@ const form = ref({
   chatbot_color: '#6366F1',
   chatbot_theme: 'dark',
   notification_email: '',
+  cta_mode: 'ai',
   cta_message: '',
   domain_url: '',
   voice_input_enabled: false,
@@ -914,6 +946,7 @@ watch(() => props.client, (c) => {
   form.value.chatbot_color = c.chatbot_color || '#6366F1'
   form.value.chatbot_theme = c.chatbot_theme || 'dark'
   form.value.notification_email = c.notification_email || ''
+  form.value.cta_mode = c.cta_mode || 'ai'
   form.value.cta_message = c.cta_message || ''
   form.value.domain_url = c.domain_url || ''
   form.value.voice_input_enabled = c.voice_input_enabled || false
@@ -1684,6 +1717,40 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   margin-top: 6px;
   font-size: 12px;
   color: #f87171;
+}
+
+/* CTA mode picker — three radio cards stacked on mobile, 3-up on desktop.
+   Visible radio button + title + description, with active state borrowing
+   the brand accent like the theme picker above. */
+.cta-mode-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+.cta-mode-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--cf-bg-input);
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cta-mode-opt:hover { background: var(--cf-bg-ghost-hover); border-color: var(--cf-border-default); }
+.cta-mode-opt.active {
+  background: rgba(99,102,241,0.10);
+  border-color: rgba(99,102,241,0.55);
+}
+.cta-mode-opt input[type="radio"] { margin-top: 2px; accent-color: #6366f1; }
+.cta-mode-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cta-mode-title { font-size: 13px; font-weight: 600; color: var(--cf-text-primary); }
+.cta-mode-desc  { font-size: 11.5px; color: var(--cf-text-muted); line-height: 1.4; }
+
+@media (max-width: 720px) {
+  .cta-mode-row { grid-template-columns: 1fr; }
 }
 
 /* ── Real-time sync panel ────────────────────────────────────────────── */
