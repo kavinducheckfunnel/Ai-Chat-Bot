@@ -9,7 +9,6 @@ Routes are wired in `users/urls.py` under `/api/admin/prompts/`.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 import time
@@ -129,14 +128,6 @@ def _audit_prompt(actor, action_key, template, before=None, after=None, ip='', n
 # to add.
 REQUIRED_PLACEHOLDERS_SYSTEM_PERSONA: tuple[str, ...] = ()
 
-# State instructions JSON must have a value for every state the state machine
-# can emit. Pulled at call time from chat.state_machine to stay in sync.
-def _required_state_keys() -> set[str]:
-    # Hardcoded to mirror chat.state_machine.determine_conversation_state().
-    # If a new state is ever added, also add it here.
-    return {'RESEARCH', 'EVALUATION', 'OBJECTION', 'RECOVERY', 'READY_TO_BUY'}
-
-
 PLACEHOLDER_RE = re.compile(r'\{([a-zA-Z_][a-zA-Z0-9_]*)\}')
 
 
@@ -164,55 +155,23 @@ def _validate_system_persona(body: str) -> list[str]:
     return errors
 
 
-def _validate_state_instructions(body: str) -> list[str]:
-    errors = []
-    try:
-        data = json.loads(body)
-    except json.JSONDecodeError as e:
-        errors.append(f'Invalid JSON: {e.msg} (line {e.lineno}, col {e.colno})')
-        return errors
-
-    if not isinstance(data, dict):
-        errors.append('State instructions must be a JSON object (state-name → instruction string).')
-        return errors
-
-    required = _required_state_keys()
-    missing = required - set(data.keys())
-    if missing:
-        errors.append(f'Missing required state keys: {", ".join(sorted(missing))}')
-
-    for key, val in data.items():
-        if not isinstance(val, str) or not val.strip():
-            errors.append(f'State "{key}" must be a non-empty string.')
-
-    return errors
-
-
 def _validate_body(slug: str, body: str) -> list[str]:
     if slug == 'system_persona':
         return _validate_system_persona(body)
-    if slug == 'state_instructions':
-        return _validate_state_instructions(body)
     return [f'Unknown slug "{slug}".']
 
 
 def _dry_run_render(slug: str, body: str) -> list[str]:
-    """Render build_prompt() against a fake session using the proposed body.
+    """Render build_prompt() against a fake session as a smoke test.
 
-    The placeholder/JSON validators already cover the actual failure modes:
-      • `system_persona` is interpolated as a plain string into an f-string
-        slot — it is not re-formatted, so braces inside it cannot raise.
-      • `state_instructions` is JSON-parsed; required keys are checked.
-    We still call build_prompt against the current cache as a smoke test
-    that import wiring is intact.
+    The placeholder validator already covers the real failure mode for the
+    persona (`system_persona` is interpolated as a plain string into an
+    f-string slot — it is not re-formatted, so braces inside it cannot
+    raise). We still exercise build_prompt to make sure import wiring is
+    intact.
     """
     errors: list[str] = []
     try:
-        # Just confirm json.loads succeeds for the state-instructions slug,
-        # which we already validated; but re-check to be defensive.
-        if slug == 'state_instructions':
-            json.loads(body)
-
         from chat import prompts as prompts_module
         prompts_module.build_prompt(
             conversation_state='RESEARCH',
@@ -324,11 +283,7 @@ def prompt_detail(request, slug):
     # Also surface the file-default body so the UI can offer "reset" cleanly.
     from chat.prompt_service import _file_default
     try:
-        default_value = _file_default(slug)
-        if slug == 'state_instructions':
-            payload['file_default_body'] = json.dumps(default_value, indent=2, ensure_ascii=False)
-        else:
-            payload['file_default_body'] = default_value
+        payload['file_default_body'] = _file_default(slug)
     except Exception:
         payload['file_default_body'] = ''
     return Response(payload)
@@ -555,8 +510,7 @@ def prompt_reset(request, slug):
         return Response({'detail': 'Prompt template not found.'}, status=404)
 
     try:
-        default_value = _file_default(slug)
-        body = json.dumps(default_value, indent=2, ensure_ascii=False) if slug == 'state_instructions' else default_value
+        body = _file_default(slug)
     except Exception as e:
         return Response({'detail': f'Failed to load factory default: {e}'}, status=500)
 

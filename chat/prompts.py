@@ -367,13 +367,13 @@ def build_prompt(
     and what's still missing. This is the single biggest sales-enablement
     upgrade — without it the LLM has no idea what to ASK NEXT.
     """
-    # Resolve through the editable-prompt service so super-admin edits
-    # in the UI flow through at runtime. Falls back to the constants in
-    # this module on any error.
-    from .prompt_service import get_system_persona, get_state_instructions
+    # Persona is editable via the super-admin prompt editor (resolves
+    # through prompt_service with file-constant fallback). State
+    # instructions stay file-only — they're internal behavior plumbing
+    # and not something we want hot-edited in production.
+    from .prompt_service import get_system_persona
     persona = get_system_persona()
-    state_map = get_state_instructions()
-    state_instruction = state_map.get(conversation_state, state_map.get('RESEARCH', STATE_INSTRUCTIONS['RESEARCH']))
+    state_instruction = STATE_INSTRUCTIONS.get(conversation_state, STATE_INSTRUCTIONS['RESEARCH'])
 
     # Build context blocks — each chunk clearly labelled with its title + URL
     context_blocks = []

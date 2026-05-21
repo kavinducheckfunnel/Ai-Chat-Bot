@@ -263,7 +263,6 @@ class PromptTemplate(models.Model):
 
     SLUG_CHOICES = (
         ('system_persona', 'System Persona'),
-        ('state_instructions', 'State Instructions'),
     )
 
     id          = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

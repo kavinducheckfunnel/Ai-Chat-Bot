@@ -35,21 +35,16 @@ def _file_default(slug: str) -> Any:
     from . import prompts as prompts_module
     if slug == 'system_persona':
         return prompts_module.SYSTEM_PERSONA
-    if slug == 'state_instructions':
-        return prompts_module.STATE_INSTRUCTIONS
     raise KeyError(f'Unknown prompt slug: {slug}')
 
 
 def _parse(slug: str, body: str) -> Any:
     """Coerce the stored body to the type build_prompt() expects.
 
-    `system_persona` is a plain string. `state_instructions` is a JSON-encoded
-    dict (so super admin edits one editor box, not five).
+    Currently only `system_persona` is editable; it's a plain string.
     """
     if slug == 'system_persona':
         return body
-    if slug == 'state_instructions':
-        return json.loads(body)
     raise KeyError(f'Unknown prompt slug: {slug}')
 
 
@@ -95,15 +90,6 @@ def _get(slug: str) -> Any:
 
 def get_system_persona() -> str:
     return _get('system_persona')
-
-
-def get_state_instructions() -> dict:
-    val = _get('state_instructions')
-    # Defensive: if a malformed JSON ever slips past validation, fall back.
-    if not isinstance(val, dict):
-        logger.warning('[prompt_service] state_instructions is not a dict; using file default')
-        return _file_default('state_instructions')
-    return val
 
 
 def bump_cache(slug: Optional[str] = None) -> None:

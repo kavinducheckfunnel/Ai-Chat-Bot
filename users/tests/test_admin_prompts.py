@@ -14,7 +14,6 @@ Also covers the prompt_service runtime resolver: cache hit, fail-safe
 fallback to the file constant, and that build_prompt picks up DB changes.
 """
 
-import json
 import time
 
 import jwt
@@ -41,8 +40,9 @@ def _get_reauth_token(client, password='SuperPass123!'):
 
 
 def _seed_templates(db):
-    """Migrations seed both templates, but pytest's transaction rollback can
-    leave us with an empty table inside a test class. Re-seed defensively."""
+    """Migration 0014 seeds system_persona, then 0015 removes the
+    state_instructions row. Pytest's transaction rollback can leave us
+    with an empty table inside a test class, so re-seed defensively."""
     if PromptTemplate.objects.filter(slug='system_persona').exists():
         return
 
@@ -59,20 +59,6 @@ def _seed_templates(db):
     )
     persona.active_version = pv
     persona.save()
-
-    states = PromptTemplate.objects.create(
-        slug='state_instructions',
-        description='State playbook map.',
-    )
-    sv = PromptVersion.objects.create(
-        template=states,
-        version=1,
-        body=json.dumps(prompts_module.STATE_INSTRUCTIONS, indent=2),
-        notes='seed',
-        is_default=True,
-    )
-    states.active_version = sv
-    states.save()
 
 
 @pytest.fixture
@@ -122,11 +108,11 @@ class TestReauth:
 
 @pytest.mark.django_db
 class TestListAndDetail:
-    def test_list_returns_both_slots(self, superadmin_client, seeded_templates):
+    def test_list_returns_system_persona_only(self, superadmin_client, seeded_templates):
         resp = superadmin_client.get(f'{BASE}/')
         assert resp.status_code == 200
         slugs = {item['slug'] for item in resp.data}
-        assert slugs == {'system_persona', 'state_instructions'}
+        assert slugs == {'system_persona'}
 
     def test_detail_returns_active_body(self, superadmin_client, seeded_templates):
         resp = superadmin_client.get(f'{BASE}/system_persona/')
@@ -185,52 +171,6 @@ class TestPreview:
         assert resp.status_code == 200
         assert resp.data['ok'] is False
         assert any('Unknown placeholders' in e for e in resp.data['errors'])
-
-    def test_preview_state_instructions_ok(self, superadmin_client, seeded_templates):
-        good = {
-            'RESEARCH': 'do A', 'EVALUATION': 'do B', 'OBJECTION': 'do C',
-            'RECOVERY': 'do D', 'READY_TO_BUY': 'do E',
-        }
-        resp = superadmin_client.post(
-            f'{BASE}/state_instructions/preview/',
-            {'body': json.dumps(good)},
-            format='json',
-        )
-        assert resp.status_code == 200
-        assert resp.data['ok'] is True
-
-    def test_preview_state_instructions_bad_json(self, superadmin_client, seeded_templates):
-        resp = superadmin_client.post(
-            f'{BASE}/state_instructions/preview/',
-            {'body': '{not: valid json'},
-            format='json',
-        )
-        assert resp.data['ok'] is False
-        assert any('Invalid JSON' in e for e in resp.data['errors'])
-
-    def test_preview_state_instructions_missing_keys(self, superadmin_client, seeded_templates):
-        # Missing READY_TO_BUY
-        partial = {'RESEARCH': 'a', 'EVALUATION': 'b', 'OBJECTION': 'c', 'RECOVERY': 'd'}
-        resp = superadmin_client.post(
-            f'{BASE}/state_instructions/preview/',
-            {'body': json.dumps(partial)},
-            format='json',
-        )
-        assert resp.data['ok'] is False
-        assert any('Missing required state keys' in e for e in resp.data['errors'])
-
-    def test_preview_state_instructions_empty_string_value(self, superadmin_client, seeded_templates):
-        bad = {
-            'RESEARCH': 'a', 'EVALUATION': '', 'OBJECTION': 'c',
-            'RECOVERY': 'd', 'READY_TO_BUY': 'e',
-        }
-        resp = superadmin_client.post(
-            f'{BASE}/state_instructions/preview/',
-            {'body': json.dumps(bad)},
-            format='json',
-        )
-        assert resp.data['ok'] is False
-
 
 # ─── Save flow ──────────────────────────────────────────────────────────────
 
@@ -387,11 +327,10 @@ class TestRuntimeResolver:
     def test_resolves_seed_to_file_constant(self, seeded_templates):
         prompt_service.bump_cache()
         assert prompt_service.get_system_persona() == prompts_module.SYSTEM_PERSONA
-        assert prompt_service.get_state_instructions() == prompts_module.STATE_INSTRUCTIONS
 
     def test_falls_back_to_file_when_no_template(self, db):
         """With an empty DB, the resolver returns the file constant. The
-        chatbot must keep working even before migrations seed the templates."""
+        chatbot must keep working even before migrations seed the template."""
         PromptTemplate.objects.all().delete()
         prompt_service.bump_cache()
         assert prompt_service.get_system_persona() == prompts_module.SYSTEM_PERSONA
@@ -406,18 +345,3 @@ class TestRuntimeResolver:
 
         prompt_service.bump_cache('system_persona')
         assert prompt_service.get_system_persona() == 'UPDATED'
-
-    def test_malformed_state_json_falls_back(self, seeded_templates):
-        """Defensive: if somehow malformed JSON reaches the DB (bypassing
-        validation), the resolver returns the file default."""
-        template = PromptTemplate.objects.get(slug='state_instructions')
-        bad = PromptVersion.objects.create(
-            template=template, version=2, body='not json', notes='', is_default=False,
-        )
-        template.active_version = bad
-        template.save()
-        prompt_service.bump_cache('state_instructions')
-
-        result = prompt_service.get_state_instructions()
-        # Falls back to file default
-        assert result == prompts_module.STATE_INSTRUCTIONS
