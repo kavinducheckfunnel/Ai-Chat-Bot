@@ -409,6 +409,41 @@ def _intent_score_floor(user_message: str) -> float:
     return 0.0
 
 
+def _budget_score_floor(user_message: str) -> float:
+    """
+    Implicit budget tolerance — when the visitor says "I'll take it" or
+    "I want to buy this", they've effectively accepted the displayed price.
+    Without this floor, budget_ema stays around 0.5-0.7 even after explicit
+    purchase intent, and the state machine never reaches READY_TO_BUY
+    because that requires budget > 0.8 too. Floor at 0.75 — high enough
+    to push state forward, low enough that an explicit budget-objection
+    later still works.
+    """
+    if not user_message:
+        return 0.0
+    msg = user_message.lower()
+    for kw in BUY_PHRASES:
+        if kw in msg:
+            return 0.75
+    return 0.0
+
+
+def _recompute_heat_score(session) -> float:
+    """
+    Mirror of consumers.refresh_and_persist_heat()'s heat formula so the
+    score gets calculated whether the AI is invoked over WebSocket or
+    via direct HTTP / Celery / management commands. Keeps qualification
+    detection (which checks heat >= 75) reliable across all entry points.
+
+    Formula: weighted average of the 3 EMAs scaled to 0–100.
+    """
+    intent  = session.current_intent_ema  or 0
+    budget  = session.current_budget_ema  or 0
+    urgency = session.current_urgency_ema or 0
+    score = (intent * 0.45 + budget * 0.30 + urgency * 0.25) * 100
+    return round(min(score, 100), 1)
+
+
 def _maybe_promote_kanban(session) -> bool:
     """
     Auto-promote the kanban_state to HOT_LEAD or QUALIFIED when the
@@ -562,7 +597,7 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     # "need it today!" can't be scored 0.4 by an under-confident model.
     # The flooring is a MAX() against the LLM number — never decreases it.
     raw_intent  = max(float(result.get('intent_score', 0.5)),  _intent_score_floor(user_message))
-    raw_budget  = float(result.get('budget_score', 0.5))
+    raw_budget  = max(float(result.get('budget_score', 0.5)),  _budget_score_floor(user_message))
     raw_urgency = max(float(result.get('urgency_score', 0.5)), _urgency_score_floor(user_message))
 
     update_session_scores(
@@ -575,11 +610,23 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     # 7. Update conversation state machine
     update_session_state(session)
 
-    # 7b. Auto-promote kanban_state to HOT_LEAD / QUALIFIED when scores warrant
+    # 7b. Recompute heat_score in the AI service path too — previously it
+    # was only computed by the WS consumer's refresh_and_persist_heat(),
+    # which meant non-WS callers (Celery tasks, tests, management commands)
+    # never saw heat update. The qualification module's is_hot_lead check
+    # depends on heat>=75 as one of its triggers.
+    session.heat_score = _recompute_heat_score(session)
+
+    # 7c. Auto-promote kanban_state to HOT_LEAD / QUALIFIED when scores warrant
     # it. Saves the field if changed so the dashboard reflects reality
     # without a tenant having to drag the card manually.
-    if _maybe_promote_kanban(session):
-        session.save(update_fields=['kanban_state'])
+    kanban_changed = _maybe_promote_kanban(session)
+
+    # Single combined save covers both heat and (optional) kanban update.
+    update_fields = ['heat_score']
+    if kanban_changed:
+        update_fields.append('kanban_state')
+    session.save(update_fields=update_fields)
 
     # 8. Persist chat history
     session.chat_history.append({'role': 'user', 'message': user_message or '[image]'})
