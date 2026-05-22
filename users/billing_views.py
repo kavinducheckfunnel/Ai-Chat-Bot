@@ -20,7 +20,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import Plan, TenantProfile
+from .models import AddOnPurchase, Plan, TenantProfile
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +268,12 @@ def stripe_webhook(request):
 
     try:
         if event_type == 'checkout.session.completed':
-            _handle_checkout_completed(data)
+            # Route by purchase_type — subscription checkouts vs one-time addons
+            ptype = (data.get('metadata') or {}).get('purchase_type', '')
+            if ptype == 'addon':
+                _handle_addon_checkout_completed(data)
+            else:
+                _handle_checkout_completed(data)
 
         elif event_type == 'customer.subscription.updated':
             _handle_subscription_updated(data)
@@ -351,6 +356,199 @@ def _handle_subscription_deleted(subscription):
 
     tenant.save(update_fields=['stripe_subscription_status', 'stripe_subscription_id', 'plan'])
     logger.info(f'[billing] Subscription {sub_id} canceled for tenant {tenant.pk}')
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# F7 — Ad-hoc add-on top-ups (one-time purchases for extra
+# messages / images / voice / video credits when plan quota is exhausted)
+# ──────────────────────────────────────────────────────────────────────────────
+
+ADDON_KIND_TO_PLAN_PRICE_FIELD = {
+    'message': 'addon_price_per_message',
+    'image':   'addon_price_per_image',
+    'voice':   'addon_price_per_voice',
+    'video':   'addon_price_per_video',
+}
+
+ADDON_BUNDLES = {
+    # Suggested bundle sizes shown in the UI. Tenant picks one OR enters
+    # a custom quantity. Backend validates against >0 and <=10000.
+    'message': [100, 500, 2000],
+    'image':   [25, 100, 500],
+    'voice':   [25, 100, 500],
+    'video':   [10, 50, 200],
+}
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_addon_options(request):
+    """Return per-unit prices + suggested bundle sizes for the UI."""
+    try:
+        tenant = request.user.tenant_profile
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'No tenant profile.'}, status=400)
+    plan = tenant.plan
+    if not plan:
+        return Response({'detail': 'No plan assigned. Choose a plan first.'}, status=400)
+    return Response({
+        'prices': {
+            'message': str(plan.addon_price_per_message),
+            'image':   str(plan.addon_price_per_image),
+            'voice':   str(plan.addon_price_per_voice),
+            'video':   str(plan.addon_price_per_video),
+        },
+        'bundles': ADDON_BUNDLES,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def purchase_addon(request):
+    """Create a Stripe one-time Checkout session for an add-on top-up.
+
+    Body: { kind: 'message'|'image'|'voice'|'video', quantity: int }
+    Returns: { url: str, purchase_id: int }
+    """
+    s = _stripe()
+    kind = (request.data.get('kind') or '').strip().lower()
+    quantity = request.data.get('quantity')
+
+    if kind not in ADDON_KIND_TO_PLAN_PRICE_FIELD:
+        return Response({'detail': "kind must be one of: message, image, voice, video"}, status=400)
+    try:
+        quantity = int(quantity)
+    except (TypeError, ValueError):
+        return Response({'detail': 'quantity must be an integer'}, status=400)
+    if quantity < 1 or quantity > 10000:
+        return Response({'detail': 'quantity must be between 1 and 10000'}, status=400)
+
+    try:
+        tenant = request.user.tenant_profile
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'No tenant profile.'}, status=400)
+    plan = tenant.plan
+    if not plan:
+        return Response({'detail': 'No plan assigned. Choose a plan first.'}, status=400)
+
+    unit_price = getattr(plan, ADDON_KIND_TO_PLAN_PRICE_FIELD[kind])
+    total_cents = int(round(float(unit_price) * quantity * 100))
+    if total_cents < 50:  # Stripe minimum $0.50
+        return Response({'detail': 'Total below Stripe minimum charge ($0.50). Increase quantity.'}, status=400)
+
+    # Ensure Stripe customer
+    customer_id = tenant.stripe_customer_id
+    if not customer_id:
+        try:
+            customer = s.Customer.create(
+                email=request.user.email,
+                name=tenant.company_name or request.user.username,
+                metadata={'tenant_id': str(tenant.pk), 'user_id': str(request.user.pk)},
+            )
+            tenant.stripe_customer_id = customer['id']
+            tenant.save(update_fields=['stripe_customer_id'])
+            customer_id = customer['id']
+        except s.error.StripeError as e:
+            logger.error(f'[billing] Stripe customer create failed: {e}')
+            return Response({'detail': 'Could not create billing account.'}, status=500)
+
+    # Create audit row BEFORE Stripe Checkout so we can correlate via metadata
+    purchase = AddOnPurchase.objects.create(
+        tenant=tenant,
+        kind=kind,
+        quantity=quantity,
+        unit_price_usd=unit_price,
+        status='pending',
+    )
+
+    base_url = settings.STRIPE_PORTAL_RETURN_URL.replace('/billing', '')
+    try:
+        session = s.checkout.Session.create(
+            customer=customer_id,
+            payment_method_types=['card'],
+            mode='payment',  # one-time, NOT subscription
+            line_items=[{
+                'quantity': 1,
+                'price_data': {
+                    'currency': 'usd',
+                    'unit_amount': total_cents,
+                    'product_data': {
+                        'name': f'Checkfunnel — {quantity} {kind} credits',
+                        'description': f'One-time top-up at ${unit_price}/{kind}',
+                    },
+                },
+            }],
+            success_url=f'{base_url}/portal/billing?addon_purchased={purchase.id}',
+            cancel_url=f'{base_url}/portal/billing',
+            metadata={
+                'purchase_type': 'addon',
+                'tenant_id': str(tenant.pk),
+                'purchase_id': str(purchase.id),
+                'kind': kind,
+                'quantity': str(quantity),
+            },
+            payment_intent_data={
+                'metadata': {
+                    'purchase_type': 'addon',
+                    'tenant_id': str(tenant.pk),
+                    'purchase_id': str(purchase.id),
+                    'kind': kind,
+                    'quantity': str(quantity),
+                }
+            },
+        )
+        purchase.stripe_checkout_session_id = session['id']
+        purchase.save(update_fields=['stripe_checkout_session_id'])
+    except s.error.StripeError as e:
+        purchase.status = 'failed'
+        purchase.notes = str(e)[:255]
+        purchase.save(update_fields=['status', 'notes'])
+        logger.error(f'[billing] Add-on checkout create failed: {e}')
+        return Response({'detail': 'Could not start checkout. Please try again.'}, status=500)
+
+    return Response({'url': session['url'], 'purchase_id': purchase.id})
+
+
+def _handle_addon_checkout_completed(session):
+    """Stripe webhook handler — credit the tenant after Stripe confirms payment.
+
+    Idempotent: if the purchase_id row is already 'succeeded', no-op. This is
+    important because Stripe can re-deliver events.
+    """
+    from django.utils import timezone
+    meta = session.get('metadata', {}) or {}
+    if meta.get('purchase_type') != 'addon':
+        return
+    purchase_id = meta.get('purchase_id')
+    if not purchase_id:
+        return
+    try:
+        purchase = AddOnPurchase.objects.select_related('tenant').get(pk=int(purchase_id))
+    except (AddOnPurchase.DoesNotExist, ValueError):
+        logger.warning(f'[billing] addon webhook — purchase {purchase_id} not found')
+        return
+    if purchase.status == 'succeeded':
+        return  # idempotent
+
+    tenant = purchase.tenant
+    field = f'addon_{purchase.kind}s'  # addon_messages, addon_images, addon_voice, addon_videos
+    # Atomic increment via F() so concurrent webhook deliveries can't race.
+    from django.db.models import F
+    TenantProfile.objects.filter(pk=tenant.pk).update(**{field: F(field) + purchase.quantity})
+
+    payment_intent_id = session.get('payment_intent') or ''
+    total_paid = (session.get('amount_total') or 0) / 100.0
+    purchase.status = 'succeeded'
+    purchase.completed_at = timezone.now()
+    purchase.stripe_payment_intent_id = payment_intent_id or None
+    purchase.total_paid_usd = total_paid
+    purchase.save(update_fields=['status', 'completed_at', 'stripe_payment_intent_id', 'total_paid_usd'])
+    logger.info(
+        f'[billing] Add-on succeeded: tenant {tenant.pk} +{purchase.quantity} {purchase.kind} '
+        f'(${total_paid:.2f}) intent={payment_intent_id}'
+    )
+
+
 
 
 def _handle_payment_failed(invoice):

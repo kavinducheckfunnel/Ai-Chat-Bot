@@ -376,6 +376,10 @@ export function useAdminApi() {
 
     // ── Billing ──────────────────────────────────────────────────────────────
     getSubscription: () => apiFetch('/api/admin/billing/subscription/'),
+    getAddOnOptions: () => apiFetch('/api/admin/billing/addons/'),
+    purchaseAddOn: (kind, quantity) => apiFetch('/api/admin/billing/addons/purchase/', {
+      method: 'POST', body: JSON.stringify({ kind, quantity }),
+    }),
 
     getPublicPlans: () => apiFetch('/api/admin/billing/plans/'),
 

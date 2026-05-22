@@ -66,6 +66,9 @@ urlpatterns = [
     path('billing/portal/', billing_views.create_portal_session, name='billing-portal'),
     path('billing/webhook/', billing_views.stripe_webhook, name='billing-webhook'),
     path('billing/plans/', billing_views.public_plans, name='billing-plans'),
+    # F7 — Ad-hoc add-on top-ups
+    path('billing/addons/', billing_views.list_addon_options, name='billing-addon-options'),
+    path('billing/addons/purchase/', billing_views.purchase_addon, name='billing-addon-purchase'),
 
     # Tenant Management (superadmin only)
     path('tenants/', admin_views.tenant_list, name='admin-tenants'),

@@ -293,6 +293,58 @@ class PlanHistory(models.Model):
         return f"{self.tenant} | {self.from_plan} → {self.to_plan}"
 
 
+class AddOnPurchase(models.Model):
+    """One-time top-up credits bought outside the subscription quota.
+
+    When a tenant exhausts their plan's monthly message/image/voice/video
+    quota they can buy more here, one purchase at a time. Each row is the
+    audit record for a Stripe one-time PaymentIntent; on
+    payment_intent.succeeded we add the credits to the corresponding
+    TenantProfile.addon_* field.
+
+    These credits never expire automatically — they sit on the tenant
+    until consumed. (Refund handled by zeroing the addon_* counter and
+    issuing the Stripe refund via the customer portal.)
+    """
+    KIND_CHOICES = [
+        ('message', 'Messages'),
+        ('image',   'Images'),
+        ('voice',   'Voice commands'),
+        ('video',   'Videos'),
+    ]
+    STATUS_CHOICES = [
+        ('pending',   'Pending'),     # Stripe Checkout created, awaiting payment
+        ('succeeded', 'Succeeded'),   # Stripe payment_intent.succeeded — credits applied
+        ('failed',    'Failed'),
+        ('refunded',  'Refunded'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    tenant = models.ForeignKey(TenantProfile, on_delete=models.CASCADE, related_name='addon_purchases')
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    quantity = models.IntegerField()              # number of credits purchased
+    unit_price_usd = models.DecimalField(max_digits=8, decimal_places=4)  # snapshot
+    total_paid_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default='pending')
+
+    stripe_checkout_session_id = models.CharField(max_length=200, blank=True)
+    stripe_payment_intent_id = models.CharField(max_length=200, blank=True, unique=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', '-created_at']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.tenant} — {self.quantity} {self.kind} ({self.status})'
+
+
 class TenantFeatureOverride(models.Model):
     """
     Per-tenant feature override — grants/revokes a single Plan feature flag,

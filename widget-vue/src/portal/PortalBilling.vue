@@ -65,6 +65,37 @@
         </div>
       </div>
 
+      <!-- ── F7: Top up credits (one-time add-on purchases) ─────────── -->
+      <div class="addon-section" v-if="addonOptions && sub.plan">
+        <h3 class="section-heading">Need more this month? Top up credits</h3>
+        <p class="section-sub">
+          Run out of monthly quota before your next renewal? Buy one-time credits at the rates below.
+          Credits stack on top of your plan and never expire.
+        </p>
+        <div class="addon-grid">
+          <div class="addon-card" v-for="kind in addonKinds" :key="kind.key">
+            <div class="addon-card-header">
+              <span class="addon-icon">{{ kind.icon }}</span>
+              <span class="addon-label">{{ kind.label }}</span>
+            </div>
+            <div class="addon-price-line">${{ addonOptions.prices[kind.key] }}<span>/{{ kind.unit }}</span></div>
+            <div class="addon-bundles">
+              <button
+                v-for="bundle in addonOptions.bundles[kind.key]"
+                :key="bundle"
+                class="addon-bundle-btn"
+                :disabled="addonLoading === `${kind.key}_${bundle}`"
+                @click="buyAddOn(kind.key, bundle)"
+              >
+                <span v-if="addonLoading === `${kind.key}_${bundle}`" class="spinner"></span>
+                <span v-else>+{{ bundle.toLocaleString() }} · ${{ addonTotal(kind.key, bundle) }}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <p v-if="addonError" class="addon-error">{{ addonError }}</p>
+      </div>
+
       <!-- Past due / canceled warning -->
       <div v-if="sub.stripe_subscription_status === 'past_due'" class="alert-banner warn">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#f59e0b" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/></svg>
@@ -196,6 +227,43 @@ const sub = ref({})
 const plans = ref([])
 const billingInterval = ref('monthly')
 
+// F7 — Add-on top-ups
+const addonOptions = ref(null)   // { prices: {message,image,voice,video}, bundles: {...} }
+const addonLoading = ref('')     // `${kind}_${qty}` while a purchase is in flight
+const addonError = ref('')
+const addonKinds = [
+  { key: 'message', label: 'AI messages',  icon: '💬', unit: 'msg' },
+  { key: 'image',   label: 'Image uploads', icon: '🖼️', unit: 'image' },
+  { key: 'voice',   label: 'Voice commands', icon: '🎤', unit: 'voice' },
+  { key: 'video',   label: 'Video uploads', icon: '🎬', unit: 'video' },
+]
+
+function addonTotal(kind, qty) {
+  const price = parseFloat(addonOptions.value?.prices?.[kind] || 0)
+  const total = price * qty
+  return total >= 10 ? total.toFixed(0) : total.toFixed(2)
+}
+
+async function loadAddOns() {
+  try {
+    addonOptions.value = await api.getAddOnOptions()
+  } catch {
+    addonOptions.value = null
+  }
+}
+
+async function buyAddOn(kind, quantity) {
+  addonError.value = ''
+  addonLoading.value = `${kind}_${quantity}`
+  try {
+    const { url } = await api.purchaseAddOn(kind, quantity)
+    window.location.href = url
+  } catch (e) {
+    addonError.value = e.message || 'Could not start checkout.'
+    addonLoading.value = ''
+  }
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function annualMonthly(plan) {
@@ -297,6 +365,8 @@ async function load() {
       if (subData.billing_interval) billingInterval.value = subData.billing_interval
     }
     if (Array.isArray(planData)) plans.value = planData
+    // Fetch add-on prices/bundles in the background (don't block the main load)
+    loadAddOns()
   } catch (e) {
     error.value = e.message || 'Failed to load billing info.'
   } finally {
@@ -481,6 +551,68 @@ async function openPortal() {
 .alert-banner.warn { background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); color: #fcd34d; }
 .alert-banner.danger { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5; }
 .btn-link { background: none; border: none; text-decoration: underline; cursor: pointer; color: inherit; font-size: 13px; margin-left: auto; }
+
+/* F7 — Add-on top-ups */
+.addon-section {
+  background: var(--cf-bg-surface-raised);
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin: 16px 0 20px;
+}
+.section-heading + .section-sub { margin-top: -8px; }
+.addon-section .section-sub {
+  font-size: 13px;
+  color: var(--cf-text-muted);
+  line-height: 1.5;
+  margin: 6px 0 14px;
+}
+.addon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.addon-card {
+  background: var(--cf-bg-input);
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.addon-card-header { display: flex; align-items: center; gap: 8px; }
+.addon-icon { font-size: 20px; }
+.addon-label { font-size: 13px; font-weight: 600; color: var(--cf-text-primary); }
+.addon-price-line { font-size: 18px; font-weight: 700; color: var(--cf-text-primary); }
+.addon-price-line span { font-size: 11px; font-weight: 500; color: var(--cf-text-muted); margin-left: 3px; }
+.addon-bundles { display: flex; flex-direction: column; gap: 6px; }
+.addon-bundle-btn {
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.25);
+  color: var(--cf-text-primary);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.addon-bundle-btn:hover:not(:disabled) { background: rgba(99,102,241,0.15); }
+.addon-bundle-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.addon-error {
+  margin-top: 10px;
+  font-size: 12px;
+  color: #fca5a5;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
 
 /* Billing interval toggle */
 .interval-toggle-wrap {
