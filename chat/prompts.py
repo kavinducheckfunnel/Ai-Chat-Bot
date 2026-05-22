@@ -571,6 +571,24 @@ GEMINI_SCHEMA = {
         "suggested_product_id": {
             "type": "integer",
             "description": "WordPress post/product ID to show as a card, or null if none."
+        },
+        "quick_replies": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "OPTIONAL 2-4 short clickable button suggestions (max 28 chars "
+                "each). USE quick_replies when your reply ends with a question "
+                "that has discrete, finite answers — visitor typing is friction. "
+                "USE for vague-opener category routing ('What are you shopping "
+                "for today?' → ['Clothing', 'Accessories', 'Best deals']), "
+                "size/variant picks, yes/no decision questions, or channel "
+                "choice (['WhatsApp', 'Email']). "
+                "DO NOT use when the question is open-ended ('What's drawing "
+                "you to this one?'), when there's no question at all, or after "
+                "the visitor has already started typing detailed messages. "
+                "Empty array [] if not appropriate. Never repeat the same "
+                "options you offered last turn."
+            )
         }
     },
     "required": ["reply_text", "intent_score", "budget_score", "urgency_score"]

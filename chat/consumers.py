@@ -111,6 +111,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'type': 'ai_message',
             'message': ai_response.get('reply_text'),
             'suggested_product_id': ai_response.get('suggested_product_id'),
+            'quick_replies': ai_response.get('quick_replies') or [],
         }))
 
         # ── Post-response: persist heat score + broadcast to admin ────────

@@ -139,6 +139,9 @@ export function generateEmbedCode(id, url, color, botName, format) {
 #cf-w .cf-typ { align-self: flex-start; background: var(--cf-bubble-ai);
   border: 1px solid var(--cf-border-soft); border-radius: 20px;
   border-bottom-left-radius: 6px; padding: 13px 16px; display: flex; gap: 5px; align-items: center; }
+#cf-w .cf-qrs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 2px 8px 2px; align-self: flex-start; max-width: 92%; }
+#cf-w .cf-qr { background: transparent; color: var(--cf-accent, #6366f1); border: 1px solid currentColor; border-radius: 16px; padding: 6px 12px; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#cf-w .cf-qr:hover { background: var(--cf-accent, #6366f1); color: #fff; }
 .cf-typ span { width: 7px; height: 7px; background: #475569; border-radius: 50%;
   display: inline-block; animation: cf-bop 1.3s infinite ease-in-out; }
 .cf-typ span:nth-child(2) { animation-delay: .18s; }
@@ -521,6 +524,19 @@ function connect(){
       }
       if(d.type==='ai_message'&&d.message){
         bubble(renderMd(d.message),'ai');chime();
+        // Q3: render clickable chip suggestions if the bot included any
+        if(Array.isArray(d.quick_replies)&&d.quick_replies.length){
+          var qrEl=document.createElement('div');qrEl.className='cf-qrs';
+          d.quick_replies.slice(0,4).forEach(function(text){
+            var b=document.createElement('button');b.className='cf-qr';b.textContent=text;
+            b.onclick=function(){
+              qrEl.remove(); // prevent double-tap during round-trip
+              var inp=$('cf-inp');inp.value=text;send();
+            };
+            qrEl.appendChild(b);
+          });
+          $('cf-msgs').appendChild(qrEl);$('cf-msgs').scrollTop=9999;
+        }
         var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action','lead_captured','proactive_open'];
         if(AUTO_OPEN.indexOf(d.source)>=0&&!isOpen)toggleOpen();
       }

@@ -47,6 +47,22 @@
               </div>
             </template>
           </div>
+          <!-- Q3: clickable chip suggestions below the bubble (only on the
+               most recent AI message — old chips get cleared on next reply
+               to keep the surface clean). -->
+          <div
+            v-if="msg.sender === 'ai' && msg.quickReplies && msg.quickReplies.length && index === chatMessages.length - 1"
+            class="cf-quick-replies"
+          >
+            <button
+              v-for="(qr, i) in msg.quickReplies"
+              :key="i"
+              type="button"
+              class="cf-quick-reply"
+              :style="{ borderColor: branding.chatbot_color || '#6366f1', color: branding.chatbot_color || '#6366f1' }"
+              @click="sendQuickReply(qr, index)"
+            >{{ qr }}</button>
+          </div>
           <!-- Emoji reactions below AI bubbles only -->
           <div v-if="msg.sender === 'ai' && msg.type === 'text' && msg.text" class="msg-reactions">
             <button
@@ -285,7 +301,14 @@ function connectWebSocket() {
       removeTypingIndicator()
       isTyping.value = false
       if (data.type === 'ai_message' && data.message) {
-        chatMessages.value.push({ type: 'text', text: data.message, sender: 'ai', reaction: null })
+        chatMessages.value.push({
+          type: 'text',
+          text: data.message,
+          sender: 'ai',
+          reaction: null,
+          // Q3 — clickable chips below the bubble. Bot decides when to send.
+          quickReplies: Array.isArray(data.quick_replies) ? data.quick_replies.slice(0, 4) : [],
+        })
         speakText(data.message)
         playChime()
         // Auto-open widget for trigger-based messages so the visitor sees them
@@ -356,6 +379,19 @@ function playChime() {
     })
     setTimeout(() => ctx.close(), 1400)
   } catch {}
+}
+
+// Q3 — Visitor tapped a chip suggestion. Treat it as if they typed it:
+// stuff the text into the input box, clear chips on the source message
+// so they can't double-tap, then run the normal send flow.
+function sendQuickReply(text, sourceIndex) {
+  if (isTyping.value) return
+  // Clear the chip set so the visitor can't tap twice during the LLM round-trip
+  if (chatMessages.value[sourceIndex]) {
+    chatMessages.value[sourceIndex].quickReplies = []
+  }
+  inputValue.value = text
+  sendMessage()
 }
 
 // ── Send message ──────────────────────────────────────────────────────────────
@@ -771,6 +807,35 @@ onBeforeUnmount(() => {
   color: #e2e8f0;
   border-bottom-left-radius: 5px;
   border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* ── Q3 — Quick-reply chips below the AI bubble ────────────────────── */
+.cf-quick-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding-left: 2px;
+}
+.cf-quick-reply {
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 16px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-quick-reply:hover {
+  background: currentColor !important;
+}
+.cf-quick-reply:hover {
+  color: white !important;
 }
 
 /* ── Emoji reactions — below the AI bubble, outside it ─────────────── */
