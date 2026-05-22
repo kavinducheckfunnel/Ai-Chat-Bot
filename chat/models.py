@@ -174,6 +174,22 @@ class ChatSession(models.Model):
     # See chat.consumers.AsyncChatConsumer._maybe_prompt_lead_capture.
     lead_capture_prompted = models.BooleanField(default=False)
 
+    # ── E1 — Outcome tagging for conversion KPI tracking ─────────────────
+    # Single canonical session outcome. Used to compute CVR/CER/OHR/ESC/ABN
+    # metrics on the KPI dashboard. Auto-set when the session ends or on a
+    # nightly sweep (chat.tasks.tag_session_outcomes). Manual override
+    # possible from the Inbox UI for cases the heuristic mislabelled.
+    OUTCOME_CHOICES = [
+        ('open',       'Still in conversation'),   # default until classified
+        ('converted',  'Converted'),               # kanban_state == CONVERTED
+        ('captured',   'Contact captured'),        # has lead_email or lead_phone, not converted
+        ('escalated',  'Escalated to human'),      # taken_over_by is set
+        ('abandoned',  'Abandoned mid-chat'),      # idle 30+ min, no contact, no conversion
+        ('ghost',      'Ghost session (no messages)'),  # message_count == 0 → exclude from KPIs
+    ]
+    outcome = models.CharField(max_length=12, choices=OUTCOME_CHOICES, default='open', db_index=True)
+    outcome_set_at = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

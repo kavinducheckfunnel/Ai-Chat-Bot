@@ -221,6 +221,12 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'chat.tasks.check_afk_sessions',
         'schedule': crontab(minute='*/2'),
     },
+    # E1 — Tag stale 'open' sessions with their outcome (CVR/CER/ABN signals).
+    # Runs every 15 min so the KPI dashboard always reflects recent activity.
+    'tag-session-outcomes': {
+        'task': 'chat.tasks.tag_session_outcomes',
+        'schedule': crontab(minute='*/15'),
+    },
     # C2 — Daily digest: every day at 08:00 UTC
     'daily-digest-8am': {
         'task': 'chat.tasks.send_daily_digest',

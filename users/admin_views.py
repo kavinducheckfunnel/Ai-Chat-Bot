@@ -1446,6 +1446,128 @@ def client_analytics(request, client_id):
     })
 
 
+# ─── E2: Conversion KPI dashboard ─────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def client_kpis(request, client_id):
+    """Aggregate conversion KPIs from ChatSession.outcome over a window.
+
+    Returns the 6 metrics from the training-guide spec:
+      CVR — conversion rate (converted / non-ghost)
+      CER — contact-capture rate ((converted + captured) / non-ghost)
+      AHT — average handle turns (msg_count for active sessions)
+      OHR — objection handle rate (OBJECTION-state sessions that
+            ended in captured or converted / OBJECTION-state sessions)
+      ESC — escalation rate (escalated / non-ghost)
+      ABN — mid-chat abandon rate (abandoned / non-ghost)
+
+    Window is ?period=today|7d|30d|90d (default 30d).
+    """
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    period = request.query_params.get('period', '30d')
+    now = timezone.now()
+    period_days_map = {'today': 1, '7d': 7, '30d': 30, '90d': 90}
+    days = period_days_map.get(period, 30)
+    if period == 'today':
+        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        period_start = now - timedelta(days=days)
+
+    qs = ChatSession.objects.filter(client=client, created_at__gte=period_start)
+
+    # Outcome counts
+    outcome_counts = {row['outcome']: row['n'] for row in qs.values('outcome').annotate(n=Count('session_id'))}
+    converted = outcome_counts.get('converted', 0)
+    captured  = outcome_counts.get('captured', 0)
+    escalated = outcome_counts.get('escalated', 0)
+    abandoned = outcome_counts.get('abandoned', 0)
+    open_now  = outcome_counts.get('open', 0)
+    ghost     = outcome_counts.get('ghost', 0)
+
+    # Denominator for engagement KPIs excludes ghosts (no visitor activity)
+    # and 'open' (still in progress — outcome not yet known).
+    closed_active = converted + captured + escalated + abandoned
+    total_active = closed_active + open_now   # used for CVR-style %, includes in-progress as "not yet"
+
+    def pct(num, den):
+        return round((num / den) * 100, 1) if den > 0 else 0.0
+
+    # Average handle turns: only active sessions
+    aht = qs.filter(message_count__gte=1).aggregate(avg=Avg('message_count'))['avg'] or 0
+
+    # Objection handle rate: sessions whose conversation reached OBJECTION
+    # state and were ultimately captured/converted (not abandoned).
+    objection_qs = qs.filter(conversation_state='OBJECTION')
+    objection_total = objection_qs.count()
+    objection_handled = objection_qs.filter(outcome__in=['captured', 'converted']).count()
+
+    return Response({
+        'period': period,
+        'window': {'start': period_start.isoformat(), 'end': now.isoformat()},
+        'totals': {
+            'all_sessions': qs.count(),
+            'active_sessions': total_active,
+            'closed_sessions': closed_active,
+            'ghost_sessions': ghost,
+        },
+        'outcome_breakdown': {
+            'converted': converted,
+            'captured':  captured,
+            'escalated': escalated,
+            'abandoned': abandoned,
+            'open':      open_now,
+            'ghost':     ghost,
+        },
+        'kpis': {
+            'cvr': {
+                'label': 'Conversion rate',
+                'value': pct(converted, total_active),
+                'target': 8.0,
+                'description': 'Visitors who reached CONVERTED kanban state',
+            },
+            'cer': {
+                'label': 'Contact capture rate',
+                'value': pct(converted + captured, total_active),
+                'target': 25.0,
+                'description': 'Sessions that ended with at least an email or phone',
+            },
+            'aht': {
+                'label': 'Avg handle turns',
+                'value': round(aht, 1),
+                'target_range': [4, 7],
+                'description': 'Avg messages per active session',
+            },
+            'ohr': {
+                'label': 'Objection handle rate',
+                'value': pct(objection_handled, objection_total),
+                'target': 60.0,
+                'description': 'OBJECTION sessions that converted/captured',
+                'sample_size': objection_total,
+            },
+            'esc': {
+                'label': 'Escalation rate',
+                'value': pct(escalated, total_active),
+                'target': 15.0,
+                'target_direction': 'below',
+                'description': 'Sessions taken over by a human',
+            },
+            'abn': {
+                'label': 'Mid-chat abandon rate',
+                'value': pct(abandoned, total_active),
+                'target': 40.0,
+                'target_direction': 'below',
+                'description': 'Sessions that went silent 30+ min with no contact capture',
+            },
+        },
+    })
+
+
 # ─── Scrape trigger ───────────────────────────────────────────────────────────
 
 @api_view(['POST'])

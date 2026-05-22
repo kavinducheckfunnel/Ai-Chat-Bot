@@ -506,3 +506,51 @@ def archive_long_sessions():
         count += 1
 
     logger.info(f'[archive_long_sessions] Truncated {count} session(s).')
+
+
+@shared_task
+def tag_session_outcomes(batch_size=500):
+    """Auto-classify ChatSession.outcome for E1 KPI tracking.
+
+    Runs hourly via Celery beat. Looks at sessions where outcome='open'
+    and applies a fixed precedence:
+      1. message_count == 0 → 'ghost' (excluded from KPIs)
+      2. kanban_state == 'CONVERTED' → 'converted'
+      3. taken_over_by is set → 'escalated'
+      4. lead_email or lead_phone present → 'captured'
+      5. last_visitor_message_at older than 30 min → 'abandoned'
+    Sessions that don't yet match any of the above stay 'open' so they
+    don't pollute the KPI dashboard mid-conversation.
+    """
+    from chat.models import ChatSession
+    from django.utils import timezone
+    from datetime import timedelta
+    from django.db import models as dj_models
+
+    now = timezone.now()
+    idle_cutoff = now - timedelta(minutes=30)
+
+    qs = ChatSession.objects.filter(outcome='open').order_by('created_at')[:batch_size]
+    tagged = {}
+    for s in qs:
+        if (s.message_count or 0) == 0:
+            new_outcome = 'ghost'
+        elif s.kanban_state == 'CONVERTED':
+            new_outcome = 'converted'
+        elif s.taken_over_by_id:
+            new_outcome = 'escalated'
+        elif (s.lead_email or s.lead_phone):
+            new_outcome = 'captured'
+        elif s.last_visitor_message_at and s.last_visitor_message_at < idle_cutoff:
+            new_outcome = 'abandoned'
+        else:
+            continue  # still active — leave as 'open'
+
+        ChatSession.objects.filter(session_id=s.session_id).update(
+            outcome=new_outcome, outcome_set_at=now,
+        )
+        tagged[new_outcome] = tagged.get(new_outcome, 0) + 1
+
+    if tagged:
+        logger.info(f'[tag_session_outcomes] Tagged {sum(tagged.values())} sessions: {dict(tagged)}')
+    return tagged

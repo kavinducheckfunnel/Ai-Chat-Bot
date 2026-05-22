@@ -21,6 +21,7 @@ urlpatterns = [
     path('clients/<uuid:client_id>/', admin_views.client_detail, name='admin-client-detail'),
     path('clients/<uuid:client_id>/sessions/', admin_views.client_sessions, name='admin-client-sessions'),
     path('clients/<uuid:client_id>/analytics/', admin_views.client_analytics, name='admin-client-analytics'),
+    path('clients/<uuid:client_id>/kpis/', admin_views.client_kpis, name='admin-client-kpis'),
     path('clients/<uuid:client_id>/scrape/', admin_views.trigger_scrape, name='admin-client-scrape'),
     path('clients/<uuid:client_id>/scrape-progress/', admin_views.scrape_progress, name='admin-client-scrape-progress'),
     path('clients/<uuid:client_id>/rotate-secret/', admin_views.rotate_webhook_secret, name='admin-client-rotate-secret'),
