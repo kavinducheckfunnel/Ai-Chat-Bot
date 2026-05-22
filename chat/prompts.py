@@ -495,7 +495,18 @@ def build_prompt(
         faq_block.append(f'SCARCITY (quote VERBATIM only at READY_TO_BUY + hesitation — see RULE O): {scarcity_blurb}')
     faq_text = '\n'.join(faq_block)
 
-    system_prompt = f"""{persona}
+    # ── Split the system prompt into STATIC vs DYNAMIC halves so Anthropic
+    # ephemeral prompt caching can wrap a cache_control around the static
+    # half (saves ~80% of token cost on the cached portion for Anthropic
+    # models — see ai_service._build_system_message). For non-Anthropic
+    # models, the two halves get concatenated normally.
+    #
+    # STATIC = persona + domain + state instructions + FAQ blurbs. These
+    # change rarely (file persona is one global; state changes a few times
+    # per session; FAQ blurbs change only when the tenant edits settings).
+    # DYNAMIC = qualification, KB chunks, browsing context, chat history.
+    # These change every turn.
+    static_system = f"""{persona}
 
 ════════════════════
 WEBSITE DOMAIN: {website_domain}
@@ -507,9 +518,9 @@ YOUR CURRENT SALES STRATEGY:
 ════════════════════
 PRE-PURCHASE FAQ — answer these inline (RULE M)
 ════════════════════
-{faq_text}
+{faq_text}"""
 
-════════════════════
+    dynamic_system = f"""════════════════════
 QUALIFICATION CHECKLIST
 (What you already know about this visitor vs. what's still missing.
 Use this to decide what to ask next — never re-ask a slot already filled.)
@@ -534,6 +545,9 @@ RECENT CONVERSATION HISTORY
 {json.dumps(recent_history, indent=2)}
 """
 
+    # Concatenated form for callers that don't care about cache boundaries.
+    system_prompt = static_system + "\n\n" + dynamic_system
+
     # ── Inject high-salience opening hint for greeting + browsing context ──
     bs = (behavior_matrix or {}).get('browsing_summary') or {}
     msg_lower = (user_message or '').lower().strip()
@@ -554,7 +568,12 @@ RECENT CONVERSATION HISTORY
     else:
         user_prompt = f"User message: {user_message}"
 
-    return system_prompt, user_prompt
+    # Return:
+    #   system_prompt  — concatenated (back-compat single string)
+    #   user_prompt    — user-side message
+    #   static_system  — cacheable persona+state+FAQ portion (Anthropic prompt-caching)
+    #   dynamic_system — KB+qualification+history portion (changes each turn)
+    return system_prompt, user_prompt, static_system, dynamic_system
 
 
 # ─────────────────────────────────────────────────────────────────────────────

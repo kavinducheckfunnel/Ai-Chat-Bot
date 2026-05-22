@@ -493,12 +493,26 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
 
     # 2. Similarity search — STRICTLY scoped to the session's client.
     # Never fall back to .all() — that would leak content across tenants.
-    # F10 — top-K dropped from 40 to 8. Average chunk is ~200 tokens, so 40
-    # chunks = ~8000 tokens of KB context per request. Production showed
-    # avg prompt at 9500 tokens with KB dominating. 8 chunks is industry
-    # standard for RAG and the LLM rarely needs more than 3-5 to answer.
-    # The 5x extra chunks were padding cost without improving quality.
-    KB_TOP_K = 8
+    #
+    # F10 + bonus: dynamic top-K by conversation state. Higher-intent
+    # states need richer context (exact specs, variants, stock); browsing
+    # states just need orientation. Saves ~25% additional tokens on
+    # average without hurting close-quality.
+    #
+    # Baseline: 8 (post-F10 from 40)
+    # RESEARCH:    5  → visitor still browsing, doesn't need deep specs yet
+    # EVALUATION:  8  → comparing options, default coverage
+    # OBJECTION:   8  → defending the recommendation, default
+    # RECOVERY:    6  → re-engagement, brief context
+    # READY_TO_BUY:10 → exact match matters; variant + stock detail useful
+    KB_TOP_K_BY_STATE = {
+        'RESEARCH': 5,
+        'EVALUATION': 8,
+        'OBJECTION': 8,
+        'RECOVERY': 6,
+        'READY_TO_BUY': 10,
+    }
+    KB_TOP_K = KB_TOP_K_BY_STATE.get(session.conversation_state, 8)
     if session.client_id:
         chunk_qs = DocumentChunk.objects.filter(client_id=session.client_id)
         top_chunks = chunk_qs.annotate(
@@ -542,7 +556,7 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         'scarcity': (getattr(session.client, 'scarcity_blurb', '') or '').strip() if session.client else '',
     }
 
-    system_prompt, user_prompt = build_prompt(
+    system_prompt, user_prompt, static_system, dynamic_system = build_prompt(
         session.conversation_state,
         top_chunks,
         enriched_behavior,
@@ -559,6 +573,30 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     )
 
     # 4. Build message list — multimodal if image attached
+    # Anthropic prompt caching: wrap the static system portion in a
+    # cache_control: ephemeral block so Anthropic charges full price once
+    # per 5-min window, then ~10% per read. Static = persona + state +
+    # FAQ blurbs (~3500 tokens). Dynamic = qualification + KB + history.
+    # Only applied for Anthropic-routed models (direct or via OpenRouter)
+    # — other providers ignore the cache_control hint (no-op).
+    model_name = (
+        (session.client.ai_model if session.client and session.client.ai_model else '')
+        or _get_platform_config()[1]
+        or ''
+    ).lower()
+    use_anthropic_cache = 'anthropic' in model_name or 'claude' in model_name
+
+    if use_anthropic_cache:
+        # Structured content blocks. cache_control marks the cache boundary
+        # — Anthropic caches everything up to (and including) the marked
+        # block, indexed by exact content hash.
+        system_content = [
+            {'type': 'text', 'text': static_system, 'cache_control': {'type': 'ephemeral'}},
+            {'type': 'text', 'text': dynamic_system},
+        ]
+    else:
+        system_content = system_prompt
+
     if image_data:
         # Strip data URI prefix (e.g. "data:image/jpeg;base64,")
         raw_b64 = image_data.split(',', 1)[1] if ',' in image_data else image_data
@@ -570,12 +608,12 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
             },
         ]
         messages = [
-            SystemMessage(content=system_prompt),
+            SystemMessage(content=system_content),
             HumanMessage(content=human_content),
         ]
     else:
         messages = [
-            SystemMessage(content=system_prompt),
+            SystemMessage(content=system_content),
             HumanMessage(content=user_prompt),
         ]
 
