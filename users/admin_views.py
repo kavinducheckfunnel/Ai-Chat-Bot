@@ -338,6 +338,12 @@ def client_list(request):
     serializer = ClientCreateSerializer(data=request.data)
     if serializer.is_valid():
         client = serializer.save()
+        # Default chatbot_name to the brand name so new bots aren't called
+        # "AI Assistant" (or worse — "test" — when a dev or onboarding flow
+        # left a placeholder). The tenant can rename it in /portal/settings.
+        if client.name and (not client.chatbot_name or client.chatbot_name in ('AI Assistant', 'test', '')):
+            client.chatbot_name = f'{client.name} Assistant'
+            client.save(update_fields=['chatbot_name'])
         # Auto-assign to tenant profile if tenant_admin
         tenant = getattr(request.user, 'tenant_profile', None)
         if tenant:
