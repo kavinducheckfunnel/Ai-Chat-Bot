@@ -63,29 +63,6 @@
         </div>
       </div>
 
-      <!-- Other channels (off) -->
-      <div class="channels-list">
-        <div class="channel-item">
-          <div class="channel-icon messenger-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z" fill="#0084FF"/></svg>
-          </div>
-          <div class="channel-meta">
-            <span class="channel-name">Messenger</span>
-            <span class="channel-status off">OFF</span>
-          </div>
-          <button class="btn-configure" disabled>Configure</button>
-        </div>
-        <div class="channel-item">
-          <div class="channel-icon twilio-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#F22F46"/><circle cx="8.5" cy="8.5" r="1.5" fill="white"/><circle cx="15.5" cy="8.5" r="1.5" fill="white"/><circle cx="8.5" cy="15.5" r="1.5" fill="white"/><circle cx="15.5" cy="15.5" r="1.5" fill="white"/></svg>
-          </div>
-          <div class="channel-meta">
-            <span class="channel-name">Twilio SMS</span>
-            <span class="channel-status off">OFF</span>
-          </div>
-          <button class="btn-configure" disabled>Configure</button>
-        </div>
-      </div>
     </div>
 
     <!-- ── Chatbot config ──────────────────────────────────────────────────── -->
@@ -1248,7 +1225,6 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 
 .web-icon { background: rgba(99,102,241,0.12); color: #a5b4fc; }
 .messenger-icon { background: rgba(0,132,255,0.1); }
-.twilio-icon { background: rgba(242,47,70,0.1); }
 
 .section-title { font-size: 15px; font-weight: 600; color: var(--cf-text-primary); }
 .section-sub { font-size: 12px; color: var(--cf-text-muted); margin-top: 3px; }

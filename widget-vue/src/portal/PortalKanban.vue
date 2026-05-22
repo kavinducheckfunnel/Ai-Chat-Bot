@@ -55,8 +55,19 @@
               <div class="heat-bar" :style="{ width: (session.heat_score || 0) + '%', background: heatGradient(session.heat_score) }"></div>
             </div>
 
-            <p class="card-visitor">{{ session.lead_email || (session.visitor_id || 'Anonymous').slice(0, 16) + '...' }}</p>
-            <p v-if="session.lead_phone" class="card-phone">{{ session.lead_phone }}</p>
+            <p class="card-visitor">
+              <span v-if="!session.lead_email" class="card-visitor-id">{{ (session.visitor_id || 'Anonymous').slice(0, 16) + (session.visitor_id && session.visitor_id.length > 16 ? '…' : '') }}</span>
+            </p>
+            <div v-if="session.lead_email || session.lead_phone" class="card-contact">
+              <div v-if="session.lead_email" class="contact-row" :title="session.lead_email">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                <span>{{ session.lead_email }}</span>
+              </div>
+              <div v-if="session.lead_phone" class="contact-row">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                <span>{{ session.lead_phone }}</span>
+              </div>
+            </div>
 
             <div class="card-footer">
               <span class="card-msgs">{{ session.message_count || 0 }} msgs</span>
@@ -318,8 +329,12 @@ watch(() => props.client, loadData)
 .heat-bar-wrap { background: var(--cf-bg-input); border-radius: 2px; height: 4px; margin-bottom: 9px; overflow: hidden; }
 .heat-bar { height: 100%; border-radius: 2px; transition: width 0.5s; }
 
-.card-visitor { font-size: 12px; font-weight: 500; color: var(--cf-text-secondary); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card-phone   { font-size: 11px; color: var(--cf-text-muted); margin-bottom: 4px; }
+.card-visitor { font-size: 12px; font-weight: 500; color: var(--cf-text-secondary); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 0; }
+.card-visitor-id { font-family: ui-monospace, monospace; font-size: 11px; color: var(--cf-text-muted); }
+.card-contact { display: flex; flex-direction: column; gap: 3px; margin: 4px 0 6px; }
+.contact-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--cf-text-secondary); overflow: hidden; }
+.contact-row svg { flex-shrink: 0; color: var(--cf-text-muted); }
+.contact-row span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 .card-footer { display: flex; justify-content: space-between; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--cf-border-subtle); }
 .card-msgs, .card-time { font-size: 10px; color: var(--cf-text-muted); }
