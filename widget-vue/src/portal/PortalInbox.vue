@@ -614,7 +614,7 @@ function initials(s) {
 }
 
 function heatColor(score) {
-  if (!score) return '#1e293b'
+  if (!score) return '#64748b'
   if (score > 70) return '#ef4444'
   if (score > 40) return '#f59e0b'
   return '#6366f1'
@@ -988,9 +988,9 @@ watch(selected, (s) => {
 
 .loading-state { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
 .skeleton-session { display: flex; gap: 10px; align-items: center; }
-.sk-avatar { width: 36px; height: 36px; border-radius: 50%; background: #1e293b; flex-shrink: 0; }
+.sk-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--cf-skeleton-color); flex-shrink: 0; }
 .sk-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
-.sk-line { height: 10px; background: #1e293b; border-radius: 4px; }
+.sk-line { height: 10px; background: var(--cf-skeleton-color); border-radius: 4px; }
 .sk-line.short { width: 55%; }
 
 .empty-state {
@@ -998,7 +998,7 @@ watch(selected, (s) => {
   height: 100%; padding: 40px 20px; text-align: center; gap: 10px;
 }
 .empty-state p { font-size: 14px; font-weight: 500; color: var(--cf-text-muted); }
-.empty-state span { font-size: 12px; color: #1e293b; line-height: 1.5; }
+.empty-state span { font-size: 12px; color: var(--cf-text-muted); line-height: 1.5; }
 
 .session-row {
   display: flex; align-items: flex-start; gap: 10px;
@@ -1055,7 +1055,7 @@ watch(selected, (s) => {
 
 .empty-panel {
   align-items: center; justify-content: center;
-  gap: 12px; color: #1e293b; font-size: 14px;
+  gap: 12px; color: var(--cf-text-muted); font-size: 14px;
 }
 
 .chat-panel-header {
@@ -1095,7 +1095,7 @@ watch(selected, (s) => {
   font-size: 13px; line-height: 1.55;
 }
 .user-msg .bubble { background: #6366f1; color: white; border-bottom-right-radius: 4px; }
-.ai-msg .bubble { background: #1e293b; color: var(--cf-text-primary); border-bottom-left-radius: 4px; }
+.ai-msg .bubble { background: var(--cf-chat-ai-bubble-bg); color: var(--cf-chat-ai-bubble-text); border-bottom-left-radius: 4px; }
 
 /* ── Visitor panel ───────────────────────────────────────────────────── */
 .visitor-panel {
@@ -1107,7 +1107,7 @@ watch(selected, (s) => {
 
 .visitor-panel-empty {
   align-items: center; justify-content: center; gap: 10px;
-  color: #1e293b; font-size: 13px;
+  color: var(--cf-text-muted); font-size: 13px;
 }
 
 .vp-section {
@@ -1326,7 +1326,7 @@ watch(selected, (s) => {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .admin-msg { flex-direction: column; align-items: flex-end; }
-.admin-msg .bubble { background: rgba(99,102,241,0.2); color: #c7d2fe; border-bottom-right-radius: 4px; }
+.admin-msg .bubble { background: rgba(99,102,241,0.15); color: var(--cf-chat-admin-bubble-text); border-bottom-right-radius: 4px; }
 .msg-role-label { font-size: 10px; font-weight: 600; color: #6366f1; margin-bottom: 2px; }
 
 .header-right-actions {

@@ -57,6 +57,20 @@
   --cf-toggle-active-bg: rgba(255,255,255,0.12);
   --cf-toggle-active-text: #F1F5F9;
   --cf-toggle-text: #64748B;
+
+  /* Chat bubbles */
+  --cf-chat-ai-bubble-bg: #1E293B;
+  --cf-chat-ai-bubble-text: #E2E8F0;
+  --cf-chat-admin-bubble-text: #C7D2FE;
+
+  /* Skeleton loaders */
+  --cf-skeleton-color: rgba(255,255,255,0.08);
+
+  /* Billing — popular plan card */
+  --cf-popular-card-bg-start: #1A1A2E;
+  --cf-popular-card-bg-end: #1E1B3A;
+  --cf-popular-card-text: #E2E8F0;
+  --cf-popular-card-feature-text: #94A3B8;
 }
 
 /* ── Light theme ──────────────────────────────────────────────────── */
@@ -112,6 +126,20 @@
   --cf-toggle-active-bg: #FFFFFF;
   --cf-toggle-active-text: #0F172A;
   --cf-toggle-text: #94A3B8;
+
+  /* Chat bubbles */
+  --cf-chat-ai-bubble-bg: #E2E8F0;
+  --cf-chat-ai-bubble-text: #1E293B;
+  --cf-chat-admin-bubble-text: #3730A3;
+
+  /* Skeleton loaders */
+  --cf-skeleton-color: #E2E8F0;
+
+  /* Billing — popular plan card */
+  --cf-popular-card-bg-start: #EEF2FF;
+  --cf-popular-card-bg-end: #F3E8FF;
+  --cf-popular-card-text: #1E293B;
+  --cf-popular-card-feature-text: #475569;
 }
 
 /* ── Brand & semantic (same in both, only opacity variants differ) ── */

@@ -275,7 +275,7 @@ watch(() => props.client, load)
   margin-bottom: 20px;
 }
 .stat-card {
-  background: var(--cf-bg-card);
+  background: var(--cf-bg-surface-raised);
   border: 1px solid var(--cf-border-subtle);
   border-radius: 12px;
   padding: 16px;
@@ -289,7 +289,7 @@ watch(() => props.client, load)
 
 /* Section cards */
 .section-card {
-  background: var(--cf-bg-card);
+  background: var(--cf-bg-surface-raised);
   border: 1px solid var(--cf-border-subtle);
   border-radius: 14px;
   padding: 20px;
@@ -345,7 +345,7 @@ watch(() => props.client, load)
 }
 .page-bar-wrap {
   height: 5px;
-  background: var(--cf-bg-card);
+  background: var(--cf-bg-surface-raised);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -426,7 +426,7 @@ watch(() => props.client, load)
 .el-bar-wrap {
   flex: 1;
   height: 5px;
-  background: var(--cf-bg-card);
+  background: var(--cf-bg-surface-raised);
   border-radius: 4px;
   overflow: hidden;
 }
@@ -448,14 +448,14 @@ watch(() => props.client, load)
 .sk-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .sk-card {
   height: 76px;
-  background: var(--cf-bg-card);
+  background: var(--cf-bg-surface-raised);
   border: 1px solid var(--cf-border-subtle);
   border-radius: 12px;
   animation: pulse 1.5s ease-in-out infinite;
 }
 .sk-block {
   height: 220px;
-  background: var(--cf-bg-card);
+  background: var(--cf-bg-surface-raised);
   border: 1px solid var(--cf-border-subtle);
   border-radius: 14px;
   animation: pulse 1.5s ease-in-out infinite;
@@ -469,7 +469,7 @@ watch(() => props.client, load)
   align-items: center;
   justify-content: center;
   padding: 64px 20px;
-  background: var(--cf-bg-card);
+  background: var(--cf-bg-surface-raised);
   border: 1px solid var(--cf-border-subtle);
   border-radius: 14px;
   text-align: center;

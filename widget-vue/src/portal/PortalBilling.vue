@@ -513,7 +513,7 @@ onMounted(load)
 }
 .plan-card.popular {
   border-color: rgba(99,102,241,0.4);
-  background: linear-gradient(135deg, #1a1a2e, #1e1b3a);
+  background: linear-gradient(135deg, var(--cf-popular-card-bg-start), var(--cf-popular-card-bg-end));
 }
 .plan-card.current { border-color: rgba(34,197,94,0.3); }
 
