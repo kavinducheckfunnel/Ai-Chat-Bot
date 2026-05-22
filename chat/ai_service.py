@@ -535,9 +535,11 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
 
     # Pull tenant-configured pre-purchase FAQ blurbs so the bot can answer
     # "return policy?" and "shipping?" inline instead of deflecting (C3, C5).
+    # Plus Q8 scarcity blurb for late-stage urgency injection.
     faq_blurbs = {
         'return_policy': (getattr(session.client, 'return_policy_blurb', '') or '').strip() if session.client else '',
         'shipping': (getattr(session.client, 'shipping_blurb', '') or '').strip() if session.client else '',
+        'scarcity': (getattr(session.client, 'scarcity_blurb', '') or '').strip() if session.client else '',
     }
 
     system_prompt, user_prompt = build_prompt(

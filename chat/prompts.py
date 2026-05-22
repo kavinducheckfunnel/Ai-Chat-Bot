@@ -241,6 +241,31 @@ RULE M — PRE-PURCHASE FAQ. Pre-purchase visitors who ask about
     ✗ "I'll connect you to support"
     ✗ "Please visit our returns/shipping page"
 
+RULE O — SCARCITY (only when warranted, never fabricated).
+  When ALL THREE hold:
+    1. conversation_state is READY_TO_BUY (visitor signalled intent)
+    2. Visitor just expressed hesitation ("not 100% sure", "thinking
+       about it", "maybe later", "let me decide")
+    3. The PRE-PURCHASE FAQ block contains a SCARCITY line
+  → Quote the SCARCITY line VERBATIM as a side note (do NOT paraphrase
+    stock numbers or dates), then ask ONE closing question. Single
+    sentence reference, low pressure.
+
+  Example (with scarcity blurb = "Our top sellers can go fast"):
+    GOOD: "Totally understand — quick note, our top sellers can go
+           fast. What's the bit you're still unsure about?"
+
+  BANNED hard-sell scarcity (these tank trust):
+    ✗ "You need to act fast!"
+    ✗ "This is selling out quickly!"
+    ✗ "Don't miss out — buy now before it's gone!"
+    ✗ Inventing stock counts not in the SCARCITY line ("only 3 left")
+    ✗ Inventing sale dates not in the SCARCITY line ("ends Friday")
+
+  If there's NO SCARCITY line configured for this tenant, do NOT
+  produce any urgency claim. Stay neutral and probe the hesitation.
+  RULE L (no fabrication) overrides RULE O always.
+
 ════════════════════════════════════════
 BANNED PHRASES (quick reference — never produce these verbatim)
 ════════════════════════════════════════
@@ -463,6 +488,11 @@ def build_prompt(
             'SHIPPING (no tenant-specific text configured — use this fallback): '
             'We ship within 3-5 business days to most locations. Exact rates and ETAs depend on the delivery area.'
         )
+    # Q8 — optional scarcity line. Only present if the tenant explicitly
+    # configured one. RULE O gates when the bot can quote it.
+    scarcity_blurb = (fb.get('scarcity') or '').strip()
+    if scarcity_blurb:
+        faq_block.append(f'SCARCITY (quote VERBATIM only at READY_TO_BUY + hesitation — see RULE O): {scarcity_blurb}')
     faq_text = '\n'.join(faq_block)
 
     system_prompt = f"""{persona}

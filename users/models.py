@@ -160,6 +160,14 @@ class Client(models.Model):
         max_length=300, blank=True, default='',
         help_text='Short pre-purchase shipping answer (e.g. "We ship nationwide in 3-5 business days. Exact rates depend on your area.")',
     )
+    # Q8 — Scarcity / urgency line. Bot only deploys this when visitor is
+    # at READY_TO_BUY state AND hesitating on price/timing (not on every
+    # message). Tenant MUST keep it honest — RULE L (no fabricated stock)
+    # still applies; the bot will never invent a number that isn't here.
+    scarcity_blurb = models.CharField(
+        max_length=300, blank=True, default='',
+        help_text='Optional urgency line for late-stage hesitation, e.g. "Our top sellers can go fast — want me to check availability?" or "This sale ends Friday at midnight." Leave blank to disable scarcity prompts.',
+    )
 
     # Ingestion tracking
     ingestion_status = models.CharField(max_length=20, choices=INGESTION_CHOICES, default='PENDING')
