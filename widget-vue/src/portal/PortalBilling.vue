@@ -182,7 +182,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onActivated, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const api = useAdminApi()
@@ -277,22 +278,53 @@ const faqs = ref([
 // ── data loading ─────────────────────────────────────────────────────────────
 
 async function load() {
-  loading.value = true
+  // Only show the full skeleton on the very first load; subsequent refreshes
+  // (navigation back, focus regain) should update silently in the background.
+  const isInitial = !sub.value || !sub.value.plan
+  if (isInitial) loading.value = true
   error.value = ''
   try {
     const [subData, planData] = await Promise.all([
       api.getSubscription(),
       api.getPublicPlans(),
     ])
-    sub.value = subData
-    plans.value = planData
-    if (subData.billing_interval) billingInterval.value = subData.billing_interval
+    // Defensive: only overwrite sub.value if the API returned a real object.
+    // A network blip or 401-then-refresh-failure can return undefined; in
+    // that case we keep showing the last-known-good plan instead of
+    // collapsing to "No plan / Free".
+    if (subData && typeof subData === 'object') {
+      sub.value = subData
+      if (subData.billing_interval) billingInterval.value = subData.billing_interval
+    }
+    if (Array.isArray(planData)) plans.value = planData
   } catch (e) {
     error.value = e.message || 'Failed to load billing info.'
   } finally {
     loading.value = false
   }
 }
+
+const route = useRoute()
+
+// Refetch when the user navigates back to the billing route. Even though
+// the router is not configured with <keep-alive>, this guards against
+// future routing changes and the lifecycle is idempotent.
+onActivated(load)
+
+// Refetch when the tab regains focus (covers the case where the user
+// completes Stripe checkout in another tab and comes back).
+function onVisibilityChange() {
+  if (document.visibilityState === 'visible') load()
+}
+
+onMounted(() => {
+  load()
+  document.addEventListener('visibilitychange', onVisibilityChange)
+})
+
+watch(() => route.fullPath, (newPath) => {
+  if (newPath.startsWith('/portal/billing')) load()
+})
 
 async function checkout(plan) {
   error.value = ''
@@ -321,7 +353,6 @@ async function openPortal() {
   }
 }
 
-onMounted(load)
 </script>
 
 <style scoped>

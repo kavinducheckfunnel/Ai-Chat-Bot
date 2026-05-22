@@ -14,6 +14,7 @@ import logging
 
 import stripe
 from django.conf import settings
+from django.db.models import Q
 from django.views.decorators.csrf import csrf_exempt
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -68,7 +69,14 @@ def public_plans(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_subscription(request):
-    """Return the tenant's current plan + Stripe subscription status."""
+    """Return the tenant's current plan + Stripe subscription status.
+
+    Self-heals if the local tenant.plan is NULL but a live Stripe
+    subscription exists. This handles a known race condition: a user
+    completes Stripe checkout, immediately navigates back to /portal/billing,
+    but the checkout.session.completed webhook hasn't landed yet so
+    tenant.plan is still NULL — the page would show "No plan".
+    """
     try:
         tenant = request.user.tenant_profile
     except TenantProfile.DoesNotExist:
@@ -76,6 +84,27 @@ def get_subscription(request):
 
     from users.feature_flags import usage_summary
     plan = tenant.plan
+
+    # ── Self-heal missing plan from Stripe ────────────────────────────
+    if plan is None and tenant.stripe_subscription_id:
+        try:
+            s = _stripe()
+            sub = s.Subscription.retrieve(tenant.stripe_subscription_id)
+            price_id = sub['items']['data'][0]['price']['id']
+            resolved = Plan.objects.filter(
+                Q(stripe_price_id=price_id) | Q(stripe_price_id_annual=price_id)
+            ).first()
+            if resolved:
+                tenant.plan = resolved
+                tenant.stripe_subscription_status = sub.get('status') or 'active'
+                tenant.save(update_fields=['plan', 'stripe_subscription_status'])
+                plan = resolved
+                logger.info(
+                    f'[get_subscription] Self-healed plan for tenant {tenant.id} '
+                    f'from Stripe price {price_id} → {resolved.name}'
+                )
+        except Exception as e:
+            logger.warning(f'[get_subscription] Self-heal failed for tenant {tenant.id}: {e}')
 
     def _plan_data(p):
         if not p:
