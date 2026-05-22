@@ -139,6 +139,20 @@ class Client(models.Model):
     fomo_offer_text = models.CharField(max_length=255, blank=True, null=True)
     fomo_countdown_seconds = models.IntegerField(default=600)
 
+    # ── Pre-purchase FAQ blurbs ──────────────────────────────────────────────
+    # Short tenant-configurable answers the bot uses when a visitor asks
+    # about return policy or shipping BEFORE buying. Without these the bot
+    # was deflecting ("share your order number") which kills pre-sale trust.
+    # Leave blank to fall back to generic defaults baked into the prompt.
+    return_policy_blurb = models.CharField(
+        max_length=300, blank=True, default='',
+        help_text='Short pre-purchase return policy answer (e.g. "30-day no-questions returns. Free return shipping.")',
+    )
+    shipping_blurb = models.CharField(
+        max_length=300, blank=True, default='',
+        help_text='Short pre-purchase shipping answer (e.g. "We ship nationwide in 3-5 business days. Exact rates depend on your area.")',
+    )
+
     # Ingestion tracking
     ingestion_status = models.CharField(max_length=20, choices=INGESTION_CHOICES, default='PENDING')
     total_pages_ingested = models.IntegerField(default=0)

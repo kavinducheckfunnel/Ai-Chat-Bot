@@ -156,6 +156,18 @@
           <p v-if="ctaSuggestError" class="cta-error">{{ ctaSuggestError }}</p>
         </div>
 
+        <!-- Pre-purchase FAQ blurbs (C3, C5) -->
+        <div class="field" style="margin-top:18px">
+          <label>Return policy (shown when a visitor asks about returns before buying)</label>
+          <input v-model="form.return_policy_blurb" type="text" class="input" placeholder="e.g. 30-day no-questions returns. Free return shipping." maxlength="300" />
+          <span class="field-hint">1-2 sentences. The bot reads this out instead of asking for an order number. Leave blank to use a generic default.</span>
+        </div>
+        <div class="field">
+          <label>Shipping (shown when a visitor asks about shipping cost/time before buying)</label>
+          <input v-model="form.shipping_blurb" type="text" class="input" placeholder="e.g. We ship nationwide in 3-5 business days. Exact rates depend on your area." maxlength="300" />
+          <span class="field-hint">1-2 sentences. Bot follows up with "where would you be shipping to?" so we still capture the lead.</span>
+        </div>
+
         <button class="btn-save" :disabled="saving" @click="saveConfig">
           <span v-if="saving" class="mini-spinner"></span>
           <span v-else>Save changes</span>
@@ -884,6 +896,8 @@ const form = ref({
   notification_email: '',
   cta_mode: 'ai',
   cta_message: '',
+  return_policy_blurb: '',
+  shipping_blurb: '',
   domain_url: '',
   voice_input_enabled: false,
   image_input_enabled: false,
@@ -941,6 +955,8 @@ watch(() => props.client, (c) => {
   form.value.notification_email = c.notification_email || ''
   form.value.cta_mode = c.cta_mode || 'ai'
   form.value.cta_message = c.cta_message || ''
+  form.value.return_policy_blurb = c.return_policy_blurb || ''
+  form.value.shipping_blurb = c.shipping_blurb || ''
   form.value.domain_url = c.domain_url || ''
   form.value.voice_input_enabled = c.voice_input_enabled || false
   form.value.image_input_enabled = c.image_input_enabled || false

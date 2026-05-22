@@ -216,6 +216,30 @@ RULE L — NO PERSONAL-DATA HALLUCINATION.
       GOOD: Address visitor with no name until they share one
       GOOD: "To complete this, what name and address should we use?"
 
+RULE M — PRE-PURCHASE FAQ (do NOT treat as support tickets).
+  When a visitor — who has NOT yet bought — asks about return policy,
+  refund policy, shipping cost, shipping time, warranty, sizing, or any
+  other pre-purchase trust question:
+    • Answer DIRECTLY using the PRE-PURCHASE FAQ block below (always
+      present in the system context). 1-2 sentences max.
+    • DO NOT ask for an order number, order ID, or email for "order
+      lookup" — they have nothing to look up yet. That's a support flow.
+    • After the answer, pivot back to the sale with ONE qualifying or
+      decision question.
+
+  BANNED responses (these treat pre-purchase visitors as existing customers
+  and kill the sale):
+      ✗ "Could you share your order number?"
+      ✗ "Please share the email associated with your account."
+      ✗ "I'll connect you to support to look up your order."
+      ✗ "Please visit our returns/shipping page."
+
+  REQUIRED shape:
+      Return question → "<return blurb>. Want me to help you pick the
+                         right size first so it fits perfectly?"
+      Shipping question → "<shipping blurb>. Where would you be
+                           shipping to? I can give you an exact ETA."
+
 RULE K — STRUCTURED OUTPUT (machine).
   Always score the visitor's CURRENT message on:
     intent_score   (0.0–1.0): how strongly do they want to buy/use?
@@ -358,6 +382,7 @@ def build_prompt(
     user_message,
     website_domain="",
     qualification_block="",
+    faq_blurbs=None,
 ):
     """
     Build the full system + user prompt pair.
@@ -393,6 +418,30 @@ def build_prompt(
     # Render browsing context as readable narrative for natural AI responses
     browsing_block = _format_browsing_context(behavior_matrix)
 
+    # Pre-purchase FAQ block — answers to "return policy?" / "shipping?"
+    # that the bot can read out instead of asking the visitor for an order
+    # number (which kills pre-sale trust).
+    fb = faq_blurbs or {}
+    return_blurb = (fb.get('return_policy') or '').strip()
+    shipping_blurb = (fb.get('shipping') or '').strip()
+    faq_block = []
+    if return_blurb:
+        faq_block.append(f'RETURN POLICY (use when visitor asks about returns/refunds): {return_blurb}')
+    else:
+        faq_block.append(
+            'RETURN POLICY (no tenant-specific text configured — use this fallback): '
+            'We offer easy returns within 30 days if the item is not right for you. '
+            'For exact terms, the team can confirm via email.'
+        )
+    if shipping_blurb:
+        faq_block.append(f'SHIPPING (use when visitor asks about shipping cost/time): {shipping_blurb}')
+    else:
+        faq_block.append(
+            'SHIPPING (no tenant-specific text configured — use this fallback): '
+            'We ship within 3-5 business days to most locations. Exact rates and ETAs depend on the delivery area.'
+        )
+    faq_text = '\n'.join(faq_block)
+
     system_prompt = f"""{persona}
 
 ════════════════════
@@ -401,6 +450,11 @@ WEBSITE DOMAIN: {website_domain}
 
 YOUR CURRENT SALES STRATEGY:
 {state_instruction}
+
+════════════════════
+PRE-PURCHASE FAQ — answer these inline (RULE M)
+════════════════════
+{faq_text}
 
 ════════════════════
 QUALIFICATION CHECKLIST
