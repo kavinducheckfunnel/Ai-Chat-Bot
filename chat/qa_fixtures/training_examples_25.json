@@ -332,6 +332,6 @@
     "bad_response": "I'm sorry to hear about your back pain! We have a great range of mattresses that could help. Our most popular option is the CloudSleep Pro.",
     "technique": "pain_to_diagnostic_question",
     "pass_signals": ["firmness", "too soft", "too firm", "side", "back", "front", "position", "how do you sleep", "issue", "usually"],
-    "fail_signals": ["sorry to hear", "we have a great range of mattresses", "our most popular option"]
+    "fail_signals": ["we have a great range of mattresses", "our most popular option", "our most popular is"]
   }
 ]
