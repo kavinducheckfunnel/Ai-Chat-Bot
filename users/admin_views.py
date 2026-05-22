@@ -1301,20 +1301,31 @@ def client_analytics(request, client_id):
         (F('current_intent_ema') * 0.45 + F('current_budget_ema') * 0.30 + F('current_urgency_ema') * 0.25) * 100,
         output_field=FloatField()
     )
-    dur_expr = ExpressionWrapper(F('updated_at') - F('created_at'), output_field=DurationField())
+    # F12 — duration = last_visitor_message_at - created_at, NOT updated_at.
+    # updated_at refreshes on EVERY field write (admin actions, async tasks,
+    # kanban moves) so it was overstating duration by ~20x. Real session
+    # duration is "first visitor message → last visitor message".
+    dur_expr = ExpressionWrapper(F('last_visitor_message_at') - F('created_at'), output_field=DurationField())
 
     def get_metrics(qs):
         total = qs.count()
+        # Active = at least one visitor message. Used as the honest denominator
+        # for engagement metrics (ai_resolution_rate, duration). The earlier
+        # version counted 0-message ghost sessions as "AI-handled" which
+        # inflated the rate.
+        active = qs.filter(message_count__gte=1)
+        active_total = active.count()
         unique_visitors = qs.values('visitor_id').distinct().count()
-        ai_handled = qs.filter(taken_over_by__isnull=True).count()
-        manual_handled = qs.filter(taken_over_by__isnull=False).count()
+        ai_handled = active.filter(taken_over_by__isnull=True).count()
+        manual_handled = active.filter(taken_over_by__isnull=False).count()
         missed = qs.filter(message_count=0).count()
 
-        dur_qs = qs.annotate(dur=dur_expr)
+        # Duration is only meaningful on sessions where a visitor actually spoke
+        dur_qs = active.exclude(last_visitor_message_at__isnull=True).annotate(dur=dur_expr)
         avg_dur_td = dur_qs.aggregate(avg=Avg('dur'))['avg']
         total_dur_td = dur_qs.aggregate(total=Sum('dur'))['total']
-        avg_dur_s = int(avg_dur_td.total_seconds()) if avg_dur_td else 0
-        total_dur_s = int(total_dur_td.total_seconds()) if total_dur_td else 0
+        avg_dur_s = max(0, int(avg_dur_td.total_seconds())) if avg_dur_td else 0
+        total_dur_s = max(0, int(total_dur_td.total_seconds())) if total_dur_td else 0
 
         leads = qs.filter(
             Q(lead_email__isnull=False) | Q(lead_phone__isnull=False)
@@ -1325,7 +1336,9 @@ def client_analytics(request, client_id):
         warm = annotated.filter(heat__gte=40, heat__lt=70).count()
         cold = annotated.filter(heat__lt=40).count()
         avg_heat = annotated.aggregate(avg=Avg('heat'))['avg'] or 0
-        ai_res_rate = round((ai_handled / total * 100) if total > 0 else 0, 1)
+        # AI resolution rate among ACTIVE sessions only. 0-message ghosts
+        # shouldn't count toward the bot's competence stat.
+        ai_res_rate = round((ai_handled / active_total * 100) if active_total > 0 else 0, 1)
 
         return {
             'total': total, 'unique_visitors': unique_visitors,
