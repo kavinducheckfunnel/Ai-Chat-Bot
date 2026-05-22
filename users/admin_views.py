@@ -122,7 +122,7 @@ def forgot_password(request):
     from django.contrib.auth.tokens import default_token_generator
     from django.utils.http import urlsafe_base64_encode
     from django.utils.encoding import force_bytes
-    from django.core.mail import EmailMessage as DjangoEmail
+    from django.core.mail import EmailMultiAlternatives
     from django.conf import settings as django_settings
 
     email = request.data.get('email', '').strip().lower()
@@ -221,18 +221,19 @@ def forgot_password(request):
         f'— The Checkfunnel Team'
     )
     try:
-        msg = DjangoEmail(
+        msg = EmailMultiAlternatives(
             subject='Reset your Checkfunnel password',
             body=plain_body,
             from_email=django_settings.DEFAULT_FROM_EMAIL,
             to=[user.email],
         )
-        msg.content_subtype = 'plain'
-        msg.mixed_subtype = 'related'
         msg.attach_alternative(html_body, 'text/html')
-        msg.send(fail_silently=True)
+        # fail_silently=False so we log the actual error in the except block
+        # instead of silently dropping it (this was the original bug)
+        msg.send(fail_silently=False)
+        logger.info(f'[forgot_password] Reset email sent to {user.email}')
     except Exception as e:
-        logger.warning(f'[forgot_password] Email send failed: {e}')
+        logger.exception(f'[forgot_password] Email send FAILED for {user.email}: {e}')
 
     return Response({'detail': response_msg})
 
