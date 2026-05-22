@@ -30,6 +30,7 @@ import PortalInbox from './portal/PortalInbox.vue'
 import PortalCustomers from './portal/PortalCustomers.vue'
 import PortalReports from './portal/PortalReports.vue'
 import PortalSettings from './portal/PortalSettings.vue'
+import PortalIntegrations from './portal/PortalIntegrations.vue'
 import PortalLiveView from './portal/PortalLiveView.vue'
 import PortalKanban from './portal/PortalKanban.vue'
 import PortalBilling from './portal/PortalBilling.vue'
@@ -89,6 +90,7 @@ const routes = [
       { path: 'customers', component: PortalCustomers },
       { path: 'reports', component: PortalReports },
       { path: 'settings', component: PortalSettings },
+      { path: 'integrations', component: PortalIntegrations },
       { path: 'live', component: PortalLiveView },
       { path: 'activity', component: PortalActivity },
       { path: 'visitors', component: PortalVisitors },
