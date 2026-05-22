@@ -50,6 +50,12 @@ class Visitor(models.Model):
     top_interest_title = models.CharField(max_length=300, blank=True)
     top_interest_url   = models.CharField(max_length=500, blank=True)
 
+    # F14 — V2 marketing prep. Adding this flag NOW so we never have to
+    # backfill millions of Visitor rows when V2 marketing campaigns ship.
+    # No UI/API yet — when V2 launches, the unsubscribe link in marketing
+    # emails flips this to True; the send-fanout task filters it out.
+    marketing_opt_out = models.BooleanField(default=False)
+
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=['visitor_uid', 'client'], name='uniq_visitor_per_client'),

@@ -470,3 +470,161 @@ class PlatformConfig(models.Model):
         super().save(*args, **kwargs)
         from django.core.cache import cache
         cache.delete('platform_config')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# F14 — V2 ARCHITECTURE STUBS
+#
+# IMPORTANT: These models exist to LOCK IN the schema shape so V2 features
+# can be lit up without painful migrations on hot tables. They are NOT
+# wired to any views, admin pages, Celery tasks, or webhooks today.
+#
+# Do NOT add fields to TenantProfile/Client/ChatSession for V2 features
+# without adding them HERE first — that's the whole point. When V2 ships:
+#   - Affiliate: add views/admin to read AffiliateProfile + AffiliateConversion
+#   - Marketing: add views to create MarketingCampaign, fan-out delivery
+#                rows on send, track delivery status from webhook callbacks
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AffiliateProfile(models.Model):
+    """V2: Affiliate program — tenants who refer other tenants earn commission.
+
+    Stub only — no UI/API today. When V2 ships, a signup flow assigns each
+    affiliate a unique referral_code, that code lands in new-tenant signup
+    URLs as ?ref=<code>, and we record the AffiliateConversion below at
+    plan checkout time.
+    """
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='affiliate_profile')
+    referral_code = models.CharField(max_length=32, unique=True)
+    commission_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0.20)  # 20% default
+    payout_email = models.EmailField(blank=True)  # PayPal / wire info
+    is_active = models.BooleanField(default=True)
+    total_earned_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # lifetime
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['referral_code'])]
+
+    def __str__(self):
+        return f'Affiliate<{self.user.username}, code={self.referral_code}>'
+
+
+class AffiliateConversion(models.Model):
+    """V2: a referred tenant subscribed to a paid plan.
+
+    One row per qualifying event. We compute commission at write time from
+    affiliate.commission_rate × plan price so historical changes don't
+    re-bill past conversions. payout_status tracks the lifecycle:
+    pending → ready (awaiting batch) → paid → reversed (refund/chargeback).
+    """
+    STATUS_CHOICES = [
+        ('pending',  'Pending qualification period'),  # e.g. 30-day refund window
+        ('ready',    'Ready to pay out'),
+        ('paid',     'Paid'),
+        ('reversed', 'Reversed (refund/chargeback)'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    affiliate = models.ForeignKey(AffiliateProfile, on_delete=models.PROTECT, related_name='conversions')
+    referred_tenant = models.ForeignKey('TenantProfile', on_delete=models.SET_NULL, null=True, related_name='+')
+    plan = models.ForeignKey('Plan', on_delete=models.SET_NULL, null=True, related_name='+')
+    plan_price_at_event_usd = models.DecimalField(max_digits=8, decimal_places=2)
+    commission_usd = models.DecimalField(max_digits=8, decimal_places=2)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    stripe_subscription_id = models.CharField(max_length=200, blank=True)  # source of truth
+    created_at = models.DateTimeField(auto_now_add=True)
+    qualified_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['affiliate', '-created_at']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'Conversion<{self.affiliate} → tenant {self.referred_tenant_id}, ${self.commission_usd}>'
+
+
+class MarketingCampaign(models.Model):
+    """V2: Pro-plan-only outbound marketing campaigns.
+
+    Stub only — no send pipeline today. When V2 ships, scheduled_at + status
+    drive a Celery task that fans out one MarketingDelivery per recipient
+    Visitor (whose marketing_opt_out is False).
+    """
+    STATUS_CHOICES = [
+        ('draft',     'Draft'),
+        ('scheduled', 'Scheduled'),
+        ('sending',   'Sending'),
+        ('sent',      'Sent'),
+        ('canceled',  'Canceled'),
+    ]
+    CHANNEL_CHOICES = [
+        ('email',    'Email'),
+        ('whatsapp', 'WhatsApp'),
+        ('sms',      'SMS'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    client = models.ForeignKey('Client', on_delete=models.CASCADE, related_name='marketing_campaigns')
+    name = models.CharField(max_length=200)
+    channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES, default='email')
+    subject = models.CharField(max_length=255, blank=True)         # email only
+    body = models.TextField(blank=True)
+    target_filter_json = models.JSONField(default=dict, blank=True)  # e.g. {'kanban_state': 'HOT_LEAD'}
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['client', '-created_at']),
+            models.Index(fields=['status', 'scheduled_at']),
+        ]
+
+    def __str__(self):
+        return f'Campaign<{self.client.name}/{self.name} {self.status}>'
+
+
+class MarketingDelivery(models.Model):
+    """V2: one row per (campaign × recipient). Tracks delivery + click telemetry."""
+    STATUS_CHOICES = [
+        ('queued',    'Queued'),
+        ('sent',      'Sent'),
+        ('delivered', 'Delivered (provider confirmed)'),
+        ('opened',    'Opened (email pixel / link click)'),
+        ('clicked',   'CTA clicked'),
+        ('bounced',   'Bounced'),
+        ('unsubscribed', 'Unsubscribed'),
+        ('failed',    'Failed'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    campaign = models.ForeignKey(MarketingCampaign, on_delete=models.CASCADE, related_name='deliveries')
+    # Recipient can be either an anonymous Visitor or a known TenantProfile member
+    visitor = models.ForeignKey('chat.Visitor', on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+    recipient_email = models.EmailField(blank=True)
+    recipient_phone = models.CharField(max_length=50, blank=True)
+    status = models.CharField(max_length=14, choices=STATUS_CHOICES, default='queued')
+    provider_message_id = models.CharField(max_length=200, blank=True)
+    error_message = models.TextField(blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    opened_at = models.DateTimeField(null=True, blank=True)
+    clicked_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['campaign', 'status']),
+            models.Index(fields=['recipient_email']),
+        ]
+
+    def __str__(self):
+        return f'Delivery<{self.campaign_id} → {self.recipient_email or self.recipient_phone}>'
