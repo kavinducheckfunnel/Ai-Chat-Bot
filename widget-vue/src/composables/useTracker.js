@@ -281,10 +281,15 @@ export function useTracker() {
           }
         }
 
-        // deep_engagement trigger: scroll ≥75% + time ≥90s
+        // C7 — engagement trigger: scroll ≥50% + time ≥30s
+        // QA report flagged the old 75% + 90s bar as way too high — most
+        // visitors who would benefit from a nudge had already bounced by then.
+        // Lowered to capture mid-funnel browsers who are exploring but not
+        // yet ready to act. Backend cooldown (last_nudge_at 60s) still
+        // prevents overlap with other triggers (proactive_open, afk_nudge).
         if (
-          depth >= 75 &&
-          behaviorMatrix.timeOnSite >= 90 &&
+          depth >= 50 &&
+          behaviorMatrix.timeOnSite >= 30 &&
           !nudgeFired
         ) {
           nudgeFired = true;
@@ -410,11 +415,16 @@ export function useTracker() {
   };
 
   // ── Exit-intent detection ─────────────────────────────────────────────────
+  // Fires when the cursor moves toward the top of the viewport (about to
+  // close the tab / hit the back button). Threshold tuned in C7:
+  //   - mouse Y near top of viewport (within 20px)
+  //   - visitor on page at least 10s (avoid mouse-jump-on-arrival false fires)
+  //   - hasn't already fired this session
   const trackExitIntent = () => {
     const handleMouseLeave = (e) => {
       if (e.clientY > 20) return;
       if (behaviorMatrix.exitIntentFired) return;
-      if (behaviorMatrix.timeOnSite < 5) return;
+      if (behaviorMatrix.timeOnSite < 10) return;
       behaviorMatrix.exitIntentFired = true;
       logEvent('exit_intent', window.location.pathname);
       fireTrigger('exit_intent');

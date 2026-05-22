@@ -488,6 +488,22 @@ function sendVisitorMeta(){
   for(var k in visitorMeta)payload[k]=visitorMeta[k];
   ws.send(JSON.stringify(payload));
 }
+// C2 — proactive_trigger: 10s after page load send a behavior frame to the
+// backend; if widget hasn't been opened and no other nudge has fired, the
+// server generates a context-aware question and pushes it back with
+// source='proactive_open' (in AUTO_OPEN above, so it pops the widget).
+// Once per session — flag in sessionStorage so multi-page nav doesn't re-fire.
+setTimeout(function(){
+  try{
+    var k='cf_proactive_'+C+'_'+sid;
+    if(sessionStorage.getItem(k))return;
+    if(isOpen)return;
+    if(!ws||ws.readyState!==1)return;
+    ws.send(JSON.stringify({type:'proactive_trigger',behavior_matrix:behavior,page_visits:pageVisits,dwell_seconds:behavior.timeOnSite,page_url:location.href}));
+    sessionStorage.setItem(k,String(Date.now()));
+  }catch(_){}
+},10000);
+
 function connect(){
   ws=new WebSocket(B.replace(/^https/,'wss').replace(/^http/,'ws')+'/ws/chat/'+C+'/'+sid+'/');
   ws.onopen=function(){sendVisitorMeta()};
@@ -505,7 +521,7 @@ function connect(){
       }
       if(d.type==='ai_message'&&d.message){
         bubble(renderMd(d.message),'ai');chime();
-        var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action','lead_captured'];
+        var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action','lead_captured','proactive_open'];
         if(AUTO_OPEN.indexOf(d.source)>=0&&!isOpen)toggleOpen();
       }
     }catch(x){}};
@@ -737,16 +753,18 @@ setTimeout(function(){
 // Video play
 document.addEventListener('play',function(){behavior.videoPlays++},true);
 
-// Exit intent
+// Exit intent (C7 — was timeOnSite<5, raised to 10 to avoid early-mouse-jump false fires)
 document.addEventListener('mouseleave',function(e){
-  if(e.clientY>20||behavior.exitIntentFired||behavior.timeOnSite<5)return;
+  if(e.clientY>20||behavior.exitIntentFired||behavior.timeOnSite<10)return;
   behavior.exitIntentFired=true;flush(true);fireTrigger('exit_intent');
 });
 
 // Time on site + deep engagement trigger
+// C7 — lowered from scrollDepth>=75 + timeOnSite>=90 to scrollDepth>=50 + timeOnSite>=30
+// QA flagged the old bar was so high most visitors who would benefit had already bounced.
 setInterval(function(){
   behavior.timeOnSite=Math.round((Date.now()-startTime)/1000);
-  if(behavior.timeOnSite>=90&&behavior.scrollDepth>=75&&!behavior._deepFired){
+  if(behavior.timeOnSite>=30&&behavior.scrollDepth>=50&&!behavior._deepFired){
     behavior._deepFired=true;fireTrigger('deep_engagement');
   }
   if(behavior.timeOnSite>=120&&(behavior.ctaClicks>=1||behavior.pricingPageVisits>=1)&&!behavior._hiFired){
