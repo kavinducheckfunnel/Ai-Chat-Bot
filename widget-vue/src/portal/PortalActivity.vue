@@ -2,180 +2,216 @@
   <div class="activity-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Activity heatmap</h1>
-        <p class="page-sub">See where visitors click on each page of your site.</p>
+        <h1 class="page-title">Visitor Activity</h1>
+        <p class="page-sub">See which pages visitors explore and what they click on.</p>
       </div>
-      <div class="header-controls">
-        <select class="period-select" v-model.number="days" @change="loadPages">
-          <option :value="1">Last 24 hours</option>
-          <option :value="7">Last 7 days</option>
-          <option :value="30">Last 30 days</option>
-          <option :value="90">Last 90 days</option>
-        </select>
+      <div class="period-tabs">
+        <button
+          v-for="p in periods"
+          :key="p.value"
+          class="period-tab"
+          :class="{ active: days === p.value }"
+          @click="setPeriod(p.value)"
+        >{{ p.label }}</button>
       </div>
     </div>
 
-    <!-- Page selector -->
-    <div class="page-selector-wrap">
-      <label class="selector-label">Page</label>
-      <select class="page-selector" v-model="selectedPage" @change="loadHeatmap">
-        <option v-if="!pages.length" disabled value="">No activity yet — visitors haven't clicked anything</option>
-        <option v-for="p in pages" :key="p.page_url" :value="p.page_url">
-          {{ p.page_url }} ({{ p.total_clicks }} clicks)
-        </option>
-      </select>
+    <!-- Loading -->
+    <div v-if="loading" class="loading-state">
+      <div class="sk-row">
+        <div class="sk-card" v-for="n in 4" :key="n"></div>
+      </div>
+      <div class="sk-block"></div>
     </div>
 
-    <div v-if="loading" class="loading-block">Loading activity…</div>
-
-    <div v-else-if="!selectedPage" class="empty-block">
-      <svg width="48" height="48" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#334155" stroke-width="1.5"/><path d="M12 8v4M12 16h.01" stroke="#334155" stroke-width="2" stroke-linecap="round"/></svg>
-      <p class="empty-title">No page selected</p>
-      <p class="empty-sub">Pick a page from the dropdown to see its heatmap.</p>
-    </div>
-
-    <div v-else class="heatmap-container">
-      <!-- Stats row -->
+    <template v-else>
+      <!-- Summary stats -->
       <div class="stats-row">
-        <div class="stat-card">
-          <div class="stat-num">{{ heatmap.total_clicks || 0 }}</div>
-          <div class="stat-lbl">Total clicks</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num">{{ heatmap.unique_visitors || 0 }}</div>
-          <div class="stat-lbl">Unique visitors</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-num">{{ heatmap.clusters?.length || 0 }}</div>
-          <div class="stat-lbl">Hot spots</div>
+        <div class="stat-card" v-for="s in summaryStats" :key="s.label">
+          <div class="stat-icon">{{ s.icon }}</div>
+          <div class="stat-body">
+            <div class="stat-num">{{ s.value }}</div>
+            <div class="stat-label">{{ s.label }}</div>
+          </div>
         </div>
       </div>
 
-      <!-- Heatmap visualization -->
-      <div class="heatmap-section">
-        <div class="section-head">
-          <h2 class="section-title">Click heatmap</h2>
-          <div class="legend">
-            <span class="legend-item"><span class="legend-dot legend-cta"></span>CTA click</span>
-            <span class="legend-item"><span class="legend-dot legend-normal"></span>Regular click</span>
-            <span class="legend-item"><span class="legend-dot legend-rage"></span>Rage click</span>
+      <!-- No data empty state -->
+      <div v-if="!pages.length && !loadingPages" class="empty-state">
+        <div class="empty-icon">📊</div>
+        <p class="empty-title">No activity yet</p>
+        <p class="empty-sub">Visitor page activity will appear here once people start browsing your site.</p>
+      </div>
+
+      <template v-else>
+        <!-- Most visited pages -->
+        <div class="section-card">
+          <div class="section-header">
+            <h2 class="section-title">Most visited pages</h2>
+            <span class="section-hint">{{ pages.length }} page{{ pages.length !== 1 ? 's' : '' }} tracked</span>
           </div>
-        </div>
-        <div class="heatmap-canvas" ref="canvasWrap">
-          <div v-if="!heatmap.clusters?.length" class="heatmap-empty">
-            No clicks recorded on this page yet.
-          </div>
-          <template v-else>
-            <div class="grid-overlay"></div>
+          <div v-if="loadingPages" class="inline-loading">Loading pages…</div>
+          <div v-else-if="!pages.length" class="inline-empty">No page visits recorded yet.</div>
+          <div v-else class="pages-list">
             <div
-              v-for="(c, i) in heatmap.clusters"
-              :key="i"
-              class="heat-dot"
-              :class="[
-                c.is_rage ? 'dot-rage' : c.is_cta ? 'dot-cta' : 'dot-normal'
-              ]"
-              :style="{
-                left: c.x + '%',
-                top: Math.min(c.y, 95) + '%',
-                width: dotSize(c.count) + 'px',
-                height: dotSize(c.count) + 'px',
-                opacity: dotOpacity(c.count),
-              }"
-              :title="(c.text || 'Click') + ' — ' + c.count + ' clicks'"
+              v-for="(p, i) in pages.slice(0, 10)"
+              :key="p.page_url"
+              class="page-row"
             >
-              <span class="dot-count">{{ c.count }}</span>
-              <span v-if="c.text" class="dot-label">{{ c.text.slice(0, 20) }}</span>
+              <span class="page-rank">{{ i + 1 }}</span>
+              <div class="page-info">
+                <span class="page-url" :title="p.page_url">{{ formatUrl(p.page_url) }}</span>
+                <div class="page-bar-wrap">
+                  <div
+                    class="page-bar"
+                    :style="{ width: pageBarWidth(p.total_clicks) + '%' }"
+                  ></div>
+                </div>
+              </div>
+              <div class="page-stats">
+                <span class="page-clicks">{{ p.total_clicks.toLocaleString() }}</span>
+                <span class="page-clicks-label">clicks</span>
+              </div>
             </div>
-          </template>
-        </div>
-      </div>
-
-      <!-- Top elements -->
-      <div class="elements-section">
-        <h2 class="section-title">Top clicked elements</h2>
-        <div v-if="!heatmap.top_elements?.length" class="empty-inline">No element data yet.</div>
-        <div v-else class="elements-list">
-          <div
-            v-for="(el, i) in heatmap.top_elements"
-            :key="i"
-            class="element-row"
-          >
-            <span class="el-rank">{{ i + 1 }}</span>
-            <span class="el-text">{{ el.text }}</span>
-            <span class="el-tag">{{ el.tag }}</span>
-            <div class="el-bar-wrap">
-              <div class="el-bar" :style="{ width: barWidth(el.count) + '%' }"></div>
-            </div>
-            <span class="el-count">{{ el.count }}×</span>
           </div>
         </div>
-      </div>
-    </div>
+
+        <!-- Top interactions -->
+        <div class="section-card" v-if="selectedPage">
+          <div class="section-header">
+            <h2 class="section-title">Top interactions</h2>
+            <span class="section-hint">on {{ formatUrl(selectedPage) }}</span>
+          </div>
+          <div v-if="loadingHeatmap" class="inline-loading">Loading interactions…</div>
+          <div v-else-if="!topElements.length" class="inline-empty">No interaction data for this page yet.</div>
+          <div v-else class="elements-list">
+            <div
+              v-for="(el, i) in topElements"
+              :key="i"
+              class="element-row"
+            >
+              <div class="el-left">
+                <span class="el-rank">{{ i + 1 }}</span>
+                <div class="el-info">
+                  <span class="el-text">{{ el.text || 'Unnamed element' }}</span>
+                  <span class="el-tag">{{ el.tag }}</span>
+                </div>
+              </div>
+              <div class="el-right">
+                <div class="el-bar-wrap">
+                  <div class="el-bar" :style="{ width: elBarWidth(el.count) + '%' }"></div>
+                </div>
+                <span class="el-count">{{ el.count }}×</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
 
+const periods = [
+  { label: '24h', value: 1 },
+  { label: '7 days', value: 7 },
+  { label: '30 days', value: 30 },
+  { label: '90 days', value: 90 },
+]
+
 const days = ref(7)
 const pages = ref([])
 const selectedPage = ref('')
-const heatmap = ref({ clusters: [], top_elements: [] })
+const heatmapData = ref({ clusters: [], top_elements: [] })
+const analytics = ref({})
 const loading = ref(false)
+const loadingPages = ref(false)
+const loadingHeatmap = ref(false)
 
-async function loadPages() {
+const topElements = computed(() => heatmapData.value.top_elements?.slice(0, 8) || [])
+
+const summaryStats = computed(() => {
+  const a = analytics.value
+  return [
+    { icon: '💬', label: 'Chat sessions', value: (a.total_sessions?.value ?? 0).toLocaleString() },
+    { icon: '👥', label: 'Unique visitors', value: (a.unique_visitors?.value ?? 0).toLocaleString() },
+    { icon: '📄', label: 'Page views', value: (a.total_page_views ?? 0).toLocaleString() },
+    { icon: '👆', label: 'Total clicks', value: pages.value.reduce((s, p) => s + (p.total_clicks || 0), 0).toLocaleString() },
+  ]
+})
+
+function formatUrl(url) {
+  if (!url) return ''
+  try {
+    const u = new URL(url.startsWith('http') ? url : `https://x.com${url}`)
+    const path = u.pathname + (u.search || '')
+    return path.length > 50 ? path.slice(0, 47) + '…' : path || '/'
+  } catch {
+    return url.length > 50 ? url.slice(0, 47) + '…' : url
+  }
+}
+
+function pageBarWidth(clicks) {
+  const max = Math.max(1, ...pages.value.map(p => p.total_clicks || 0))
+  return Math.max(2, (clicks / max) * 100)
+}
+
+function elBarWidth(count) {
+  const max = Math.max(1, ...topElements.value.map(e => e.count || 0))
+  return Math.max(2, (count / max) * 100)
+}
+
+async function load() {
   if (!props.client) return
   loading.value = true
   try {
-    const data = await api.getActivityPages(props.client.id, days.value)
-    pages.value = data?.pages || []
-    if (pages.value.length && !pages.value.find(p => p.page_url === selectedPage.value)) {
+    const periodKey = days.value === 1 ? 'today' : days.value === 7 ? '7d' : days.value === 30 ? '30d' : '90d'
+    const [pagesData, analyticsData] = await Promise.all([
+      api.getActivityPages(props.client.id, days.value),
+      api.getPortalAnalytics(props.client.id, periodKey),
+    ])
+    pages.value = pagesData?.pages || []
+    analytics.value = analyticsData || {}
+    if (pages.value.length) {
       selectedPage.value = pages.value[0].page_url
-      await loadHeatmap()
-    } else if (selectedPage.value) {
-      await loadHeatmap()
+      loadTopInteractions()
+    } else {
+      selectedPage.value = ''
     }
-  } catch (e) {
+  } catch {
     pages.value = []
+    analytics.value = {}
   } finally {
     loading.value = false
   }
 }
 
-async function loadHeatmap() {
+async function loadTopInteractions() {
   if (!props.client || !selectedPage.value) return
-  loading.value = true
+  loadingHeatmap.value = true
   try {
     const data = await api.getPageHeatmap(props.client.id, selectedPage.value, days.value)
-    heatmap.value = data || { clusters: [], top_elements: [] }
-  } catch (e) {
-    heatmap.value = { clusters: [], top_elements: [] }
+    heatmapData.value = data || { clusters: [], top_elements: [] }
+  } catch {
+    heatmapData.value = { clusters: [], top_elements: [] }
   } finally {
-    loading.value = false
+    loadingHeatmap.value = false
   }
 }
 
-// Dot rendering helpers
-const maxCount = () => Math.max(1, ...(heatmap.value.clusters || []).map(c => c.count))
-function dotSize(count) {
-  const m = maxCount()
-  return Math.max(18, Math.min(80, 18 + (count / m) * 62))
-}
-function dotOpacity(count) {
-  const m = maxCount()
-  return 0.45 + (count / m) * 0.5
-}
-function barWidth(count) {
-  const m = Math.max(1, ...(heatmap.value.top_elements || []).map(e => e.count))
-  return (count / m) * 100
+function setPeriod(val) {
+  days.value = val
+  load()
 }
 
-onMounted(loadPages)
-watch(() => props.client, loadPages)
+onMounted(load)
+watch(() => props.client, load)
 </script>
 
 <style scoped>
@@ -184,155 +220,276 @@ watch(() => props.client, loadPages)
 .activity-page {
   padding: 28px 32px;
   font-family: 'Inter', -apple-system, sans-serif;
+  max-width: 900px;
 }
-.page-header {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  margin-bottom: 24px;
-}
-.page-title { font-size: 22px; font-weight: 700; color: var(--cf-text-primary); letter-spacing: -.4px; }
-.page-sub { font-size: 13px; color: var(--cf-text-muted); margin-top: 3px; }
 
-.period-select, .page-selector {
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--cf-text-primary);
+  letter-spacing: -.4px;
+  margin: 0 0 3px;
+}
+.page-sub { font-size: 13px; color: var(--cf-text-muted); margin: 0; }
+
+.period-tabs {
+  display: flex;
   background: var(--cf-bg-input);
   border: 1px solid var(--cf-border-default);
-  color: var(--cf-text-primary);
-  border-radius: 8px; padding: 8px 12px;
-  font-size: 13px; font-family: inherit;
-  cursor: pointer; outline: none;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  flex-shrink: 0;
 }
+.period-tab {
+  background: none;
+  border: none;
+  border-radius: 7px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--cf-text-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.period-tab.active {
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+}
+.period-tab:hover:not(.active) { color: var(--cf-text-secondary); }
 
-.page-selector-wrap {
-  display: flex; align-items: center; gap: 12px;
+/* Stats */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
   margin-bottom: 20px;
 }
-.selector-label {
-  font-size: 12px; font-weight: 600; color: var(--cf-text-muted);
-  text-transform: uppercase; letter-spacing: 0.5px;
-}
-.page-selector {
-  flex: 1; max-width: 520px;
-}
-
-.stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
 .stat-card {
   background: var(--cf-bg-card);
   border: 1px solid var(--cf-border-subtle);
-  border-radius: 12px; padding: 16px;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
-.stat-num { font-size: 24px; font-weight: 700; color: var(--cf-text-primary); }
-.stat-lbl { font-size: 12px; color: var(--cf-text-muted); margin-top: 4px; }
+.stat-icon { font-size: 22px; flex-shrink: 0; }
+.stat-num { font-size: 22px; font-weight: 700; color: var(--cf-text-primary); line-height: 1; }
+.stat-label { font-size: 11px; color: var(--cf-text-muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
 
-.section-title { font-size: 15px; font-weight: 600; color: var(--cf-text-primary); margin-bottom: 12px; }
-.section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.legend { display: flex; gap: 14px; font-size: 11px; color: var(--cf-text-muted); }
-.legend-item { display: flex; align-items: center; gap: 5px; }
-.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.legend-cta { background: #f59e0b; }
-.legend-normal { background: #6366f1; }
-.legend-rage { background: #ef4444; }
-
-.heatmap-section {
+/* Section cards */
+.section-card {
   background: var(--cf-bg-card);
   border: 1px solid var(--cf-border-subtle);
-  border-radius: 12px; padding: 16px; margin-bottom: 24px;
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 16px;
 }
-.heatmap-canvas {
-  position: relative; width: 100%; height: 560px;
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--cf-text-primary);
+  margin: 0;
+}
+.section-hint {
+  font-size: 12px;
+  color: var(--cf-text-muted);
+}
+
+/* Pages list */
+.pages-list { display: flex; flex-direction: column; gap: 8px; }
+.page-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
   background: var(--cf-bg-input);
-  border: 1px solid var(--cf-border-subtle);
-  border-radius: 8px;
+  border-radius: 10px;
+  transition: background 0.1s;
+}
+.page-row:hover { background: rgba(99, 102, 241, 0.06); }
+.page-rank {
+  width: 22px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cf-text-muted);
+  text-align: center;
+}
+.page-info { flex: 1; min-width: 0; }
+.page-url {
+  display: block;
+  font-size: 13px;
+  color: var(--cf-text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 6px;
+}
+.page-bar-wrap {
+  height: 5px;
+  background: var(--cf-bg-card);
+  border-radius: 4px;
   overflow: hidden;
 }
-.grid-overlay {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(148,163,184,0.10) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148,163,184,0.10) 1px, transparent 1px);
-  background-size: 10% 10%;
-  pointer-events: none;
+.page-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #a855f7);
+  border-radius: 4px;
+  transition: width 0.4s;
 }
-.heat-dot {
-  position: absolute;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  color: #fff; font-weight: 700;
-  cursor: pointer;
-  transition: transform .15s;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+.page-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+  min-width: 50px;
 }
-.heat-dot:hover { transform: translate(-50%, -50%) scale(1.15); z-index: 10; }
-.dot-normal { background: radial-gradient(circle, #6366f1 0%, #4338ca 100%); }
-.dot-cta { background: radial-gradient(circle, #f59e0b 0%, #d97706 100%); }
-.dot-rage { background: radial-gradient(circle, #ef4444 0%, #b91c1c 100%); }
-.dot-count { font-size: 11px; line-height: 1; }
-.dot-label {
-  position: absolute; top: calc(100% + 4px); left: 50%;
-  transform: translateX(-50%);
-  font-size: 10px; color: var(--cf-text-secondary);
-  background: var(--cf-bg-card);
-  padding: 2px 6px; border-radius: 4px;
-  white-space: nowrap;
-  border: 1px solid var(--cf-border-subtle);
-  opacity: 0; pointer-events: none;
-  transition: opacity .15s;
+.page-clicks {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--cf-text-primary);
+  line-height: 1;
 }
-.heat-dot:hover .dot-label { opacity: 1; }
-.heatmap-empty {
-  position: absolute; inset: 0;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--cf-text-muted); font-size: 13px;
+.page-clicks-label {
+  font-size: 10px;
+  color: var(--cf-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
 }
 
-.elements-section {
-  background: var(--cf-bg-card);
-  border: 1px solid var(--cf-border-subtle);
-  border-radius: 12px; padding: 16px;
-}
+/* Elements list */
 .elements-list { display: flex; flex-direction: column; gap: 6px; }
 .element-row {
-  display: grid;
-  grid-template-columns: 24px 1fr auto 120px 50px;
-  gap: 10px;
+  display: flex;
   align-items: center;
-  padding: 8px 12px;
+  gap: 12px;
+  padding: 10px 12px;
   background: var(--cf-bg-input);
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: 10px;
 }
-.el-rank { color: var(--cf-text-muted); font-weight: 600; font-size: 12px; }
-.el-text { color: var(--cf-text-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.el-rank {
+  width: 22px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--cf-text-muted);
+  text-align: center;
+}
+.el-info { min-width: 0; }
+.el-text {
+  display: block;
+  font-size: 13px;
+  color: var(--cf-text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .el-tag {
-  background: rgba(99,102,241,0.15); color: #a5b4fc;
-  font-size: 10px; padding: 2px 7px; border-radius: 5px;
-  text-transform: uppercase; font-weight: 600;
+  display: inline-block;
+  margin-top: 2px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.el-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  width: 140px;
 }
 .el-bar-wrap {
-  height: 6px; background: var(--cf-bg-card);
-  border-radius: 4px; overflow: hidden;
+  flex: 1;
+  height: 5px;
+  background: var(--cf-bg-card);
+  border-radius: 4px;
+  overflow: hidden;
 }
-.el-bar { height: 100%; background: linear-gradient(90deg, #6366f1, #a855f7); }
-.el-count { font-weight: 700; color: var(--cf-text-primary); text-align: right; }
+.el-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #6366f1, #a855f7);
+  border-radius: 4px;
+  transition: width 0.4s;
+}
+.el-count {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cf-text-primary);
+  white-space: nowrap;
+}
 
-.loading-block, .empty-block {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 80px 20px; text-align: center;
+/* Loading skeleton */
+.loading-state { display: flex; flex-direction: column; gap: 16px; }
+.sk-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.sk-card {
+  height: 76px;
   background: var(--cf-bg-card);
   border: 1px solid var(--cf-border-subtle);
   border-radius: 12px;
+  animation: pulse 1.5s ease-in-out infinite;
 }
-.empty-title { font-size: 14px; font-weight: 600; color: var(--cf-text-secondary); margin-top: 12px; }
-.empty-sub { font-size: 12px; color: var(--cf-text-muted); margin-top: 4px; }
-.empty-inline { padding: 16px; text-align: center; color: var(--cf-text-muted); font-size: 13px; }
+.sk-block {
+  height: 220px;
+  background: var(--cf-bg-card);
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 14px;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 20px;
+  background: var(--cf-bg-card);
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 14px;
+  text-align: center;
+}
+.empty-icon { font-size: 40px; margin-bottom: 12px; }
+.empty-title { font-size: 15px; font-weight: 600; color: var(--cf-text-secondary); margin: 0 0 6px; }
+.empty-sub { font-size: 13px; color: var(--cf-text-muted); margin: 0; max-width: 340px; }
+
+.inline-loading, .inline-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--cf-text-muted);
+  font-size: 13px;
+}
 
 @media (max-width: 768px) {
   .activity-page { padding: 20px 16px; }
   .page-header { flex-direction: column; gap: 12px; }
-  .stats-row { grid-template-columns: repeat(3, 1fr); gap: 8px; }
-  .stat-num { font-size: 18px; }
-  .heatmap-canvas { height: 380px; }
-  .element-row { grid-template-columns: 20px 1fr 60px; gap: 6px; font-size: 12px; }
-  .el-tag, .el-bar-wrap { display: none; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+  .sk-row { grid-template-columns: repeat(2, 1fr); }
+  .period-tabs { align-self: flex-start; }
 }
 </style>

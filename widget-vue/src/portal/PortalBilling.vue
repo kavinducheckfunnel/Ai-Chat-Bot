@@ -98,9 +98,12 @@
           <div class="plan-popular-badge" v-if="plan.name === 'Growth'">Most popular</div>
           <div class="plan-header">
             <span class="plan-name">{{ plan.name }}</span>
-            <div class="plan-price">
-              <span class="plan-amount">${{ billingInterval === 'annual' ? annualMonthly(plan) : plan.price_monthly }}</span>
+            <div class="plan-price" v-if="plan.price_monthly != null && plan.price_monthly >= 0">
+              <span class="plan-amount">${{ billingInterval === 'annual' ? annualMonthly(plan) : formatPrice(plan.price_monthly) }}</span>
               <span class="plan-period">/mo</span>
+            </div>
+            <div class="plan-price" v-else>
+              <span class="plan-amount plan-amount-custom">Custom</span>
             </div>
             <span v-if="billingInterval === 'annual' && plan.price_monthly > 0" class="plan-annual-note">billed ${{ annualTotal(plan) }}/yr</span>
           </div>
@@ -140,13 +143,17 @@
           </ul>
           <button
             class="plan-btn"
-            :class="{ 'plan-btn-current': isCurrentPlan(plan), 'plan-btn-upgrade': !isCurrentPlan(plan) }"
-            :disabled="isCurrentPlan(plan) || !activePriceId(plan) || checkoutLoading === plan.id"
-            @click="checkout(plan)"
+            :class="{
+              'plan-btn-current': isCurrentPlan(plan),
+              'plan-btn-upgrade': !isCurrentPlan(plan) && activePriceId(plan),
+              'plan-btn-contact': !isCurrentPlan(plan) && !activePriceId(plan),
+            }"
+            :disabled="isCurrentPlan(plan) || checkoutLoading === plan.id"
+            @click="activePriceId(plan) ? checkout(plan) : contactUs()"
           >
             <span v-if="checkoutLoading === plan.id" class="spinner"></span>
             <span v-else-if="isCurrentPlan(plan)">Current plan</span>
-            <span v-else-if="!activePriceId(plan)">Coming soon</span>
+            <span v-else-if="!activePriceId(plan)">Contact us</span>
             <span v-else-if="isDowngrade(plan)">Downgrade</span>
             <span v-else>Upgrade</span>
           </button>
@@ -210,6 +217,14 @@ function isDowngrade(plan) {
 function formatLimit(n) {
   if (n < 0) return 'Unlimited'
   return n.toLocaleString()
+}
+function formatPrice(p) {
+  const n = parseFloat(p)
+  if (isNaN(n)) return '—'
+  return n === 0 ? '0' : n.toFixed(n % 1 === 0 ? 0 : 2)
+}
+function contactUs() {
+  window.open('mailto:support@checkfunnels.com?subject=Plan inquiry', '_blank')
 }
 function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
@@ -544,8 +559,11 @@ onMounted(load)
 }
 .plan-btn-current { background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); cursor: default; }
 .plan-btn-upgrade { background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; }
+.plan-btn-contact { background: rgba(99,102,241,0.08); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); }
+.plan-btn-contact:hover { background: rgba(99,102,241,0.15); }
 .plan-btn:disabled:not(.plan-btn-current) { opacity: 0.4; cursor: not-allowed; }
 .plan-btn-upgrade:hover:not(:disabled) { opacity: 0.9; }
+.plan-amount-custom { font-size: 22px; color: var(--cf-text-muted); }
 
 /* Spinner */
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }

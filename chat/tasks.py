@@ -140,6 +140,7 @@ def check_afk_sessions():
 
     idle_sessions = ChatSession.objects.filter(
         takeover_active=False,
+        afk_nudge_sent=False,  # skip if one-shot nudge already fired
         last_visitor_message_at__isnull=False,
         last_visitor_message_at__lte=idle_cutoff,
         message_count__gte=1,
@@ -164,12 +165,13 @@ def check_afk_sessions():
         history = session.chat_history or []
         history.append({'role': 'ai', 'message': nudge_message, 'source': 'afk_nudge'})
         new_count = session.nudge_count + 1
+        # For manual CTA, one nudge is enough — identical repeat messages feel like spam
+        is_done = (new_count >= 3) or (cta_mode == 'manual')
         ChatSession.objects.filter(session_id=session.session_id).update(
             chat_history=history,
             nudge_count=new_count,
             last_nudge_at=now,
-            # Mark afk_nudge_sent only after all 3 nudges are exhausted
-            afk_nudge_sent=(new_count >= 3),
+            afk_nudge_sent=is_done,
         )
         group_name = f'chat_{session.session_id}'
         try:
