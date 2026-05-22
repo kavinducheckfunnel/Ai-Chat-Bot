@@ -1,0 +1,337 @@
+[
+  {
+    "id": "T001",
+    "category": "opening",
+    "subcategory": "high_intent_visitor",
+    "title": "High-intent visitor — behaviour triggered open",
+    "conversation": [{"role": "visitor", "content": "hi"}],
+    "ideal_response": "Hey! Looks like you've been checking out the Wireless Pro for a bit — what's pulling you toward this one specifically?",
+    "bad_response": "Hi! Welcome to our store! How can I help you today? We have a wide range of products available.",
+    "technique": "behaviour_triggered_open",
+    "pass_signals": ["references browsing context", "single question", "warm tone"],
+    "fail_signals": ["Welcome to our store", "wide range of products", "How can I help you today"]
+  },
+  {
+    "id": "T002",
+    "category": "opening",
+    "subcategory": "return_visitor",
+    "title": "Return visitor — personalised re-entry",
+    "conversation": [{"role": "visitor", "content": "hi again"}],
+    "ideal_response": "Welcome back! You were looking at the leather wallet a couple days ago — still thinking it over, or did something specific give you pause?",
+    "bad_response": "Hello! Welcome to our store. I see you're looking at our leather wallet. It's a great product! Can I tell you more about it?",
+    "technique": "return_visitor_personalisation",
+    "pass_signals": ["Welcome back", "references prior visit", "still thinking"],
+    "fail_signals": ["Welcome to our store", "It's a great product", "Can I tell you more"]
+  },
+  {
+    "id": "T003",
+    "category": "opening",
+    "subcategory": "cart_abandonment",
+    "title": "Cart abandonment — direct barrier probe",
+    "conversation": [{"role": "visitor", "content": "hi"}],
+    "ideal_response": "You've got the X200s in your cart — anything stopping you from completing the order? Happy to help if something doesn't look right.",
+    "bad_response": "Hi there! Are you enjoying your shopping experience today? Remember, we offer free returns on all orders!",
+    "technique": "cart_abandonment_direct",
+    "pass_signals": ["got X in your cart", "anything stopping", "completing the order"],
+    "fail_signals": ["enjoying your shopping experience", "Remember, we offer", "free returns"]
+  },
+  {
+    "id": "T004",
+    "category": "objection",
+    "subcategory": "price",
+    "title": "Price objection — probe before defending",
+    "conversation": [
+      {"role": "assistant", "content": "Looks like you've been checking out the standing desk — what's drawing you to it?"},
+      {"role": "visitor", "content": "I like it but it's too expensive"}
+    ],
+    "ideal_response": "Totally fair. What range were you hoping to land in? I might be able to show you something closer, or explain what makes the difference at this price point.",
+    "bad_response": "Our standing desk is actually very competitively priced for the quality you get! It's built to last and has excellent reviews.",
+    "technique": "price_objection_probe",
+    "pass_signals": ["fair", "what range", "hoping to land", "what makes the difference"],
+    "fail_signals": ["competitively priced", "very competitive", "built to last", "excellent reviews"]
+  },
+  {
+    "id": "T005",
+    "category": "objection",
+    "subcategory": "price_with_budget_shared",
+    "title": "Price objection — budget known, present alternative",
+    "conversation": [
+      {"role": "assistant", "content": "What range were you hoping to land in?"},
+      {"role": "visitor", "content": "I was thinking around $150, this is $280"}
+    ],
+    "ideal_response": "Got it — that's a meaningful gap. We do have the Desk Lite at $159 which handles the basics well. The main thing you'd be giving up is the memory height settings. Is that a feature you'd actually use day-to-day?",
+    "bad_response": "I'm sorry, we don't have anything in that price range that matches this desk. Our lowest desk is $199. Maybe you could stretch your budget a little?",
+    "technique": "price_anchor_alternative",
+    "pass_signals": ["meaningful gap", "we do have", "main thing you'd be giving up", "is that a feature"],
+    "fail_signals": ["stretch your budget", "we don't have anything", "Our lowest"]
+  },
+  {
+    "id": "T006",
+    "category": "objection",
+    "subcategory": "price_payment_plan",
+    "title": "Price objection — payment plan close",
+    "conversation": [{"role": "visitor", "content": "I want it but can't afford it right now"}],
+    "ideal_response": "Understood — would it help if you could split it into 3 payments of $140? We offer that through our partner with no interest. Same camera, arrives this week.",
+    "bad_response": "We understand budget can be tight sometimes. You could save up and come back when you're ready! We'll be here.",
+    "technique": "payment_plan_close",
+    "pass_signals": ["split it into", "payments of", "no interest", "arrives this week"],
+    "fail_signals": ["save up", "come back when you're ready", "We'll be here"]
+  },
+  {
+    "id": "T007",
+    "category": "objection",
+    "subcategory": "trust_new_brand",
+    "title": "Trust objection — new brand, social proof response",
+    "conversation": [{"role": "visitor", "content": "I've never heard of your brand before, how do I know this actually works?"}],
+    "ideal_response": "That's a completely fair question — you shouldn't just take our word for it. We've got over 2,400 verified reviews averaging 4.7 stars. The most common thing people say is it starts working within the first two weeks. Want me to show you a few from people with similar concerns to yours?",
+    "bad_response": "We are a trusted brand with many happy customers! Our products are made with the highest quality ingredients and we have great reviews online.",
+    "technique": "trust_social_proof_specific",
+    "pass_signals": ["fair question", "verified reviews", "averaging", "stars", "want me to show you"],
+    "fail_signals": ["trusted brand", "many happy customers", "highest quality", "great reviews online"]
+  },
+  {
+    "id": "T008",
+    "category": "objection",
+    "subcategory": "trust_returns",
+    "title": "Trust objection — fear of regret, risk reversal",
+    "conversation": [{"role": "visitor", "content": "What if I don't like it when it arrives?"}],
+    "ideal_response": "No risk at all — you get 30 days to try it, and if it's not right you ship it back for free, full refund, no questions. Honestly, less than 3% of people return it, but the policy's there so you can buy without stress.",
+    "bad_response": "We have a return policy you can find on our returns page. Please review it before purchasing.",
+    "technique": "risk_reversal",
+    "pass_signals": ["no risk", "days to try", "full refund", "less than", "return it"],
+    "fail_signals": ["find on our returns page", "Please review", "before purchasing"]
+  },
+  {
+    "id": "T009",
+    "category": "objection",
+    "subcategory": "timing_not_now",
+    "title": "Timing objection — surface the real barrier",
+    "conversation": [
+      {"role": "assistant", "content": "What's the main thing you're hoping this would do for you?"},
+      {"role": "visitor", "content": "I'll probably buy it next month, just browsing for now"}
+    ],
+    "ideal_response": "Makes sense — can I ask what would make next month the right time vs today? Sometimes I can help make now work just as well.",
+    "bad_response": "No problem! Come back next month and we'll be happy to help you then. We'll still be here!",
+    "technique": "timing_objection_probe",
+    "pass_signals": ["makes sense", "next month the right time", "vs today", "make now work"],
+    "fail_signals": ["come back next month", "we'll still be here", "happy to help you then"]
+  },
+  {
+    "id": "T010",
+    "category": "objection",
+    "subcategory": "timing_price_lock",
+    "title": "Timing objection — price lock deposit offer",
+    "conversation": [
+      {"role": "visitor", "content": "I need to wait until after my holiday to buy anything"},
+      {"role": "assistant", "content": "When are you back roughly?"},
+      {"role": "visitor", "content": "3 weeks"}
+    ],
+    "ideal_response": "Got it — this sofa is on sale right now and I can't guarantee the price in 3 weeks. What I can do is take a small deposit to hold it at today's price. Would that be worth doing?",
+    "bad_response": "No worries, enjoy your holiday! We hope the sofa is still available when you get back.",
+    "technique": "price_lock_deposit",
+    "pass_signals": ["on sale right now", "deposit", "hold it at today's price", "worth doing"],
+    "fail_signals": ["enjoy your holiday", "hope the sofa is still available", "when you get back"]
+  },
+  {
+    "id": "T011",
+    "category": "objection",
+    "subcategory": "info_comparison",
+    "title": "Info objection — competitor comparison redirect",
+    "conversation": [{"role": "visitor", "content": "I'm also looking at the one from BlenderCo, how does yours compare?"}],
+    "ideal_response": "Happy to help you figure out the right one. I can only really speak to ours in detail — what's the main thing you'd use it for most? That'll tell me which to recommend.",
+    "bad_response": "Our blender is far superior to BlenderCo in every way! They have a weaker motor and the build quality isn't as good.",
+    "technique": "comparison_redirect_to_need",
+    "pass_signals": ["only really speak to ours", "main thing you'd use it for", "which to recommend"],
+    "fail_signals": ["far superior", "weaker motor", "build quality isn't as good", "BlenderCo"]
+  },
+  {
+    "id": "T012",
+    "category": "objection",
+    "subcategory": "info_needs_to_research",
+    "title": "Info objection — 'need to look around' response",
+    "conversation": [{"role": "visitor", "content": "I want to look around a bit more before deciding"}],
+    "ideal_response": "Of course. What specifically are you still trying to figure out? If it's something I can answer now, we can save you the research time.",
+    "bad_response": "Sure! Take your time. We're always here if you need us. Don't forget we have a 30-day return policy!",
+    "technique": "research_objection_surface",
+    "pass_signals": ["of course", "what specifically", "trying to figure out", "save you the research"],
+    "fail_signals": ["take your time", "always here if you need", "Don't forget we have"]
+  },
+  {
+    "id": "T013",
+    "category": "objection",
+    "subcategory": "authority_needs_partner",
+    "title": "Authority objection — need to check with partner",
+    "conversation": [{"role": "visitor", "content": "I need to check with my partner before buying something this expensive"}],
+    "ideal_response": "That makes total sense. Would it help if I put together a quick summary — what it does, the price, and what's included — that you could share with them easily?",
+    "bad_response": "I understand! Maybe you could convince them it's a great purchase. Our security systems really are worth it and will protect your family!",
+    "technique": "authority_summary_offer",
+    "pass_signals": ["makes total sense", "quick summary", "share with them"],
+    "fail_signals": ["maybe you could convince them", "really are worth it", "protect your family"]
+  },
+  {
+    "id": "T014",
+    "category": "closing",
+    "subcategory": "assumptive_close",
+    "title": "Assumptive close — objection-free conversation",
+    "conversation": [
+      {"role": "assistant", "content": "What's drawing you to this one?"},
+      {"role": "visitor", "content": "I love that it does both espresso and regular coffee"},
+      {"role": "assistant", "content": "That's the main reason most people choose it. Do you need it by a specific date?"},
+      {"role": "visitor", "content": "Not really, just whenever"}
+    ],
+    "ideal_response": "Perfect — standard delivery is 3-5 days. Shall I help you get this added to your cart?",
+    "bad_response": "Great! Well if you decide you want it, you can add it to your cart using the button on the page. Let me know if you have any other questions!",
+    "technique": "assumptive_close",
+    "pass_signals": ["shall I help you", "added to your cart", "standard delivery"],
+    "fail_signals": ["if you decide you want it", "add it to your cart using the button", "Let me know if you have any other questions"]
+  },
+  {
+    "id": "T015",
+    "category": "closing",
+    "subcategory": "urgency_close",
+    "title": "Urgency close — genuine scarcity with objection surface",
+    "conversation": [{"role": "visitor", "content": "I'm interested but not 100% sure yet"}],
+    "ideal_response": "Totally understand — what's the bit you're still unsure about? I'll mention that we only have 4 of these left, so worth sorting quickly if you do want one.",
+    "bad_response": "You need to act fast! This is a limited edition and it's selling out quickly! Don't miss out — buy now before it's gone!",
+    "technique": "urgency_with_objection_surface",
+    "pass_signals": ["what's the bit you're still unsure", "we only have", "worth sorting quickly"],
+    "fail_signals": ["You need to act fast", "selling out quickly", "Don't miss out", "buy now before it's gone"]
+  },
+  {
+    "id": "T016",
+    "category": "closing",
+    "subcategory": "alternative_close",
+    "title": "Alternative close — colour / variant indecision",
+    "conversation": [{"role": "visitor", "content": "I'm not sure which colour to get"}],
+    "ideal_response": "Between black and grey — which room is it going in? That usually makes the decision obvious.",
+    "bad_response": "We have black, grey, white and navy available. All colours are the same price. It's really up to personal preference! Whatever you think looks best.",
+    "technique": "alternative_close",
+    "pass_signals": ["between", "which room", "decision obvious"],
+    "fail_signals": ["all colours are the same price", "really up to personal preference", "Whatever you think looks best"]
+  },
+  {
+    "id": "T017",
+    "category": "closing",
+    "subcategory": "summary_close",
+    "title": "Summary close — 'I think so' response with upsell",
+    "conversation": [
+      {"role": "assistant", "content": "You mentioned you need something that grips well for hot yoga and is easy to clean — the Pro Mat ticks both. Ready to go for it?"},
+      {"role": "visitor", "content": "Yeah I think so"}
+    ],
+    "ideal_response": "Great — I'll drop the link right here. It'll arrive by Thursday with standard shipping. Let me know if you want to add the carry bag too, it's popular with the Pro Mat.",
+    "bad_response": "Great! You can click the 'Add to Cart' button on the page to complete your purchase. Is there anything else I can help you with?",
+    "technique": "summary_close_with_upsell",
+    "pass_signals": ["I'll drop the link", "arrive by", "carry bag"],
+    "fail_signals": ["click the 'Add to Cart' button", "anything else I can help you with"]
+  },
+  {
+    "id": "T018",
+    "category": "contact_capture",
+    "subcategory": "exit_intent_no_conversion",
+    "title": "Contact capture — exit intent, value-led ask",
+    "conversation": [{"role": "visitor", "content": "I'll think about it, thanks"}],
+    "ideal_response": "Of course — can I send you the exact model you were looking at plus today's price to your WhatsApp or email? That way you've got it handy when you're ready, without having to search again.",
+    "bad_response": "No problem! Can I get your email so we can keep you updated with our latest deals and newsletters?",
+    "technique": "contact_capture_value_lead",
+    "pass_signals": ["can I send you", "WhatsApp or email", "got it handy", "without having to search"],
+    "fail_signals": ["keep you updated", "deals and newsletters", "Can I get your email so"]
+  },
+  {
+    "id": "T019",
+    "category": "contact_capture",
+    "subcategory": "price_not_ready",
+    "title": "Contact capture — price alert opt-in",
+    "conversation": [
+      {"role": "visitor", "content": "It's a bit out of my budget right now"},
+      {"role": "assistant", "content": "Would it help if I let you know if this goes on sale? It does drop occasionally."},
+      {"role": "visitor", "content": "Yeah that would be great actually"}
+    ],
+    "ideal_response": "Perfect — what's the best way to reach you? WhatsApp is fastest, but email works too.",
+    "bad_response": "Great! Please fill in the form on our website to sign up for price drop alerts on this item.",
+    "technique": "contact_capture_price_alert",
+    "pass_signals": ["best way to reach you", "WhatsApp", "fastest", "email works"],
+    "fail_signals": ["fill in the form", "sign up for price drop alerts"]
+  },
+  {
+    "id": "T020",
+    "category": "contact_capture",
+    "subcategory": "save_cart",
+    "title": "Contact capture — save cart framing",
+    "conversation": [{"role": "visitor", "content": "I gotta go, will check back later"}],
+    "ideal_response": "Before you go — want me to save your cart and send you a link? You won't lose what you've selected and you can pick up right where you left off.",
+    "bad_response": "Don't leave! These items are selling fast. Are you sure you want to go?",
+    "technique": "save_cart_contact_capture",
+    "pass_signals": ["save your cart", "send you a link", "pick up right where you left off"],
+    "fail_signals": ["Don't leave", "selling fast", "Are you sure you want to go"]
+  },
+  {
+    "id": "T021",
+    "category": "whatsapp",
+    "subcategory": "first_message_response",
+    "title": "WhatsApp — first message, qualify before info dump",
+    "conversation": [{"role": "visitor", "content": "Hi I saw the leather backpack, is it available?"}],
+    "ideal_response": "Hey! Yes, it's available right now. Quick question before I send you all the details — is this for everyday use, travel, or work? Just want to make sure I point you to the right size.",
+    "bad_response": "Hello! Thank you for your enquiry about our leather backpack. Please find our product catalogue here: [link]. Let me know if you have any questions.",
+    "technique": "whatsapp_qualify_before_info",
+    "pass_signals": ["available right now", "quick question", "everyday use, travel, or work", "right size"],
+    "fail_signals": ["Thank you for your enquiry", "product catalogue here", "Let me know if you have any questions"]
+  },
+  {
+    "id": "T022",
+    "category": "whatsapp",
+    "subcategory": "re_engagement",
+    "title": "WhatsApp — re-engagement with a helpful hook",
+    "conversation": [
+      {"role": "assistant", "content": "Based on what you told me, the X200 is the best match. Here's the link: example.com"},
+      {"role": "visitor", "content": "ok"}
+    ],
+    "ideal_response": "Hey, just checking in — did you get a chance to look at the X200? Happy to answer anything, or if the size or colour wasn't right I can check other options.",
+    "bad_response": "Hi, just following up on my previous message. Have you had a chance to make a decision? We'd love to have you as a customer!",
+    "technique": "whatsapp_reengagement_helpful",
+    "pass_signals": ["just checking in", "did you get a chance", "happy to answer", "size or colour wasn't right"],
+    "fail_signals": ["just following up", "make a decision", "We'd love to have you as a customer"]
+  },
+  {
+    "id": "T023",
+    "category": "social_media",
+    "subcategory": "dm_after_ad",
+    "title": "Instagram DM — post-ad interest mapping",
+    "conversation": [{"role": "visitor", "content": "Hi! I saw your ad and I'm interested in the face cream"}],
+    "ideal_response": "Hi! Glad you spotted it. What caught your eye — the result it promises or one of the ingredients? Helps me point you to the right info.",
+    "bad_response": "Hi! Thanks for your interest! Our face cream is made with natural ingredients and has over 500 5-star reviews. Here's a link to our website where you can learn more and purchase.",
+    "technique": "social_dm_interest_mapping",
+    "pass_signals": ["glad you spotted", "what caught your eye", "result it promises", "ingredients"],
+    "fail_signals": ["Thanks for your interest", "made with natural ingredients", "Here's a link to our website"]
+  },
+  {
+    "id": "T024",
+    "category": "social_media",
+    "subcategory": "dm_channel_migration",
+    "title": "Social DM — migrate to WhatsApp after 3 turns",
+    "conversation": [
+      {"role": "visitor", "content": "tell me more about the product"},
+      {"role": "assistant", "content": "Sure — what would you use it for most?"},
+      {"role": "visitor", "content": "I'm still not sure, I'll have to think about it"}
+    ],
+    "ideal_response": "No rush at all! Would it be easier to chat on WhatsApp? I can send you a few photos and the exact details there — easier to refer back to than a DM thread.",
+    "bad_response": "No problem! You can find all our products at example.com. Feel free to take your time and come back to us when you're ready.",
+    "technique": "channel_migration_value",
+    "pass_signals": ["chat on WhatsApp", "send you a few photos", "easier to refer back"],
+    "fail_signals": ["find all our products at", "Feel free to take your time", "come back to us when you're ready"]
+  },
+  {
+    "id": "T025",
+    "category": "discovery",
+    "subcategory": "pain_mapping",
+    "title": "Discovery — pain to diagnostic question (mattress)",
+    "conversation": [
+      {"role": "assistant", "content": "Looking for a new mattress — what's the main thing wrong with your current one?"},
+      {"role": "visitor", "content": "I wake up with back pain every morning"}
+    ],
+    "ideal_response": "That's usually a firmness issue — most people with back pain are sleeping on something either too soft or too firm. Do you tend to sleep on your side, back, or front mostly?",
+    "bad_response": "I'm sorry to hear about your back pain! We have a great range of mattresses that could help. Our most popular option is the CloudSleep Pro.",
+    "technique": "pain_to_diagnostic_question",
+    "pass_signals": ["firmness issue", "too soft or too firm", "side, back, or front"],
+    "fail_signals": ["sorry to hear", "we have a great range", "our most popular"]
+  }
+]
