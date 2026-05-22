@@ -493,11 +493,17 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
 
     # 2. Similarity search — STRICTLY scoped to the session's client.
     # Never fall back to .all() — that would leak content across tenants.
+    # F10 — top-K dropped from 40 to 8. Average chunk is ~200 tokens, so 40
+    # chunks = ~8000 tokens of KB context per request. Production showed
+    # avg prompt at 9500 tokens with KB dominating. 8 chunks is industry
+    # standard for RAG and the LLM rarely needs more than 3-5 to answer.
+    # The 5x extra chunks were padding cost without improving quality.
+    KB_TOP_K = 8
     if session.client_id:
         chunk_qs = DocumentChunk.objects.filter(client_id=session.client_id)
         top_chunks = chunk_qs.annotate(
             distance=CosineDistance('embedding', query_embedding)
-        ).order_by('distance')[:40]
+        ).order_by('distance')[:KB_TOP_K]
     else:
         # No client → no knowledge base. AI will rely solely on the system
         # persona + conversation history. Log so we can detect mis-routing.
