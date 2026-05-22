@@ -54,6 +54,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.save_visitor_meta(data)
             return
 
+        # ── Proactive open trigger (C2) ───────────────────────────────────
+        # Fires ~10s after page load when the visitor has not yet opened the
+        # chat. Backend builds a behavior-aware question and pushes it back;
+        # widget receives source='proactive_open' and auto-opens.
+        if message_type == 'proactive_trigger':
+            await self.handle_proactive_trigger(data)
+            return
+
         message = data.get('message')
         behavior_matrix = data.get('behavior_matrix', {})
         page_visits = data.get('page_visits', [])
@@ -198,6 +206,82 @@ class ChatConsumer(AsyncWebsocketConsumer):
     def update_visitor_timestamp(self, session):
         ChatSession.objects.filter(session_id=session.session_id).update(
             last_visitor_message_at=timezone.now()
+        )
+
+    async def handle_proactive_trigger(self, data):
+        """Fires ~10s after page load. Send a behavior-aware question and
+        auto-open the widget.
+
+        Cooldown guards (C4):
+        - once per session (proactive_open_sent flag in behavioral_context)
+        - skip if any nudge has fired in the last 60s (last_nudge_at)
+        - skip if visitor already sent a message (they don't need a nudge)
+        - respect tenant cta_mode (skip if 'off')
+        """
+        session = await self.get_session(self.client_id, self.session_id)
+
+        # Save the latest behavior frame so the LLM has fresh context
+        behavior_matrix = data.get('behavior_matrix') or {}
+        page_visits = data.get('page_visits') or []
+        if page_visits:
+            await self.save_page_visits(session.session_id, page_visits)
+        if behavior_matrix:
+            await self.save_behavior_matrix(session.session_id, behavior_matrix)
+        session = await self._refresh_session(session.session_id) or session
+
+        if await self._proactive_should_skip(session):
+            return
+
+        # Build a context-aware question via LLM (re-uses _generate_personalised_cta)
+        from chat.views import _generate_personalised_cta
+        client = session.client
+        text = await database_sync_to_async(_generate_personalised_cta)(
+            session, client, 'proactive_open'
+        )
+        if not text:
+            # No browsing context → fall back to brand-aware template
+            brand = (client.name if client else 'us')
+            text = f"👋 Welcome to {brand}! What brings you in today — anything I can point you toward?"
+
+        await self._persist_proactive_message(session, text)
+        await self.send(text_data=json.dumps({
+            'type': 'ai_message',
+            'message': text,
+            'source': 'proactive_open',
+        }))
+
+    @database_sync_to_async
+    def _proactive_should_skip(self, session):
+        if not session or not session.client:
+            return True
+        # Respect tenant cta_mode
+        if getattr(session.client, 'cta_mode', 'ai') == 'off':
+            return True
+        # Already fired this session
+        ctx = session.behavioral_context or {}
+        if ctx.get('proactive_open_sent'):
+            return True
+        # Visitor already chatted — they don't need a nudge
+        if session.message_count and session.message_count > 0:
+            return True
+        # Global 60s nudge cooldown (C4): suppress overlap with other triggers
+        if session.last_nudge_at:
+            from datetime import timedelta
+            if (timezone.now() - session.last_nudge_at) < timedelta(seconds=60):
+                return True
+        return False
+
+    @database_sync_to_async
+    def _persist_proactive_message(self, session, text):
+        """Append the proactive message to history + set sent flag + nudge_at."""
+        history = session.chat_history or []
+        history.append({'role': 'ai', 'message': text, 'source': 'proactive_open'})
+        ctx = session.behavioral_context or {}
+        ctx['proactive_open_sent'] = True
+        ChatSession.objects.filter(session_id=session.session_id).update(
+            chat_history=history,
+            behavioral_context=ctx,
+            last_nudge_at=timezone.now(),
         )
 
     async def _broadcast_session_update(self, session):

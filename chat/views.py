@@ -140,6 +140,12 @@ def _generate_personalised_cta(session, client, trigger_type):
             'high_intent_action': 'they have shown strong intent signals',
             'add_to_cart_help': 'they just added something to cart',
             'rage_click_help': 'they are showing signs of frustration',
+            'proactive_open': 'this is the very first proactive contact — '
+                              'visitor has been browsing ~10 seconds, has not '
+                              'opened chat yet. Open with a warm one-liner '
+                              'referencing what they were looking at and end '
+                              'with a single discovery question (NOT a hard sell). '
+                              'Match the channel: web visitor, brief and friendly.',
         }.get(trigger_type, 'they need a nudge')
 
         discount_hint = (

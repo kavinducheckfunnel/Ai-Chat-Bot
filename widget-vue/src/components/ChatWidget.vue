@@ -290,7 +290,8 @@ function connectWebSocket() {
         playChime()
         // Auto-open widget for trigger-based messages so the visitor sees them
         const AUTO_OPEN_SOURCES = new Set(['afk_nudge', 'fomo', 'exit_intent', 'pricing_hesitation',
-          'add_to_cart_help', 'abandoned_form', 'deep_engagement', 'rage_click_help', 'high_intent_action'])
+          'add_to_cart_help', 'abandoned_form', 'deep_engagement', 'rage_click_help', 'high_intent_action',
+          'proactive_open'])
         if (AUTO_OPEN_SOURCES.has(data.source) && !isOpen.value) {
           isOpen.value = true
           nextTick(() => {
@@ -546,17 +547,60 @@ watchEffect(() => {
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 let _brandingInterval = null
+let _proactiveTimer = null
+
+// C2 — fire one proactive_trigger ~10s after page load if:
+//  - visitor has not opened the widget
+//  - we haven't already fired for this session (sessionStorage flag)
+// Backend applies its own cooldown (C4) — global 60s nudge guard.
+function schedulePromptOpen() {
+  // Once per visitor session — survives multi-page navigation
+  const flagKey = `cf_proactive_${clientId || 'anon'}_${sessionId}`
+  try {
+    if (sessionStorage.getItem(flagKey)) return
+  } catch {}
+  _proactiveTimer = setTimeout(() => {
+    if (isOpen.value) return  // visitor opened it themselves — never proactively poke
+    if (!socket || socket.readyState !== WebSocket.OPEN) return
+    try {
+      const dwellSec = Math.round((Date.now() - pageEnterTs) / 1000)
+      socket.send(JSON.stringify({
+        type: 'proactive_trigger',
+        behavior_matrix: behaviorMatrix,
+        page_visits: pageVisits ? pageVisits.value : [],
+        dwell_seconds: dwellSec,
+        page_url: window.location.href,
+      }))
+      try { sessionStorage.setItem(flagKey, String(Date.now())) } catch {}
+    } catch {}
+  }, 10_000)
+}
+
+function cancelPromptOpen() {
+  if (_proactiveTimer) {
+    clearTimeout(_proactiveTimer)
+    _proactiveTimer = null
+  }
+}
+
+const pageEnterTs = Date.now()
 
 onMounted(() => {
   loadBranding()
   connectWebSocket()
   // Re-poll widget settings every 60 s so admin changes appear without a page reload
   _brandingInterval = setInterval(loadBranding, 60_000)
+  schedulePromptOpen()
 })
+
+// Cancel the proactive open the moment the visitor engages — don't pop on
+// someone who's already opened the widget or sent a message.
+watch(isOpen, (open) => { if (open) cancelPromptOpen() })
 
 onBeforeUnmount(() => {
   disconnectWebSocket()
   if (_brandingInterval) clearInterval(_brandingInterval)
+  cancelPromptOpen()
 })
 </script>
 
