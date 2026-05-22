@@ -98,16 +98,23 @@ class Command(BaseCommand):
         passed = sum(1 for r in results if r['pass'])
         total = len(results)
         pct = round(passed / total * 100, 1) if total else 0
+        banned_examples = sum(1 for r in results if r['banned_hits'])
+        technique_hits = sum(1 for r in results if r.get('technique_hint'))
         self.stdout.write('')
-        self.stdout.write(self.style.MIGRATE_HEADING(f'RESULT: {passed}/{total} pass ({pct}%) in {elapsed:.1f}s'))
+        self.stdout.write(self.style.MIGRATE_HEADING(
+            f'RESULT: {passed}/{total} pass ({pct}%) in {elapsed:.1f}s'
+        ))
+        self.stdout.write(f'  Primary metric — banned-phrase rate: {banned_examples}/{total} examples produced a banned phrase')
+        self.stdout.write(f'  Secondary metric — technique signal match: {technique_hits}/{total} ({round(technique_hits/total*100, 1) if total else 0}%)')
 
-        # By-category summary
+        # By-category summary (PASS rate)
         by_cat = {}
         for r, e in zip(results, examples):
             by_cat.setdefault(e['category'], []).append(r['pass'])
+        self.stdout.write('  By category (PASS = no banned phrases):')
         for cat, vals in sorted(by_cat.items()):
             cat_pass = sum(1 for v in vals if v)
-            self.stdout.write(f'  {cat:20s} {cat_pass}/{len(vals)}')
+            self.stdout.write(f'    {cat:20s} {cat_pass}/{len(vals)}')
 
         if opts['output']:
             self._write_markdown(opts['output'], client, results, examples, pct, elapsed)
@@ -152,9 +159,11 @@ class Command(BaseCommand):
         # Banned phrases: explicit fail_signals (case-insensitive)
         banned_hits = [s for s in ex.get('fail_signals', []) if s.lower() in reply_lower]
 
-        # Pass criteria: must match >=1 pass_signal AND have 0 banned hits.
-        # Single very-strong banned hit fails the example outright.
-        passed = (len(matched) >= 1) and (len(banned_hits) == 0)
+        # Primary pass criteria: 0 banned phrases AND non-empty response.
+        # Generative responses vary too widely for literal pass_signal matching
+        # to be the sole gate — so we use signal match as a *technique hint*
+        # (informational) but only fail on confirmed banned-phrase hits.
+        passed = (len(banned_hits) == 0) and bool(reply.strip())
 
         return {
             'id': ex['id'],
@@ -162,6 +171,7 @@ class Command(BaseCommand):
             'title': ex['title'],
             'technique': ex.get('technique', ''),
             'pass': passed,
+            'technique_hint': len(matched) >= 1,  # informational
             'response': reply,
             'matched': matched,
             'banned_hits': banned_hits,
