@@ -257,7 +257,12 @@ def re_embed_url(self, client_id, url, event_id=None):
         return
 
     try:
-        html = _fetch_url(url)
+        # _fetch_url returns (html, final_url) — must unpack. The old code
+        # was treating the whole tuple as html, which made every sitemap
+        # re-embed fail with "expected string or bytes-like object, got
+        # 'tuple'" downstream in clean_html. That's the 672/24h failure
+        # rate from the original bug report.
+        html, _final_url = _fetch_url(url)
         if not html:
             _close_event(event_id, 'failed', 'Fetch returned empty body', started)
             return
