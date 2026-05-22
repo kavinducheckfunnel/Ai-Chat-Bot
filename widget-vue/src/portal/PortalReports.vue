@@ -47,20 +47,26 @@
     <!-- ═══════════════════════ OVERVIEW TAB ═══════════════════════ -->
     <template v-if="activeTab === 'overview'">
 
-      <!-- Hero metric cards -->
+      <!-- Hero metric cards (locked tiles show upgrade CTA — F8) -->
       <div class="metric-grid" v-if="!loading">
-        <div class="metric-card" v-for="m in heroMetrics" :key="m.key">
+        <div class="metric-card" :class="{ 'metric-locked': m.locked }" v-for="m in heroMetrics" :key="m.key">
           <div class="metric-icon" :class="m.iconClass">
             <component :is="m.icon" />
           </div>
           <div class="metric-body">
-            <div class="metric-value">{{ m.value }}</div>
+            <div class="metric-value">
+              <template v-if="!m.locked">{{ m.value }}</template>
+              <span v-else class="lock-pill">🔒 Upgrade</span>
+            </div>
             <div class="metric-label">{{ m.label }}</div>
           </div>
-          <div class="metric-delta" :class="deltaCls(m.delta, m.invertDelta)">
+          <div class="metric-delta" v-if="!m.locked" :class="deltaCls(m.delta, m.invertDelta)">
             <span>{{ formatDelta(m.delta) }}</span>
             <span class="delta-sub">vs prev period</span>
           </div>
+          <router-link v-else to="/portal/billing" class="metric-upgrade-link">
+            Unlock →
+          </router-link>
         </div>
       </div>
       <div class="metric-grid" v-else>
@@ -532,11 +538,24 @@ const IconUser = { render: () => h('svg', { width: 18, height: 18, fill: 'none',
 const IconBolt = { render: () => h('svg', { width: 18, height: 18, fill: 'none', viewBox: '0 0 24 24' }, [h('path', { d: 'M13 2L3 14h9l-1 8 10-12h-9l1-8z', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })]) }
 const IconLead = { render: () => h('svg', { width: 18, height: 18, fill: 'none', viewBox: '0 0 24 24' }, [h('polyline', { points: '22 12 18 12 15 21 9 3 6 12 2 12', stroke: 'currentColor', 'stroke-width': '2', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })]) }
 
+// F8 — plan-tiered metric gating. The backend returns allowed_metric_keys
+// based on the tenant's plan (Basic=3, Growth=7, Pro=all). Each metric tile
+// checks isLocked(key) to decide whether to render the value or show an
+// upgrade prompt overlay.
+const allowedMetricKeys = computed(() => analytics.value.allowed_metric_keys || [])
+function isLocked(key) {
+  // If the API hasn't told us the allowed list yet (initial load), show
+  // everything to avoid flashing locked tiles.
+  const keys = allowedMetricKeys.value
+  if (!keys.length) return false
+  return !keys.includes(key)
+}
+
 const heroMetrics = computed(() => [
-  { key: 'total_sessions',     label: 'Total chats',       value: val('total_sessions'),     delta: delta('total_sessions'),     icon: IconChat, iconClass: 'ic-indigo',  invertDelta: false },
-  { key: 'unique_visitors',    label: 'Unique visitors',   value: val('unique_visitors'),    delta: delta('unique_visitors'),    icon: IconUser, iconClass: 'ic-green',   invertDelta: false },
-  { key: 'ai_resolution_rate', label: 'AI resolution rate', value: val('ai_resolution_rate') + '%', delta: delta('ai_resolution_rate'), icon: IconBolt, iconClass: 'ic-amber',   invertDelta: false },
-  { key: 'leads_captured',     label: 'Leads captured',    value: val('leads_captured'),     delta: delta('leads_captured'),     icon: IconLead, iconClass: 'ic-purple',  invertDelta: false },
+  { key: 'total_sessions',     label: 'Total chats',       value: val('total_sessions'),     delta: delta('total_sessions'),     icon: IconChat, iconClass: 'ic-indigo',  invertDelta: false, locked: isLocked('total_sessions') },
+  { key: 'unique_visitors',    label: 'Unique visitors',   value: val('unique_visitors'),    delta: delta('unique_visitors'),    icon: IconUser, iconClass: 'ic-green',   invertDelta: false, locked: isLocked('unique_visitors') },
+  { key: 'ai_resolution_rate', label: 'AI resolution rate', value: val('ai_resolution_rate') + '%', delta: delta('ai_resolution_rate'), icon: IconBolt, iconClass: 'ic-amber',   invertDelta: false, locked: isLocked('ai_resolution_rate') },
+  { key: 'leads_captured',     label: 'Leads captured',    value: val('leads_captured'),     delta: delta('leads_captured'),     icon: IconLead, iconClass: 'ic-purple',  invertDelta: false, locked: isLocked('leads_captured') },
 ])
 
 // ── Chats tab ────────────────────────────────────────────────────────────────
@@ -714,6 +733,31 @@ watch(() => props.client, load)
   gap: 14px;
   position: relative;
 }
+.metric-card.metric-locked {
+  opacity: 0.7;
+  background: var(--cf-bg-input);
+}
+.metric-card.metric-locked .metric-icon { opacity: 0.5; }
+.lock-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5b4fc;
+  background: rgba(99,102,241,0.12);
+  border: 1px solid rgba(99,102,241,0.3);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.metric-upgrade-link {
+  position: absolute;
+  bottom: 12px;
+  right: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #a5b4fc;
+  text-decoration: none;
+}
+.metric-upgrade-link:hover { text-decoration: underline; }
 
 .metric-icon {
   width: 38px; height: 38px; border-radius: 10px;

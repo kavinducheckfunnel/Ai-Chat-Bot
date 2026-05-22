@@ -1381,8 +1381,16 @@ def client_analytics(request, client_id):
         if ctx.get('exit_intent_triggered'):
             total_exit_intent += 1
 
+    # F8 — plan-tiered dashboard metrics. The frontend uses
+    # `allowed_metric_keys` to decide which tiles to render vs gate
+    # behind an upgrade CTA. We still return all data — gating is at the
+    # display layer so we can show "you're missing X — upgrade to see it".
+    from users.feature_flags import get_allowed_metric_keys
+    allowed_keys = get_allowed_metric_keys(request.user)
+
     return Response({
         'period': period,
+        'allowed_metric_keys': allowed_keys,
 
         # ── Metrics with period deltas ────────────────────────────────────────
         'total_sessions':        metric_obj(curr['total'], prev['total']),

@@ -54,6 +54,14 @@ class Plan(models.Model):
     max_messages_per_month = models.IntegerField(default=500)   # AI responses; -1 = unlimited
     max_images_per_month = models.IntegerField(default=0)        # image uploads; -1 = unlimited
     max_voice_per_month = models.IntegerField(default=0)         # voice commands; -1 = unlimited
+    max_videos_per_month = models.IntegerField(default=0)        # video uploads; -1 = unlimited
+
+    # Per-unit add-on prices (USD). When tenant exhausts plan quota they can
+    # top up with one-time purchases at these rates. Super-admin editable.
+    addon_price_per_message = models.DecimalField(max_digits=6, decimal_places=4, default=0.005)
+    addon_price_per_image = models.DecimalField(max_digits=6, decimal_places=4, default=0.05)
+    addon_price_per_voice = models.DecimalField(max_digits=6, decimal_places=4, default=0.10)
+    addon_price_per_video = models.DecimalField(max_digits=6, decimal_places=4, default=0.25)
 
     # ── Dashboard & channels ──────────────────────────────────────────────────
     max_dashboard_metrics = models.IntegerField(default=3)       # 3 / 7 / -1 (all)
@@ -254,11 +262,13 @@ class TenantProfile(models.Model):
     messages_this_month = models.IntegerField(default=0)
     images_this_month = models.IntegerField(default=0)
     voice_this_month = models.IntegerField(default=0)
+    videos_this_month = models.IntegerField(default=0)
 
     # ── Add-on top-ups (purchased, consumed first before plan quota) ──────────
     addon_messages = models.IntegerField(default=0)
     addon_images = models.IntegerField(default=0)
     addon_voice = models.IntegerField(default=0)
+    addon_videos = models.IntegerField(default=0)
 
     # ── V2 scaffolding (DB columns only — no business logic yet) ──────────────
     affiliate_code = models.CharField(max_length=50, blank=True, null=True)

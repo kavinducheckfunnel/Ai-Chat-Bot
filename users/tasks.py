@@ -110,10 +110,19 @@ def send_monthly_lead_reports(self):
             created_at__gte=month_ago,
         ).order_by('-heat_score')
 
-        if not leads.exists():
+        # F9 — Email reports for ALL plans (was previously skipping tenants
+        # with zero hot leads, meaning Free/Basic plans + slow months never
+        # got a report). Now we always email; content adapts to whether
+        # there are leads or just a summary.
+        all_sessions = ChatSession.objects.filter(
+            client_id__in=client_ids,
+            created_at__gte=month_ago,
+        )
+        # Skip only if literally no activity at all this month
+        if not all_sessions.exists():
             continue
 
-        # ── Build CSV ────────────────────────────────────────────────────
+        # ── Build CSV (empty if no hot leads, just headers) ──────────────
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow([
@@ -145,39 +154,55 @@ def send_monthly_lead_reports(self):
         total = leads.count()
         converted = leads.filter(kanban_state='CONVERTED').count()
         avg_heat = sum(s.heat_score for s in leads) / total if total else 0
+        total_sessions = all_sessions.count()
+
+        if total > 0:
+            lead_summary = (
+                f'Total hot leads:   {total}\n'
+                f'Converted:         {converted}\n'
+                f'Avg heat score:    {avg_heat:.1f} / 100\n'
+                f'\nFull lead list is attached as a CSV file.'
+            )
+            subject = f'[Checkfunnel] Your {month_label} Lead Report ({total} leads)'
+        else:
+            lead_summary = (
+                f'No hot leads this month — but {total_sessions} visitors\n'
+                f'chatted with your bot. Tip: review the Inbox for warm\n'
+                f'conversations that might convert with a follow-up.'
+            )
+            subject = f'[Checkfunnel] Your {month_label} Activity Summary'
 
         body = f"""Hi {tenant.user.get_full_name() or tenant.user.username},
 
-Here is your Checkfunnel lead report for {month_label}.
+Here is your Checkfunnel report for {month_label}.
 
 Summary
 -------
-Total hot leads:   {total}
-Converted:         {converted}
-Avg heat score:    {avg_heat:.1f} / 100
-Sessions used:     {sessions_used} / {tenant.plan.max_sessions_per_month if tenant.plan else '∞'}
+{lead_summary}
 
-Full lead list is attached as a CSV file.
+Sessions used:     {sessions_used} / {tenant.plan.max_sessions_per_month if tenant.plan and tenant.plan.max_sessions_per_month >= 0 else '∞'}
 
 Log in to view details:
-https://app.checkfunnel.ai/admin/
+https://ai.checkfunnels.com/portal/reports
 
 — The Checkfunnel Team
 """
         try:
             email = EmailMessage(
-                subject=f'[Checkfunnel] Your {month_label} Lead Report ({total} leads)',
+                subject=subject,
                 body=body,
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 to=[tenant.user.email],
             )
-            email.attach(
-                filename=f'checkfunnel_leads_{month_ago.strftime("%Y_%m")}.csv',
-                content=csv_content,
-                mimetype='text/csv',
-            )
+            # Only attach CSV if there are actual leads — empty CSV is noise
+            if total > 0:
+                email.attach(
+                    filename=f'checkfunnel_leads_{month_ago.strftime("%Y_%m")}.csv',
+                    content=csv_content,
+                    mimetype='text/csv',
+                )
             email.send(fail_silently=False)
-            logger.info(f'[send_monthly_lead_reports] Sent to {tenant.user.email} ({total} leads)')
+            logger.info(f'[send_monthly_lead_reports] Sent to {tenant.user.email} ({total} leads, {total_sessions} sessions)')
         except Exception as exc:
             logger.warning(f'[send_monthly_lead_reports] Failed for {tenant.user.email}: {exc}')
 
