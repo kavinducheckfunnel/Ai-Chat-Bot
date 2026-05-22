@@ -458,8 +458,39 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def save_page_visits(self, session_id, page_visits):
-        """Update page_visits on the session (always latest snapshot from widget)."""
-        ChatSession.objects.filter(session_id=session_id).update(page_visits=page_visits)
+        """Merge incoming page_visits with the accumulated server-side list.
+
+        Why merge instead of overwrite: when the visitor navigates across
+        multiple pages with full reloads, the widget tracker resets its
+        in-memory pageVisits to [] each load. Without merging, the LATEST
+        send would clobber earlier pages, making the bot blind to the
+        visitor's journey. Pages 1-2 would be lost the moment page 3
+        sent its snapshot.
+
+        Dedup key: (url, visited_at). Keeps the most-recent 30 entries
+        so the JSON column stays bounded.
+        """
+        if not page_visits:
+            return
+        try:
+            existing = list(ChatSession.objects.filter(session_id=session_id).values_list('page_visits', flat=True))[0] or []
+        except IndexError:
+            return
+        if not isinstance(existing, list):
+            existing = []
+
+        # Dedup by (url, visited_at). Incoming entries replace existing ones
+        # with the same key so we get the latest duration_seconds for each
+        # page (visitor returning to a page → longer dwell).
+        seen = {}
+        for entry in existing + list(page_visits):
+            if not isinstance(entry, dict):
+                continue
+            key = (entry.get('url', ''), entry.get('visited_at', ''))
+            seen[key] = entry
+
+        merged = sorted(seen.values(), key=lambda e: e.get('visited_at', ''))[-30:]
+        ChatSession.objects.filter(session_id=session_id).update(page_visits=merged)
 
     @database_sync_to_async
     def save_behavior_matrix(self, session_id, behavior_matrix):

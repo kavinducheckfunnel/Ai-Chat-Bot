@@ -473,13 +473,23 @@ function sendVisitorMeta(){
 // server generates a context-aware question and pushes it back with
 // source='proactive_open' (in AUTO_OPEN above, so it pops the widget).
 // Once per session — flag in sessionStorage so multi-page nav doesn't re-fire.
+// We send the accumulated page_visits from prior pages PLUS a LIVE snapshot
+// of the current page so the bot sees the visitor's full journey, not just
+// the page they happened to be on when the timer fired.
 setTimeout(function(){
   try{
     var k='cf_proactive_'+C+'_'+sid;
     if(sessionStorage.getItem(k))return;
     if(isOpen)return;
     if(!ws||ws.readyState!==1)return;
-    ws.send(JSON.stringify({type:'proactive_trigger',behavior_matrix:behavior,page_visits:pageVisits,dwell_seconds:behavior.timeOnSite,page_url:location.href}));
+    var livePage={
+      url: location.pathname,
+      title: document.title || location.pathname,
+      duration_seconds: Math.round((Date.now()-startTime)/1000),
+      visited_at: new Date(startTime).toISOString()
+    };
+    var combined=(Array.isArray(pageVisits)?pageVisits.slice():[]).concat([livePage]);
+    ws.send(JSON.stringify({type:'proactive_trigger',behavior_matrix:behavior,page_visits:combined,dwell_seconds:behavior.timeOnSite,page_url:location.href}));
     sessionStorage.setItem(k,String(Date.now()));
   }catch(_){}
 },10000);

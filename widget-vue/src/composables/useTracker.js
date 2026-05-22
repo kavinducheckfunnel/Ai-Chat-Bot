@@ -127,8 +127,24 @@ export function useTracker() {
     is_returning: checkReturning(),
   });
 
-  // Detailed page visit log with durations
-  const pageVisits = ref([]);
+  // Detailed page visit log with durations. Persisted to sessionStorage
+  // so the list accumulates across full page reloads within the same
+  // browser session — otherwise navigating between pages would reset it
+  // and the bot would only see the last page when a trigger fires.
+  const PV_STORAGE_KEY = `cf_pv_${sessionId}`;
+  const _loadPersistedPageVisits = () => {
+    try {
+      const raw = sessionStorage.getItem(PV_STORAGE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr.slice(-30) : [];
+    } catch { return []; }
+  };
+  const _persistPageVisits = () => {
+    try {
+      sessionStorage.setItem(PV_STORAGE_KEY, JSON.stringify(pageVisits.value.slice(-30)));
+    } catch {}
+  };
+  const pageVisits = ref(_loadPersistedPageVisits());
   let currentPageEntry = null;
 
   let startTime = Date.now();
@@ -185,6 +201,7 @@ export function useTracker() {
       duration_seconds: duration,
       visited_at: new Date(currentPageEntry.enteredAt).toISOString(),
     });
+    _persistPageVisits();
     currentPageEntry = null;
   };
 

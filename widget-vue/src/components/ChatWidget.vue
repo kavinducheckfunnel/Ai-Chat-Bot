@@ -600,10 +600,22 @@ function schedulePromptOpen() {
     if (!socket || socket.readyState !== WebSocket.OPEN) return
     try {
       const dwellSec = Math.round((Date.now() - pageEnterTs) / 1000)
+      // Include a LIVE snapshot of the current page even though it hasn't
+      // been finalized — finalizeCurrentPage() only runs on unload, but
+      // the visitor's CURRENT dwell is exactly the signal we want the
+      // bot to reference. Combined with the persisted earlier pages this
+      // gives the bot the full journey.
+      const accumulated = pageVisits ? pageVisits.value.slice() : []
+      const livePage = {
+        url: window.location.href,
+        title: document.title || '',
+        duration_seconds: dwellSec,
+        visited_at: new Date(pageEnterTs).toISOString(),
+      }
       socket.send(JSON.stringify({
         type: 'proactive_trigger',
         behavior_matrix: behaviorMatrix,
-        page_visits: pageVisits ? pageVisits.value : [],
+        page_visits: [...accumulated, livePage],
         dwell_seconds: dwellSec,
         page_url: window.location.href,
       }))
