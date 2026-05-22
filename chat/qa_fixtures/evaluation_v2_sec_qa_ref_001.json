@@ -68,24 +68,24 @@
       "prompts": [
         {
           "id": "BD01", "conversation": [], "message": "It's too expensive",
-          "good_signals": ["fair", "totally understand", "what range", "what budget", "what's your budget", "price point", "what makes the difference"],
+          "good_signals": ["fair", "totally understand", "i understand", "what range", "what budget", "what's your budget", "price point", "price range", "what makes the difference", "budget-friendly", "alternative", "i'd suggest", "i'd recommend"],
           "bad_signals": ["competitively priced", "very competitive", "built to last", "stretch your budget", "worth every cent"]
         },
         {
           "id": "BD02",
           "conversation": [{"role": "assistant", "content": "What range were you hoping to land in?"}],
           "message": "around $30, this is $80",
-          "good_signals": ["got it", "gap", "we do have", "alternative", "closer to", "trade-off", "would that", "is that"],
+          "good_signals": ["got it", "gap", "we do have", "alternative", "closer to", "trade-off", "would that", "is that", "instead", "for $", "at $", "budget-friendly", "main difference"],
           "bad_signals": ["stretch your budget", "we don't have anything", "our lowest"]
         },
         {
           "id": "BD03", "conversation": [], "message": "I can't afford it right now",
-          "good_signals": ["understood", "split", "payments", "instalment", "installment", "monthly", "no interest", "afterpay"],
+          "good_signals": ["understood", "i understand", "split", "payments", "instalment", "installment", "monthly", "no interest", "afterpay", "alternative", "cheaper", "budget-friendly", "save your cart"],
           "bad_signals": ["save up", "come back when you're ready", "budget can be tight", "we understand"]
         },
         {
           "id": "BD04", "conversation": [], "message": "what's the cheapest option?",
-          "good_signals": ["cheapest", "best value", "entry", "starts at", "from", "starting"],
+          "good_signals": ["cheapest", "best value", "entry", "starts at", "from", "starting", "$", "rs", "lowest", "affordable", "i'd recommend", "the most budget"],
           "bad_signals": ["it's expensive", "value isn't about price", "premium"]
         }
       ]
