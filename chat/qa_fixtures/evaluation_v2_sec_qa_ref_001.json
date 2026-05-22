@@ -1,0 +1,282 @@
+{
+  "rubric_ref": "SEC-QA-REF-001",
+  "description": "9-area sales-enablement scoring rubric. 4 prompts per area. Each prompt scored 0-10 by signal matching.",
+  "areas": [
+    {
+      "key": "product_knowledge",
+      "label": "Product Knowledge",
+      "previous_score": "8/10",
+      "description": "Bot knows the catalog, names products from KB, no fabrication",
+      "prompts": [
+        {
+          "id": "PK01", "conversation": [], "message": "What kind of products do you sell?",
+          "good_signals": ["clothing", "accessor", "music", "decor", "browse", "category", "categories"],
+          "bad_signals": ["i don't know", "check our website", "not sure what", "as an ai"]
+        },
+        {
+          "id": "PK02", "conversation": [], "message": "Do you have hoodies?",
+          "good_signals": ["yes", "hoodie", "we have", "in stock", "available"],
+          "bad_signals": ["i'm not sure", "i can't see", "check the website", "as an ai"]
+        },
+        {
+          "id": "PK03", "conversation": [], "message": "Tell me about your t-shirts",
+          "good_signals": ["t-shirt", "tee", "available", "we have", "design", "size", "fit"],
+          "bad_signals": ["as an ai language model", "i don't have access"]
+        },
+        {
+          "id": "PK04", "conversation": [], "message": "What's your bestseller?",
+          "good_signals": ["popular", "best", "recommend", "most"],
+          "bad_signals": ["i can't determine", "i don't have data", "no information"]
+        }
+      ]
+    },
+    {
+      "key": "product_recommendation",
+      "label": "Product Recommendation",
+      "previous_score": "7/10",
+      "description": "Picks ONE primary product with reason, ends with decision-ready question",
+      "prompts": [
+        {
+          "id": "PR01", "conversation": [], "message": "Can you recommend a good hoodie?",
+          "good_signals": ["i'd recommend", "best pick", "recommend the", "i suggest", "want me to", "ready to", "would you"],
+          "bad_signals": ["we have several great options", "we have a couple of", "we offer several", "here are some options"]
+        },
+        {
+          "id": "PR02", "conversation": [], "message": "I'm looking for something for daily use",
+          "good_signals": ["i'd recommend", "best pick", "recommend", "for daily", "everyday", "casual", "would you", "want me to"],
+          "bad_signals": ["we have several", "here are some options", "we offer many"]
+        },
+        {
+          "id": "PR03",
+          "conversation": [{"role": "visitor", "content": "i love that it does both espresso and regular"}],
+          "message": "what would you recommend?",
+          "good_signals": ["recommend", "best pick", "would suit", "i'd suggest", "want me to"],
+          "bad_signals": ["here are some options", "we have several", "many to choose from"]
+        },
+        {
+          "id": "PR04", "conversation": [], "message": "what's good here?",
+          "good_signals": ["clothing", "accessor", "shopping for", "looking for", "what brings", "what are you"],
+          "bad_signals": ["what's your question", "what would you like to know", "how can i help you today"]
+        }
+      ]
+    },
+    {
+      "key": "budget_understanding",
+      "label": "Budget Understanding",
+      "previous_score": "8/10",
+      "description": "Detects budget signals, validates, presents alternatives. Never says 'stretch your budget'",
+      "prompts": [
+        {
+          "id": "BD01", "conversation": [], "message": "It's too expensive",
+          "good_signals": ["fair", "totally understand", "what range", "what budget", "what's your budget", "price point", "what makes the difference"],
+          "bad_signals": ["competitively priced", "very competitive", "built to last", "stretch your budget", "worth every cent"]
+        },
+        {
+          "id": "BD02",
+          "conversation": [{"role": "assistant", "content": "What range were you hoping to land in?"}],
+          "message": "around $30, this is $80",
+          "good_signals": ["got it", "gap", "we do have", "alternative", "closer to", "trade-off", "would that", "is that"],
+          "bad_signals": ["stretch your budget", "we don't have anything", "our lowest"]
+        },
+        {
+          "id": "BD03", "conversation": [], "message": "I can't afford it right now",
+          "good_signals": ["understood", "split", "payments", "instalment", "installment", "monthly", "no interest", "afterpay"],
+          "bad_signals": ["save up", "come back when you're ready", "budget can be tight", "we understand"]
+        },
+        {
+          "id": "BD04", "conversation": [], "message": "what's the cheapest option?",
+          "good_signals": ["cheapest", "best value", "entry", "starts at", "from", "starting"],
+          "bad_signals": ["it's expensive", "value isn't about price", "premium"]
+        }
+      ]
+    },
+    {
+      "key": "urgency_understanding",
+      "label": "Urgency Understanding",
+      "previous_score": "5/10",
+      "description": "Urgent/today/fast triggers 3-slot capture (size + delivery + phone). NEVER just a checkout link.",
+      "prompts": [
+        {
+          "id": "UR01", "conversation": [], "message": "I need this urgently",
+          "good_signals": ["phone", "delivery", "size", "where", "location", "reach you", "could you share"],
+          "bad_signals": ["please call us", "visit our checkout page", "click add to cart", "add it to your cart"]
+        },
+        {
+          "id": "UR02", "conversation": [], "message": "Can I get it today?",
+          "good_signals": ["today", "same day", "phone", "delivery area", "where", "location", "could you share"],
+          "bad_signals": ["check our delivery page", "call us to confirm", "delivery information is on our"]
+        },
+        {
+          "id": "UR03", "conversation": [], "message": "How fast can you deliver?",
+          "good_signals": ["where", "location", "shipping to", "delivery area", "depends on", "exact", "could you share"],
+          "bad_signals": ["please call", "delivery times are on our website", "i don't have delivery", "phone us to find out"]
+        },
+        {
+          "id": "UR04", "conversation": [], "message": "I need this ASAP",
+          "good_signals": ["phone", "delivery", "where", "location", "fastest", "process this", "could you share"],
+          "bad_signals": ["please visit", "call our team", "click add to cart"]
+        }
+      ]
+    },
+    {
+      "key": "sales_qualification",
+      "label": "Sales Qualification",
+      "previous_score": "3.5/10",
+      "description": "Always ends with ONE qualifying question (not two). Asks the right slot.",
+      "prompts": [
+        {
+          "id": "SQ01", "conversation": [], "message": "Hi I'm just browsing",
+          "good_signals": ["whatsapp", "email", "save", "send you", "top picks", "price alert", "want me to ping"],
+          "bad_signals": ["sign up for our newsletter", "come back when you're ready", "we'll be here", "take your time"]
+        },
+        {
+          "id": "SQ02", "conversation": [], "message": "I'm just looking around",
+          "good_signals": ["who is this for", "what brings you", "shopping for", "looking for", "type of", "category", "use case"],
+          "bad_signals": ["enjoy browsing", "take your time", "let us know if you need", "happy browsing"]
+        },
+        {
+          "id": "SQ03", "conversation": [], "message": "show me everything",
+          "good_signals": ["clothing", "accessor", "category", "narrow", "looking for", "what type", "shopping for"],
+          "bad_signals": ["here is our full catalog", "visit our shop page", "browse our site"]
+        },
+        {
+          "id": "SQ04",
+          "conversation": [{"role": "visitor", "content": "i need a hoodie"}, {"role": "assistant", "content": "Got it — any preference on style?"}],
+          "message": "actually i'm not sure what i want",
+          "good_signals": ["main thing", "use it for", "style", "daily", "occasion", "what matters", "decide between"],
+          "bad_signals": ["no problem, take your time", "come back when ready"]
+        }
+      ]
+    },
+    {
+      "key": "lead_capture",
+      "label": "Lead Capture",
+      "previous_score": "5/10",
+      "description": "Value-led capture; confirms saved lead; uses WhatsApp/email channel choice",
+      "prompts": [
+        {
+          "id": "LC01", "conversation": [], "message": "I'll think about it, thanks",
+          "good_signals": ["can i send", "save", "ping you", "whatsapp", "email", "without searching", "for when you're ready"],
+          "bad_signals": ["deals and newsletters", "sign up for our newsletter", "happy browsing", "come back any time"]
+        },
+        {
+          "id": "LC02", "conversation": [], "message": "contact me about this order",
+          "good_signals": ["phone", "best way to reach", "whatsapp", "email", "what name", "share your", "your number"],
+          "bad_signals": ["please visit our contact page", "call us at", "fill in the form on our website"]
+        },
+        {
+          "id": "LC03",
+          "conversation": [
+            {"role": "visitor", "content": "i want to buy a hoodie"},
+            {"role": "assistant", "content": "Great — what size and delivery area?"},
+            {"role": "visitor", "content": "size M, dehiwala, 0771234567"}
+          ],
+          "message": "what now?",
+          "good_signals": ["marked", "priority", "team will", "reach", "within", "got it", "i've"],
+          "bad_signals": ["please call us", "visit our checkout", "no order yet"]
+        },
+        {
+          "id": "LC04", "conversation": [], "message": "I want to leave",
+          "good_signals": ["save your cart", "send you", "before you go", "pick up where you left off", "for when"],
+          "bad_signals": ["don't leave", "selling fast", "are you sure", "wait"]
+        }
+      ]
+    },
+    {
+      "key": "hot_lead_handling",
+      "label": "Hot Lead Handling",
+      "previous_score": "4.5/10",
+      "description": "Buying-intent triggers 3-slot capture (size + delivery + phone) in ONE sentence. Confirms lead saved.",
+      "prompts": [
+        {
+          "id": "HL01", "conversation": [], "message": "I want to buy this now",
+          "good_signals": ["size", "delivery", "phone", "reach you", "lock", "could you share", "best phone"],
+          "bad_signals": ["click add to cart", "visit the product page", "use the checkout button"]
+        },
+        {
+          "id": "HL02", "conversation": [], "message": "place my order",
+          "good_signals": ["size", "delivery", "phone", "could you share", "process this", "i'll get"],
+          "bad_signals": ["go to checkout", "click add to cart", "visit the cart page"]
+        },
+        {
+          "id": "HL03", "conversation": [], "message": "I'm ready to buy today",
+          "good_signals": ["size", "delivery", "phone", "today", "process", "could you share", "best phone"],
+          "bad_signals": ["please call us", "visit our checkout page", "use add to cart"]
+        },
+        {
+          "id": "HL04", "conversation": [], "message": "how do I add this to my cart?",
+          "good_signals": ["process this", "could you share", "delivery", "size", "phone", "i'll get", "marked"],
+          "bad_signals": ["click the add to cart button", "go to the product page", "use the cart icon", "press the add"]
+        }
+      ]
+    },
+    {
+      "key": "behavior_triggers",
+      "label": "Behavior-Based Triggers",
+      "previous_score": "3/10",
+      "description": "Triggers reference what the visitor was DOING, not generic 'still there?' filler",
+      "prompts": [
+        {
+          "id": "BT01",
+          "conversation": [{"role": "assistant", "content": "You were checking out the Hoodie with Zipper for a bit"}],
+          "message": "yeah",
+          "good_signals": ["hoodie with zipper", "what's pulling", "what's drawing", "want to know", "size", "color"],
+          "bad_signals": ["still there", "just checking in", "anything else", "how can i help"]
+        },
+        {
+          "id": "BT02",
+          "conversation": [{"role": "assistant", "content": "I noticed you've viewed a few different hoodies"}],
+          "message": "yes",
+          "good_signals": ["comparing", "decide between", "main thing", "narrow down", "decision"],
+          "bad_signals": ["still there", "any questions", "just checking", "let me know if"]
+        },
+        {
+          "id": "BT03",
+          "conversation": [{"role": "assistant", "content": "You've got items in your cart"}],
+          "message": "yes",
+          "good_signals": ["anything stopping", "completing", "ready to checkout", "anything doesn't look right"],
+          "bad_signals": ["just checking in", "still there", "remember we offer", "any questions"]
+        },
+        {
+          "id": "BT04",
+          "conversation": [{"role": "assistant", "content": "Welcome back!"}],
+          "message": "hi",
+          "good_signals": ["last time", "still thinking", "previously", "you were", "again"],
+          "bad_signals": ["welcome to our store", "how can i help you today", "what brings you"]
+        }
+      ]
+    },
+    {
+      "key": "closing_ability",
+      "label": "Closing Ability",
+      "previous_score": "5/10",
+      "description": "Assumptive close moves toward purchase. Doesn't pass responsibility back ('if you decide').",
+      "prompts": [
+        {
+          "id": "CL01",
+          "conversation": [{"role": "assistant", "content": "The Pro Mat ticks both — ready to go for it?"}],
+          "message": "Yeah I think so",
+          "good_signals": ["i'll", "drop the link", "arrive", "delivery", "ship", "lock", "great"],
+          "bad_signals": ["click the add to cart button", "if you decide you want", "any other questions"]
+        },
+        {
+          "id": "CL02", "conversation": [], "message": "OK let's do it",
+          "good_signals": ["size", "delivery", "phone", "i'll", "process", "could you share"],
+          "bad_signals": ["go to the product page", "click add to cart", "use the cart"]
+        },
+        {
+          "id": "CL03", "conversation": [], "message": "I'll take it",
+          "good_signals": ["size", "delivery", "phone", "i'll get", "process this", "could you share"],
+          "bad_signals": ["please visit checkout", "click add to cart", "use the buy button"]
+        },
+        {
+          "id": "CL04",
+          "conversation": [{"role": "assistant", "content": "Want me to add it to your cart?"}],
+          "message": "yes please",
+          "good_signals": ["size", "delivery", "phone", "great", "process", "could you share"],
+          "bad_signals": ["here's how to checkout", "click the button", "visit the product page"]
+        }
+      ]
+    }
+  ]
+}
