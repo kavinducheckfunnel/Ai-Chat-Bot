@@ -650,7 +650,7 @@
         <div class="field" style="grid-column:1/-1">
           <label>Bot Token</label>
           <input class="input" type="password" v-model="intForm.telegram_bot_token" placeholder="123456:ABCdef..." autocomplete="off" />
-          <span class="field-hint">Obtain from @BotFather on Telegram. Set the webhook URL to: <code>{{ telegramWebhookUrl }}</code></span>
+          <span class="field-hint">Get a bot token from <strong>@BotFather</strong> on Telegram. We register the webhook with Telegram automatically when you save.</span>
         </div>
         <div class="field toggle-field" style="grid-column:1/-1">
           <label class="toggle-label">
@@ -659,9 +659,25 @@
             Enable Telegram channel
           </label>
         </div>
+        <div v-if="telegramWebhookInfo" class="field" style="grid-column:1/-1">
+          <div class="tg-status-card" :class="telegramWebhookInfo.healthy ? 'ok' : 'err'">
+            <div class="tg-status-row">
+              <span class="tg-status-dot"></span>
+              <strong>{{ telegramWebhookInfo.healthy ? 'Webhook active' : 'Webhook problem' }}</strong>
+            </div>
+            <div v-if="telegramWebhookInfo.url" class="tg-status-detail">URL: <code>{{ telegramWebhookInfo.url }}</code></div>
+            <div v-if="telegramWebhookInfo.pending_update_count" class="tg-status-detail">{{ telegramWebhookInfo.pending_update_count }} pending updates</div>
+            <div v-if="telegramWebhookInfo.last_error_message" class="tg-status-error">
+              Telegram reported: {{ telegramWebhookInfo.last_error_message }}
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="save-row">
+      <div class="save-row" style="display:flex;gap:8px;align-items:center">
         <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Telegram settings' }}</button>
+        <button v-if="intForm.telegram_enabled && intForm.telegram_bot_token" class="btn-secondary" @click="testTelegramWebhook" :disabled="telegramTesting">
+          {{ telegramTesting ? 'Testing…' : 'Re-register webhook' }}
+        </button>
       </div>
     </div>
     </div><!-- end gate-wrap -->
@@ -949,6 +965,11 @@ watch(() => props.client, (c) => {
   intForm.value.outbound_webhook_url = c.outbound_webhook_url || ''
   intForm.value.outbound_webhook_events = c.outbound_webhook_events || 'hot_lead,lead_captured,new_session'
   cannedResponses.value = (c.canned_responses || []).map(cr => ({ ...cr }))
+  // After client loads, fetch live Telegram webhook health so the user
+  // sees right away whether Telegram knows where to deliver messages.
+  if (c.telegram_enabled && c.telegram_bot_token) {
+    loadTelegramWebhookStatus()
+  }
 }, { immediate: true })
 
 // ── Canned responses ─────────────────────────────────────────────────────────
@@ -1007,8 +1028,64 @@ async function saveIntegrations() {
     emit('client-updated', updated)
     intSaved.value = true
     setTimeout(() => { intSaved.value = false }, 3000)
+    // If the save touched Telegram, the backend ran setWebhook on Telegram's
+    // API and returned the result. Reflect that in the UI so the user knows
+    // whether their bot is actually wired up.
+    if (updated && updated.telegram_webhook_status) {
+      const s = updated.telegram_webhook_status
+      telegramWebhookInfo.value = {
+        healthy: !!s.ok,
+        url: '',
+        pending_update_count: 0,
+        last_error_message: s.ok ? '' : s.message,
+      }
+      // Then refresh from Telegram itself to get the canonical state
+      if (s.ok) loadTelegramWebhookStatus()
+    }
   } catch {} finally {
     intSaving.value = false
+  }
+}
+
+const telegramWebhookInfo = ref(null)
+const telegramTesting = ref(false)
+
+async function loadTelegramWebhookStatus() {
+  if (!props.client?.id || !intForm.value.telegram_bot_token || !intForm.value.telegram_enabled) {
+    telegramWebhookInfo.value = null
+    return
+  }
+  try {
+    const info = await api.getTelegramWebhookStatus(props.client.id)
+    if (!info?.ok) {
+      telegramWebhookInfo.value = { healthy: false, last_error_message: info?.detail || 'Unknown error' }
+      return
+    }
+    telegramWebhookInfo.value = {
+      healthy: !info.last_error_message,
+      url: info.url || '',
+      pending_update_count: info.pending_update_count || 0,
+      last_error_message: info.last_error_message || '',
+    }
+  } catch (e) {
+    telegramWebhookInfo.value = { healthy: false, last_error_message: e.message || 'Status check failed' }
+  }
+}
+
+async function testTelegramWebhook() {
+  if (!props.client?.id) return
+  telegramTesting.value = true
+  try {
+    const res = await api.reregisterTelegramWebhook(props.client.id)
+    if (res?.ok) {
+      await loadTelegramWebhookStatus()
+    } else {
+      telegramWebhookInfo.value = { healthy: false, last_error_message: res?.message || 'Failed to register' }
+    }
+  } catch (e) {
+    telegramWebhookInfo.value = { healthy: false, last_error_message: e.message || 'Failed to register' }
+  } finally {
+    telegramTesting.value = false
   }
 }
 
@@ -1412,6 +1489,46 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 }
 .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-save:hover:not(:disabled) { opacity: 0.9; }
+
+.btn-secondary {
+  background: var(--cf-bg-ghost);
+  border: 1px solid var(--cf-border-default);
+  color: var(--cf-text-secondary);
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-secondary:hover:not(:disabled) { background: var(--cf-bg-ghost-hover); color: var(--cf-text-primary); }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.tg-status-card {
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  border: 1px solid;
+}
+.tg-status-card.ok {
+  background: rgba(34,197,94,0.06);
+  border-color: rgba(34,197,94,0.25);
+  color: var(--cf-text-primary);
+}
+.tg-status-card.err {
+  background: rgba(239,68,68,0.06);
+  border-color: rgba(239,68,68,0.25);
+  color: var(--cf-text-primary);
+}
+.tg-status-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.tg-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  background: #22c55e;
+}
+.tg-status-card.err .tg-status-dot { background: #ef4444; }
+.tg-status-detail { font-size: 12px; color: var(--cf-text-muted); margin-top: 2px; }
+.tg-status-detail code { font-family: ui-monospace, monospace; font-size: 11px; color: var(--cf-text-secondary); word-break: break-all; }
+.tg-status-error { font-size: 12px; color: #ef4444; margin-top: 4px; }
 
 .save-success { font-size: 13px; color: #22c55e; margin-top: -8px; }
 

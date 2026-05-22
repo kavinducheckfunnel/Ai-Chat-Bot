@@ -359,15 +359,91 @@ def client_detail(request, client_id):
         return Response(ClientSerializer(client).data)
 
     if request.method == 'PATCH':
+        # Snapshot Telegram state BEFORE save so we can detect a transition
+        # and register/deregister the webhook with Telegram's API. Without
+        # this, toggling telegram_enabled in the UI saves the flag locally
+        # but Telegram never knows where to deliver messages.
+        prev_telegram_token = client.telegram_bot_token
+        prev_telegram_enabled = client.telegram_enabled
+
         serializer = ClientSerializer(client, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=400)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=400)
+        serializer.save()
+        client.refresh_from_db()
+
+        telegram_status = None
+        token_changed = (prev_telegram_token != client.telegram_bot_token)
+        enabled_changed = (prev_telegram_enabled != client.telegram_enabled)
+
+        if token_changed or enabled_changed:
+            from chat.views import register_telegram_webhook, delete_telegram_webhook
+            if client.telegram_enabled and client.telegram_bot_token:
+                ok, msg = register_telegram_webhook(client)
+                telegram_status = {'ok': ok, 'message': msg}
+            else:
+                # Disabled or token cleared — best-effort deregister the
+                # old token so Telegram stops sending to a dead endpoint.
+                if prev_telegram_token:
+                    delete_telegram_webhook(prev_telegram_token)
+                telegram_status = {'ok': True, 'message': 'Telegram disabled'}
+
+        response_data = serializer.data
+        if telegram_status is not None:
+            response_data = {**response_data, 'telegram_webhook_status': telegram_status}
+        return Response(response_data)
 
     if request.method == 'DELETE':
         client.delete()
         return Response(status=204)
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def telegram_webhook_status(request, client_id):
+    """Check or re-register the Telegram webhook for diagnostics.
+
+    GET → calls getWebhookInfo on Telegram's API; surfaces last_error_message
+          and last_error_date so the user can see why Telegram is not
+          delivering messages.
+    POST → re-runs setWebhook (idempotent). Useful for a 'Test bot' button.
+    """
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+    if not client.telegram_bot_token:
+        return Response({'ok': False, 'detail': 'No Telegram bot token configured.'}, status=400)
+
+    if request.method == 'POST':
+        from chat.views import register_telegram_webhook
+        ok, msg = register_telegram_webhook(client)
+        return Response({'ok': ok, 'message': msg})
+
+    # GET — query Telegram for current webhook info
+    import requests as http_requests
+    try:
+        resp = http_requests.get(
+            f'https://api.telegram.org/bot{client.telegram_bot_token}/getWebhookInfo',
+            timeout=10,
+        )
+        data = resp.json() if resp.content else {}
+        if not (resp.ok and data.get('ok')):
+            return Response({'ok': False, 'detail': data.get('description') or f'HTTP {resp.status_code}'}, status=502)
+        info = data.get('result', {})
+        return Response({
+            'ok': True,
+            'url': info.get('url'),
+            'has_custom_certificate': info.get('has_custom_certificate'),
+            'pending_update_count': info.get('pending_update_count', 0),
+            'last_error_date': info.get('last_error_date'),
+            'last_error_message': info.get('last_error_message'),
+            'max_connections': info.get('max_connections'),
+        })
+    except Exception as e:
+        logger.exception(f'[telegram_webhook_status] failed for client {client_id}: {e}')
+        return Response({'ok': False, 'detail': str(e)}, status=502)
 
 
 # ─── Sessions ────────────────────────────────────────────────────────────────

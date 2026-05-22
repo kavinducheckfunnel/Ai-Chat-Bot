@@ -704,6 +704,52 @@ def _send_telegram_reply(bot_token, chat_id, text):
         logger.error(f'[telegram_reply] Failed: {e}')
 
 
+def register_telegram_webhook(client):
+    """Register our webhook URL with Telegram for this client's bot.
+
+    Returns (ok: bool, message: str). Logs full detail on failure.
+    Without this call, Telegram has no idea where to deliver messages —
+    so toggling telegram_enabled=True in the UI alone does nothing.
+    """
+    from django.conf import settings as dj_settings
+    if not client.telegram_bot_token:
+        return False, 'No bot token configured'
+
+    backend = (getattr(dj_settings, 'BACKEND_PUBLIC_URL', '') or 'https://ai.checkfunnels.com').rstrip('/')
+    webhook_url = f'{backend}/api/chat/webhooks/telegram/{client.id}/'
+    try:
+        resp = http_requests.post(
+            f'https://api.telegram.org/bot{client.telegram_bot_token}/setWebhook',
+            json={'url': webhook_url, 'allowed_updates': ['message', 'edited_message']},
+            timeout=10,
+        )
+        data = resp.json() if resp.content else {}
+        if resp.ok and data.get('ok'):
+            logger.info(f'[telegram] Webhook registered for client {client.id} → {webhook_url}')
+            return True, 'Webhook registered'
+        err = data.get('description') or f'HTTP {resp.status_code}'
+        logger.error(f'[telegram] Webhook registration FAILED for client {client.id}: {err}')
+        return False, err
+    except Exception as e:
+        logger.exception(f'[telegram] Webhook registration exception for client {client.id}: {e}')
+        return False, str(e)
+
+
+def delete_telegram_webhook(bot_token):
+    """Tell Telegram to stop sending us updates for this bot token."""
+    if not bot_token:
+        return True, 'No bot token'
+    try:
+        resp = http_requests.post(
+            f'https://api.telegram.org/bot{bot_token}/deleteWebhook',
+            timeout=10,
+        )
+        return resp.ok, 'Webhook deleted' if resp.ok else f'HTTP {resp.status_code}'
+    except Exception as e:
+        logger.warning(f'[telegram] Webhook delete failed: {e}')
+        return False, str(e)
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def telegram_webhook(request, client_id):

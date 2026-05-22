@@ -337,6 +337,11 @@ export function useAdminApi() {
       method: 'PATCH', body: JSON.stringify(data),
     }),
 
+    getTelegramWebhookStatus: (clientId) =>
+      apiFetch(`/api/admin/clients/${clientId}/telegram-webhook/`),
+    reregisterTelegramWebhook: (clientId) =>
+      apiFetch(`/api/admin/clients/${clientId}/telegram-webhook/`, { method: 'POST' }),
+
     getPortalSessions: (clientId, params = {}) => {
       const qs = new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))
