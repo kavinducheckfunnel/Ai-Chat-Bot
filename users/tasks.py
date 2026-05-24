@@ -371,3 +371,46 @@ def sync_lead_to_hubspot(self, session_id):
             )
         except Exception as exc:
             logger.warning(f'[sync_lead_to_hubspot] Deal creation failed: {exc}')
+
+
+@shared_task(bind=True, max_retries=2)
+def send_monthly_invoices(self):
+    """Runs on the 1st of every month at 03:00 UTC (after the lead + chat
+    reports). For each active tenant, generates the previous month's
+    invoice (from local plan + add-on data) and emails it.
+
+    Idempotent: generate_invoice is unique_together(tenant, period_start),
+    so re-running this task won't create duplicates. It WILL re-send the
+    email — guard via a sent_at check if you want to suppress re-sends.
+    """
+    from datetime import date
+    from users.models import TenantProfile
+    from users.invoice_service import generate_invoice, email_invoice
+
+    today = date.today()
+    # The invoice covers the PREVIOUS calendar month
+    if today.month == 1:
+        period_year, period_month = today.year - 1, 12
+    else:
+        period_year, period_month = today.year, today.month - 1
+
+    sent = 0
+    failed = 0
+    for tenant in TenantProfile.objects.select_related('plan', 'user').all():
+        if not tenant.user.email:
+            continue
+        try:
+            invoice = generate_invoice(tenant, period_year, period_month, force=False)
+            if invoice.sent_at:
+                continue  # already emailed this period — don't spam
+            ok = email_invoice(invoice)
+            if ok:
+                sent += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logger.exception(f'[send_monthly_invoices] tenant {tenant.id}: {e}')
+            failed += 1
+
+    logger.info(f'[send_monthly_invoices] period {period_year}-{period_month:02d}: sent={sent} failed={failed}')
+    return {'sent': sent, 'failed': failed}

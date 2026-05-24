@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>Invoice {{ invoice.invoice_number }} · {{ company_brand }}</title>
+</head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
+  <tr>
+    <td align="center">
+
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:640px;width:100%;box-shadow:0 4px 24px rgba(15,23,42,0.06);">
+
+        <!-- ── Header band ───────────────────────────────────────────── -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);padding:32px 40px;color:#ffffff;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <div style="font-size:22px;font-weight:700;letter-spacing:-0.4px;">{{ company_brand }}</div>
+                  <div style="font-size:12px;opacity:0.85;margin-top:4px;">AI-Powered Conversion Intelligence</div>
+                </td>
+                <td align="right" style="vertical-align:top;">
+                  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;opacity:0.85;">Invoice</div>
+                  <div style="font-size:18px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:4px;">{{ invoice.invoice_number }}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Billing meta row ──────────────────────────────────────── -->
+        <tr>
+          <td style="padding:28px 40px 8px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="vertical-align:top;width:50%;padding-right:12px;">
+                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Billed To</div>
+                  <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;">{{ tenant_name }}</div>
+                  {% if recipient_email %}<div style="font-size:13px;color:#475569;margin-top:2px;">{{ recipient_email }}</div>{% endif %}
+                </td>
+                <td style="vertical-align:top;width:50%;padding-left:12px;">
+                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Billing Period</div>
+                  <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;">{{ invoice.period_start|date:"F j" }} — {{ invoice.period_end|date:"F j, Y" }}</div>
+                  <div style="font-size:12px;color:#64748b;margin-top:2px;">Plan: {{ invoice.plan_name_at_issue|default:"Free" }}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Line items table ──────────────────────────────────────── -->
+        <tr>
+          <td style="padding:24px 40px 0;">
+            <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Charges</div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th align="left" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;">Description</th>
+                  <th align="right" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;width:60px;">Qty</th>
+                  <th align="right" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;width:100px;">Unit</th>
+                  <th align="right" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;width:100px;">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if line_items %}
+                  {% for item in line_items %}
+                    <tr>
+                      <td style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;line-height:1.4;">{{ item.description }}</td>
+                      <td align="right" style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;">{{ item.quantity }}</td>
+                      <td align="right" style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;">${{ item.unit_price_usd }}</td>
+                      <td align="right" style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;font-weight:600;">${{ item.amount_usd }}</td>
+                    </tr>
+                  {% endfor %}
+                {% else %}
+                  <tr>
+                    <td colspan="4" style="font-size:13px;color:#64748b;padding:18px 0;text-align:center;border-bottom:1px solid #f1f5f9;">No charges this period.</td>
+                  </tr>
+                {% endif %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Totals -->
+        <tr>
+          <td style="padding:8px 40px 0;">
+            <table role="presentation" align="right" cellpadding="0" cellspacing="0" style="margin-top:16px;">
+              <tr>
+                <td style="font-size:13px;color:#64748b;padding:4px 16px 4px 0;">Subtotal</td>
+                <td align="right" style="font-size:13px;color:#0f172a;font-variant-numeric:tabular-nums;min-width:100px;">${{ invoice.subtotal_usd }}</td>
+              </tr>
+              {% if invoice.tax_usd %}
+              <tr>
+                <td style="font-size:13px;color:#64748b;padding:4px 16px 4px 0;">Tax ({{ invoice.tax_percent }}%)</td>
+                <td align="right" style="font-size:13px;color:#0f172a;font-variant-numeric:tabular-nums;">${{ invoice.tax_usd }}</td>
+              </tr>
+              {% endif %}
+              <tr>
+                <td style="font-size:15px;font-weight:600;color:#0f172a;padding:12px 16px 4px 0;border-top:2px solid #0f172a;">Total Due</td>
+                <td align="right" style="font-size:18px;font-weight:700;color:#0f172a;padding-top:12px;border-top:2px solid #0f172a;font-variant-numeric:tabular-nums;">${{ invoice.total_usd }} USD</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Usage summary panel ─────────────────────────────────── -->
+        <tr>
+          <td style="padding:40px 40px 0;">
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;">
+              <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;">Usage This Period</div>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="vertical-align:top;width:50%;padding-right:12px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Total chat sessions</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.sessions_total|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Active conversations</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.sessions_active|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">AI messages handled</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.ai_messages|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Image uploads</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.images|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Voice commands</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.voice|default:0 }}</td></tr>
+                    </table>
+                  </td>
+                  <td style="vertical-align:top;width:50%;padding-left:12px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Leads captured</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#22c55e;font-variant-numeric:tabular-nums;">{{ usage.leads|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Hot leads</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#f59e0b;font-variant-numeric:tabular-nums;">{{ usage.hot_leads|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Converted</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#22c55e;font-variant-numeric:tabular-nums;">{{ usage.converted|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Escalated to team</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.escalated|default:0 }}</td></tr>
+                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Abandoned mid-chat</td>
+                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#64748b;font-variant-numeric:tabular-nums;">{{ usage.abandoned|default:0 }}</td></tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              {% if usage.top_pages %}
+                <div style="border-top:1px solid #e2e8f0;margin-top:14px;padding-top:12px;">
+                  <div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:6px;">Top pages</div>
+                  {% for page in usage.top_pages %}
+                    <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;padding:2px 0;">
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;">{{ page.url }}</span>
+                      <span style="font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ page.views }} views</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+
+        <!-- ── Notes / payment / support -->
+        <tr>
+          <td style="padding:24px 40px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="vertical-align:top;width:60%;padding-right:16px;">
+                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Payment</div>
+                  <div style="font-size:12px;color:#475569;line-height:1.5;">
+                    Your subscription is billed automatically via Stripe on the renewal date of each cycle. Add-on credits in this invoice (if any) were charged at purchase time. There is nothing to do — this document is for your records.
+                  </div>
+                </td>
+                <td style="vertical-align:top;width:40%;padding-left:16px;">
+                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Need Help?</div>
+                  <div style="font-size:12px;color:#475569;line-height:1.5;">
+                    Questions about this invoice? Email <a href="mailto:{{ support_email }}" style="color:#6366f1;text-decoration:none;">{{ support_email }}</a> with the invoice number above and we'll get back within 1 business day.
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- ── Footer -->
+        <tr>
+          <td style="background:#f8fafc;padding:18px 40px;border-top:1px solid #e2e8f0;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td style="font-size:11px;color:#94a3b8;">© {% now "Y" %} {{ company_brand }} · Sales Enablement AI</td>
+                <td align="right" style="font-size:11px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">{{ invoice.invoice_number }}</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+      </table>
+
+      <!-- Page-footer note (outside the card) -->
+      <div style="font-size:11px;color:#94a3b8;margin-top:18px;text-align:center;max-width:640px;line-height:1.5;">
+        This invoice was generated automatically. To download a PDF copy, open this page in a browser and print to PDF (Cmd/Ctrl+P → Save as PDF).
+      </div>
+
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>

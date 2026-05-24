@@ -380,6 +380,16 @@ export function useAdminApi() {
     purchaseAddOn: (kind, quantity) => apiFetch('/api/admin/billing/addons/purchase/', {
       method: 'POST', body: JSON.stringify({ kind, quantity }),
     }),
+    grantAddOnCredits: (tenant_id, kind, quantity, reason) =>
+      apiFetch('/api/admin/billing/addons/grant/', {
+        method: 'POST', body: JSON.stringify({ tenant_id, kind, quantity, reason }),
+      }),
+
+    // Invoices
+    listInvoices: () => apiFetch('/api/admin/billing/invoices/'),
+    sendTestInvoice: (to) => apiFetch('/api/admin/billing/invoices/test-email/', {
+      method: 'POST', body: JSON.stringify({ to: to || '' }),
+    }),
 
     getPublicPlans: () => apiFetch('/api/admin/billing/plans/'),
 

@@ -211,6 +211,13 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'users.tasks.send_monthly_chat_history_report',
         'schedule': crontab(day_of_month='1', hour='2', minute='0'),
     },
+    # Monthly tenant invoice (subscription + add-ons + usage summary):
+    # 1st of every month at 03:00 UTC (after reports). Idempotent — re-runs
+    # won't duplicate; the `sent_at` check stops re-emailing already-sent ones.
+    'monthly-tenant-invoices': {
+        'task': 'users.tasks.send_monthly_invoices',
+        'schedule': crontab(day_of_month='1', hour='3', minute='0'),
+    },
     # FOMO engine: check hot sessions every 10 minutes
     'trigger-fomo-periodic': {
         'task': 'chat.tasks.trigger_fomo_for_hot_sessions',

@@ -301,6 +301,77 @@ class PlanHistory(models.Model):
         return f"{self.tenant} | {self.from_plan} → {self.to_plan}"
 
 
+class Invoice(models.Model):
+    """Monthly tenant invoice — composed from local data, NOT Stripe.
+
+    We render an invoice for every active tenant at month-end with:
+      • subscription line (plan name + period + price)
+      • each AddOnPurchase from the period (one line per purchase)
+      • usage summary (sessions, leads, addons consumed) — informational,
+        not billed (those are already covered by the plan / addon lines)
+      • tax line (configurable per tenant; 0% default)
+      • total
+
+    Invoice number format: CF-{tenant_id:04d}-{year}{month:02d}-{seq:02d}
+    where seq is the ordinal of invoices that month for this tenant
+    (almost always 01 — sequence handles edge cases like manual re-issue).
+    """
+    STATUS_CHOICES = [
+        ('draft',  'Draft'),
+        ('issued', 'Issued'),
+        ('sent',   'Sent (emailed)'),
+        ('paid',   'Paid'),
+        ('void',   'Void'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey('TenantProfile', on_delete=models.CASCADE, related_name='invoices')
+    invoice_number = models.CharField(max_length=32, unique=True)
+
+    # Billing period (inclusive)
+    period_start = models.DateField()
+    period_end = models.DateField()
+
+    # Snapshots at issue time so historical invoices don't change if plan price
+    # is later edited.
+    plan_name_at_issue = models.CharField(max_length=100, blank=True)
+    company_name_at_issue = models.CharField(max_length=255, blank=True)
+    recipient_email_at_issue = models.EmailField(blank=True)
+
+    # Money (all USD; we render with locale where appropriate)
+    subtotal_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    tax_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # 0..100
+    tax_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Line items + usage summary as JSON snapshots — frozen at issue time
+    line_items = models.JSONField(default=list)
+    # Each: { 'description': str, 'quantity': int, 'unit_price_usd': str, 'amount_usd': str }
+    usage_summary = models.JSONField(default=dict)
+    # { 'sessions': int, 'leads': int, 'hot_leads': int, 'ai_messages': int,
+    #   'images': int, 'voice': int, 'videos': int, 'top_pages': [...] }
+
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-period_start', '-created_at']
+        indexes = [
+            models.Index(fields=['tenant', '-period_start']),
+            models.Index(fields=['status', '-created_at']),
+        ]
+        unique_together = [('tenant', 'period_start')]  # one invoice per tenant per period
+
+    def __str__(self):
+        return f'{self.invoice_number} — {self.tenant} (${self.total_usd})'
+
+    @property
+    def is_zero_billed(self):
+        return self.total_usd == 0
+
+
 class AddOnPurchase(models.Model):
     """One-time top-up credits bought outside the subscription quota.
 

@@ -431,6 +431,15 @@ def purchase_addon(request):
     if not plan:
         return Response({'detail': 'No plan assigned. Choose a plan first.'}, status=400)
 
+    # Hard pre-check: if Stripe isn't configured at all on this environment,
+    # surface the real problem instead of "Could not create billing account."
+    if not getattr(settings, 'STRIPE_SECRET_KEY', ''):
+        logger.error('[billing] STRIPE_SECRET_KEY not configured — add-on purchase impossible')
+        return Response({
+            'detail': 'Stripe payments are not configured on this instance yet. Contact support to enable add-on purchases, or request a manual credit grant from your account manager.',
+            'code': 'stripe_not_configured',
+        }, status=503)
+
     unit_price = getattr(plan, ADDON_KIND_TO_PLAN_PRICE_FIELD[kind])
     total_cents = int(round(float(unit_price) * quantity * 100))
     if total_cents < 50:  # Stripe minimum $0.50
@@ -509,6 +518,68 @@ def purchase_addon(request):
     return Response({'url': session['url'], 'purchase_id': purchase.id})
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def grant_addon_credits(request):
+    """SUPER-ADMIN ONLY — manually grant add-on credits to a tenant.
+
+    Used when Stripe payments aren't configured yet, when a tenant needs
+    a courtesy credit, or when an out-of-band payment was received. Creates
+    a 'succeeded' AddOnPurchase row marked notes='manual grant by <admin>'
+    for audit. Increments TenantProfile.addon_<kind> atomically.
+
+    Body: { tenant_id: int, kind: str, quantity: int, reason: str (optional) }
+    """
+    if not request.user.is_superuser:
+        return Response({'detail': 'Super-admin only.'}, status=403)
+
+    from django.utils import timezone
+    from django.db.models import F
+
+    tenant_id = request.data.get('tenant_id')
+    kind = (request.data.get('kind') or '').strip().lower()
+    try:
+        quantity = int(request.data.get('quantity') or 0)
+    except (TypeError, ValueError):
+        return Response({'detail': 'quantity must be an integer'}, status=400)
+    reason = (request.data.get('reason') or 'manual grant').strip()[:240]
+
+    if kind not in ADDON_KIND_TO_PLAN_PRICE_FIELD:
+        return Response({'detail': 'kind must be one of: message, image, voice, video'}, status=400)
+    if quantity < 1 or quantity > 100000:
+        return Response({'detail': 'quantity must be between 1 and 100000'}, status=400)
+
+    try:
+        tenant = TenantProfile.objects.get(pk=int(tenant_id))
+    except (TenantProfile.DoesNotExist, ValueError, TypeError):
+        return Response({'detail': 'Tenant not found'}, status=404)
+
+    unit_price = 0
+    if tenant.plan:
+        unit_price = getattr(tenant.plan, ADDON_KIND_TO_PLAN_PRICE_FIELD[kind], 0) or 0
+
+    purchase = AddOnPurchase.objects.create(
+        tenant=tenant,
+        kind=kind,
+        quantity=quantity,
+        unit_price_usd=unit_price,
+        total_paid_usd=0,                  # manual grant — no money changed hands
+        status='succeeded',
+        completed_at=timezone.now(),
+        notes=f'Manual grant by {request.user.username}: {reason}'[:240],
+    )
+    field = f'addon_{kind}s'
+    TenantProfile.objects.filter(pk=tenant.pk).update(**{field: F(field) + quantity})
+    logger.info(f'[billing] Manual grant by {request.user.username}: tenant {tenant.id} +{quantity} {kind}')
+    return Response({
+        'ok': True,
+        'purchase_id': purchase.id,
+        'tenant_id': tenant.id,
+        'kind': kind,
+        'quantity': quantity,
+    })
+
+
 def _handle_addon_checkout_completed(session):
     """Stripe webhook handler — credit the tenant after Stripe confirms payment.
 
@@ -562,3 +633,96 @@ def _handle_payment_failed(invoice):
         logger.info(f'[billing] Payment failed for subscription {sub_id}')
     except TenantProfile.DoesNotExist:
         pass
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Invoices — list, view (HTML), download (HTML), send test email
+# ──────────────────────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_invoices(request):
+    """Tenant-facing list of their past invoices."""
+    from users.models import Invoice
+    try:
+        tenant = request.user.tenant_profile
+    except TenantProfile.DoesNotExist:
+        return Response([])
+
+    invoices = Invoice.objects.filter(tenant=tenant)[:24]  # 2 years of monthly
+    return Response([
+        {
+            'id':              str(inv.id),
+            'invoice_number':  inv.invoice_number,
+            'period_start':    inv.period_start.isoformat(),
+            'period_end':      inv.period_end.isoformat(),
+            'subtotal_usd':    str(inv.subtotal_usd),
+            'total_usd':       str(inv.total_usd),
+            'status':          inv.status,
+            'created_at':      inv.created_at.isoformat(),
+            'sent_at':         inv.sent_at.isoformat() if inv.sent_at else None,
+            'download_url':    f'/api/admin/billing/invoices/{inv.id}/html/',
+        }
+        for inv in invoices
+    ])
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def view_invoice_html(request, invoice_id):
+    """Return the rendered invoice HTML. Tenant can browser-print to PDF."""
+    from django.http import HttpResponse
+    from users.models import Invoice
+    from users.invoice_service import render_invoice_html
+
+    try:
+        tenant = request.user.tenant_profile
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'No tenant profile.'}, status=403)
+
+    try:
+        invoice = Invoice.objects.get(pk=invoice_id, tenant=tenant)
+    except Invoice.DoesNotExist:
+        return Response({'detail': 'Invoice not found.'}, status=404)
+
+    html = render_invoice_html(invoice)
+    response = HttpResponse(html, content_type='text/html; charset=utf-8')
+    # Set as inline so browsers render it; tenant uses Cmd/Ctrl+P → Save as PDF
+    response['Content-Disposition'] = f'inline; filename="{invoice.invoice_number}.html"'
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def send_test_invoice(request):
+    """Generate (or fetch) the current month's invoice for this tenant and email it.
+
+    Used by the tenant to preview what their monthly invoice email looks like
+    without waiting for the cron. Optional body: { to: '<override email>' }
+    """
+    from users.models import Invoice
+    from users.invoice_service import generate_invoice, email_invoice
+    from datetime import date
+
+    try:
+        tenant = request.user.tenant_profile
+    except TenantProfile.DoesNotExist:
+        return Response({'detail': 'No tenant profile.'}, status=403)
+
+    today = date.today()
+    invoice = generate_invoice(tenant, today.year, today.month, force=True, status='sent')
+
+    override_to = (request.data.get('to') or '').strip() or None
+    ok = email_invoice(invoice, to_email=override_to)
+    if not ok:
+        return Response({
+            'detail': 'Email send failed — check SMTP configuration. Invoice was still generated.',
+            'invoice_id': str(invoice.id),
+        }, status=502)
+
+    return Response({
+        'ok': True,
+        'invoice_id': str(invoice.id),
+        'invoice_number': invoice.invoice_number,
+        'sent_to': override_to or invoice.recipient_email_at_issue,
+    })

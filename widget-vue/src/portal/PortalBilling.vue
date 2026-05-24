@@ -96,6 +96,40 @@
         <p v-if="addonError" class="addon-error">{{ addonError }}</p>
       </div>
 
+      <!-- ── Invoices section ────────────────────────────────────────── -->
+      <div class="invoices-section">
+        <div class="invoices-header">
+          <div>
+            <h3 class="section-heading" style="margin:0">Invoices</h3>
+            <p class="section-sub-mini">Monthly invoices are emailed automatically on the 1st. Download anytime as PDF (Cmd/Ctrl + P → Save as PDF).</p>
+          </div>
+          <button class="btn-test-invoice" @click="sendTestInvoice" :disabled="testInvoiceSending">
+            <span v-if="testInvoiceSending" class="spinner"></span>
+            <span v-else>📧 Send me a test invoice</span>
+          </button>
+        </div>
+        <p v-if="testInvoiceStatus" :class="['test-invoice-msg', testInvoiceOk ? 'ok' : 'err']">{{ testInvoiceStatus }}</p>
+        <div v-if="!invoices.length && !invoicesLoading" class="invoices-empty">
+          No invoices yet. Your first one will be emailed and shown here on the 1st of the next month.
+        </div>
+        <div v-else-if="invoicesLoading" class="invoices-empty">Loading invoices…</div>
+        <div v-else class="invoice-list">
+          <div v-for="inv in invoices" :key="inv.id" class="invoice-row">
+            <div class="invoice-left">
+              <div class="invoice-number">{{ inv.invoice_number }}</div>
+              <div class="invoice-period">{{ formatInvoicePeriod(inv.period_start) }}</div>
+            </div>
+            <div class="invoice-center">
+              <span class="invoice-status" :class="`inv-${inv.status}`">{{ inv.status }}</span>
+              <span class="invoice-total">${{ inv.total_usd }} USD</span>
+            </div>
+            <a class="btn-invoice-view" :href="invoiceUrl(inv)" target="_blank" rel="noopener">
+              View / Download →
+            </a>
+          </div>
+        </div>
+      </div>
+
       <!-- Past due / canceled warning -->
       <div v-if="sub.stripe_subscription_status === 'past_due'" class="alert-banner warn">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="#f59e0b" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="16" x2="12.01" y2="16" stroke="#f59e0b" stroke-width="2" stroke-linecap="round"/></svg>
@@ -264,6 +298,57 @@ async function buyAddOn(kind, quantity) {
   }
 }
 
+// ── Invoices section ────────────────────────────────────────────────────────
+const invoices = ref([])
+const invoicesLoading = ref(false)
+const testInvoiceSending = ref(false)
+const testInvoiceStatus = ref('')
+const testInvoiceOk = ref(false)
+
+async function loadInvoices() {
+  invoicesLoading.value = true
+  try {
+    const list = await api.listInvoices()
+    invoices.value = Array.isArray(list) ? list : []
+  } catch {
+    invoices.value = []
+  } finally {
+    invoicesLoading.value = false
+  }
+}
+
+function invoiceUrl(inv) {
+  // Backend returns a relative download_url like /api/admin/billing/invoices/<uuid>/html/
+  // To make this work in a new tab with auth, we'd need to attach the token; for now,
+  // open the same path via the API base — the user's session cookie carries auth.
+  const base = (typeof window !== 'undefined' && window.location.origin) || ''
+  return base + inv.download_url
+}
+
+function formatInvoicePeriod(iso) {
+  if (!iso) return ''
+  try {
+    const d = new Date(iso)
+    return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  } catch { return iso }
+}
+
+async function sendTestInvoice() {
+  testInvoiceStatus.value = ''
+  testInvoiceSending.value = true
+  try {
+    const res = await api.sendTestInvoice()
+    testInvoiceOk.value = true
+    testInvoiceStatus.value = `Test invoice sent to ${res.sent_to}. Check your inbox (and spam folder).`
+    await loadInvoices()  // refresh list — the generated invoice now appears
+  } catch (e) {
+    testInvoiceOk.value = false
+    testInvoiceStatus.value = e.message || 'Could not send test invoice.'
+  } finally {
+    testInvoiceSending.value = false
+  }
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function annualMonthly(plan) {
@@ -365,8 +450,9 @@ async function load() {
       if (subData.billing_interval) billingInterval.value = subData.billing_interval
     }
     if (Array.isArray(planData)) plans.value = planData
-    // Fetch add-on prices/bundles in the background (don't block the main load)
+    // Fetch add-on prices/bundles + invoices in the background (don't block main load)
     loadAddOns()
+    loadInvoices()
   } catch (e) {
     error.value = e.message || 'Failed to load billing info.'
   } finally {
@@ -537,6 +623,104 @@ async function openPortal() {
 }
 .btn-portal:hover:not(:disabled) { background: rgba(99,102,241,0.2); }
 .btn-portal:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Invoices section */
+.invoices-section {
+  background: var(--cf-bg-surface-raised);
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin: 16px 0 20px;
+}
+.invoices-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.section-sub-mini {
+  font-size: 12px;
+  color: var(--cf-text-muted);
+  margin: 4px 0 0;
+  line-height: 1.5;
+  max-width: 560px;
+}
+.btn-test-invoice {
+  background: rgba(99,102,241,0.1);
+  border: 1px solid rgba(99,102,241,0.3);
+  color: #a5b4fc;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-test-invoice:hover:not(:disabled) { background: rgba(99,102,241,0.18); }
+.btn-test-invoice:disabled { opacity: 0.5; cursor: not-allowed; }
+.test-invoice-msg {
+  font-size: 12px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+.test-invoice-msg.ok { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.25); color: #4ade80; }
+.test-invoice-msg.err { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25); color: #fca5a5; }
+.invoices-empty {
+  font-size: 13px;
+  color: var(--cf-text-muted);
+  text-align: center;
+  padding: 20px 12px;
+  border: 1px dashed var(--cf-border-subtle);
+  border-radius: 10px;
+}
+.invoice-list { display: flex; flex-direction: column; gap: 8px; }
+.invoice-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--cf-bg-input);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.invoice-left { flex: 1; min-width: 0; }
+.invoice-number { font-family: ui-monospace, monospace; font-size: 12px; color: var(--cf-text-secondary); }
+.invoice-period { font-size: 14px; font-weight: 600; color: var(--cf-text-primary); margin-top: 2px; }
+.invoice-center { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.invoice-status {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--cf-bg-ghost);
+  color: var(--cf-text-muted);
+  border: 1px solid var(--cf-border-subtle);
+}
+.invoice-status.inv-sent { background: rgba(34,197,94,0.12); color: #22c55e; border-color: rgba(34,197,94,0.25); }
+.invoice-status.inv-issued { background: rgba(99,102,241,0.12); color: #a5b4fc; border-color: rgba(99,102,241,0.3); }
+.invoice-status.inv-paid { background: rgba(34,197,94,0.18); color: #4ade80; border-color: rgba(34,197,94,0.4); }
+.invoice-status.inv-draft { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.25); }
+.invoice-status.inv-void { background: rgba(239,68,68,0.1); color: #fca5a5; border-color: rgba(239,68,68,0.25); }
+.invoice-total { font-size: 14px; font-weight: 700; color: var(--cf-text-primary); font-variant-numeric: tabular-nums; }
+.btn-invoice-view {
+  font-size: 12px;
+  font-weight: 600;
+  color: #a5b4fc;
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.25);
+  white-space: nowrap;
+}
+.btn-invoice-view:hover { background: rgba(99,102,241,0.18); }
 
 /* Alert banners */
 .alert-banner {

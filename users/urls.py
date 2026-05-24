@@ -70,6 +70,11 @@ urlpatterns = [
     # F7 — Ad-hoc add-on top-ups
     path('billing/addons/', billing_views.list_addon_options, name='billing-addon-options'),
     path('billing/addons/purchase/', billing_views.purchase_addon, name='billing-addon-purchase'),
+    path('billing/addons/grant/', billing_views.grant_addon_credits, name='billing-addon-grant'),
+    # Invoices
+    path('billing/invoices/', billing_views.list_invoices, name='billing-invoices-list'),
+    path('billing/invoices/<uuid:invoice_id>/html/', billing_views.view_invoice_html, name='billing-invoices-view'),
+    path('billing/invoices/test-email/', billing_views.send_test_invoice, name='billing-invoices-test-email'),
 
     # Tenant Management (superadmin only)
     path('tenants/', admin_views.tenant_list, name='admin-tenants'),
