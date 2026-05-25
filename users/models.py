@@ -338,6 +338,13 @@ class Invoice(models.Model):
     company_name_at_issue = models.CharField(max_length=255, blank=True)
     recipient_email_at_issue = models.EmailField(blank=True)
 
+    # Branding snapshot — frozen at issue time. Sourced from the tenant's
+    # first Client (chatbot_logo_url / chatbot_color). Frozen here so
+    # historical invoices keep showing the brand the customer was using
+    # back then, even if they redesign next year.
+    brand_logo_url_at_issue = models.URLField(max_length=500, blank=True, default='')
+    brand_color_at_issue = models.CharField(max_length=20, blank=True, default='')
+
     # Money (all USD; we render with locale where appropriate)
     subtotal_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     tax_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # 0..100

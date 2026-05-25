@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import calendar
 import logging
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -26,6 +27,60 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
+
+
+# Default colour when a tenant has no client / no chosen brand colour.
+# Matches the original Checkfunnel header gradient start point.
+_DEFAULT_BRAND_COLOR = '#6366f1'
+
+# `#RGB`, `#RRGGBB`, or `#RRGGBBAA` — anything else gets discarded so a
+# malformed value never makes it into the rendered CSS gradient.
+_HEX_COLOR_RE = re.compile(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$')
+
+
+def _safe_brand_color(value: str | None) -> str:
+    """Return `value` if it parses as a hex colour, otherwise the default."""
+    candidate = (value or '').strip()
+    if candidate and _HEX_COLOR_RE.match(candidate):
+        return candidate
+    return _DEFAULT_BRAND_COLOR
+
+
+def _lighten_hex(color: str, amount: float = 0.20) -> str:
+    """Move `color` toward white by `amount` (0..1). Used to build the
+    second stop of the header gradient when only one brand colour is set.
+
+    Always returns a valid `#RRGGBB` string — falls back to the default
+    on any parse error.
+    """
+    base = _safe_brand_color(color).lstrip('#')
+    if len(base) == 3:
+        base = ''.join(c * 2 for c in base)
+    elif len(base) == 8:
+        base = base[:6]
+    try:
+        r = int(base[0:2], 16)
+        g = int(base[2:4], 16)
+        b = int(base[4:6], 16)
+    except ValueError:
+        base = _DEFAULT_BRAND_COLOR.lstrip('#')
+        r = int(base[0:2], 16); g = int(base[2:4], 16); b = int(base[4:6], 16)
+
+    amount = max(0.0, min(1.0, amount))
+    r = round(r + (255 - r) * amount)
+    g = round(g + (255 - g) * amount)
+    b = round(b + (255 - b) * amount)
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
+def _primary_client(tenant):
+    """The Client we treat as the tenant's brand source.
+
+    A tenant can have multiple Client rows (one per managed website).
+    Invoice branding pulls from whichever was created first — almost
+    always the only one. Returns None if the tenant has no clients.
+    """
+    return tenant.clients.order_by('id').first() if tenant else None
 
 
 def _period_bounds(year: int, month: int) -> tuple[date, date]:
@@ -175,6 +230,15 @@ def generate_invoice(tenant, year: int, month: int, force: bool = False, status:
     tax = (subtotal * tax_percent / Decimal('100')).quantize(Decimal('0.01'))
     total = (subtotal + tax).quantize(Decimal('0.01'))
 
+    # Snapshot the tenant's first-client branding so historical invoices
+    # don't get rewritten when the customer changes their logo months later.
+    primary = _primary_client(tenant)
+    brand_logo = (getattr(primary, 'chatbot_logo_url', '') or '') if primary else ''
+    # Stored RAW: we render through _safe_brand_color so a junk value
+    # never blows up the CSS gradient, but we keep the original string
+    # for transparency in the DB.
+    brand_color = (getattr(primary, 'chatbot_color', '') or '') if primary else ''
+
     fields = dict(
         tenant=tenant,
         period_start=period_start,
@@ -182,6 +246,8 @@ def generate_invoice(tenant, year: int, month: int, force: bool = False, status:
         plan_name_at_issue=(tenant.plan.name if tenant.plan else ''),
         company_name_at_issue=(tenant.company_name or tenant.user.username),
         recipient_email_at_issue=(tenant.user.email or ''),
+        brand_logo_url_at_issue=brand_logo,
+        brand_color_at_issue=brand_color,
         subtotal_usd=subtotal,
         tax_percent=tax_percent,
         tax_usd=tax,
@@ -209,6 +275,14 @@ def render_invoice_html(invoice) -> str:
     Inline CSS so it survives any email-client rewriting.
     """
     backend_url = getattr(settings, 'BACKEND_PUBLIC_URL', '') or 'https://ai.checkfunnels.com'
+
+    # Build the header gradient from the brand colour stored at issue time.
+    # `_safe_brand_color` gates anything not matching `#RGB`/`#RRGGBB`/`#RRGGBBAA`
+    # so a typo in the tenant's settings can't render an invalid CSS gradient.
+    brand_color = _safe_brand_color(invoice.brand_color_at_issue)
+    brand_color_secondary = _lighten_hex(brand_color, 0.18)
+    brand_logo_url = (invoice.brand_logo_url_at_issue or '').strip()
+
     return render_to_string('billing/invoice.html', {
         'invoice': invoice,
         'line_items': invoice.line_items or [],
@@ -218,6 +292,9 @@ def render_invoice_html(invoice) -> str:
         'backend_url': backend_url,
         'company_brand': 'Checkfunnel',
         'support_email': 'support@checkfunnels.com',
+        'brand_logo_url': brand_logo_url,
+        'brand_color': brand_color,
+        'brand_color_secondary': brand_color_secondary,
     })
 
 

@@ -14,13 +14,30 @@
       <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:640px;width:100%;box-shadow:0 4px 24px rgba(15,23,42,0.06);">
 
         <!-- ── Header band ───────────────────────────────────────────── -->
+        <!-- Uses the tenant's brand colour at issue time (snapshotted on
+             the Invoice). Falls back to Checkfunnel purple when missing.
+             Logo (top-left) renders only if the tenant has one configured. -->
         <tr>
-          <td style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);padding:32px 40px;color:#ffffff;">
+          <td style="background:linear-gradient(135deg,{{ brand_color }} 0%,{{ brand_color_secondary }} 100%);padding:32px 40px;color:#ffffff;">
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
               <tr>
-                <td>
-                  <div style="font-size:22px;font-weight:700;letter-spacing:-0.4px;">{{ company_brand }}</div>
-                  <div style="font-size:12px;opacity:0.85;margin-top:4px;">AI-Powered Conversion Intelligence</div>
+                <td style="vertical-align:middle;">
+                  {% if brand_logo_url %}
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td style="padding-right:14px;vertical-align:middle;">
+                          <img src="{{ brand_logo_url }}" alt="{{ tenant_name }}" height="44" style="display:block;max-height:44px;max-width:160px;width:auto;border:0;border-radius:8px;background:rgba(255,255,255,0.12);padding:4px;" />
+                        </td>
+                        <td style="vertical-align:middle;">
+                          <div style="font-size:20px;font-weight:700;letter-spacing:-0.3px;line-height:1.1;">{{ tenant_name }}</div>
+                          <div style="font-size:11px;opacity:0.85;margin-top:4px;">Invoice from {{ company_brand }}</div>
+                        </td>
+                      </tr>
+                    </table>
+                  {% else %}
+                    <div style="font-size:22px;font-weight:700;letter-spacing:-0.4px;">{{ tenant_name|default:company_brand }}</div>
+                    <div style="font-size:12px;opacity:0.85;margin-top:4px;">Invoice from {{ company_brand }}</div>
+                  {% endif %}
                 </td>
                 <td align="right" style="vertical-align:top;">
                   <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;opacity:0.85;">Invoice</div>
@@ -173,7 +190,7 @@
                 <td style="vertical-align:top;width:40%;padding-left:16px;">
                   <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Need Help?</div>
                   <div style="font-size:12px;color:#475569;line-height:1.5;">
-                    Questions about this invoice? Email <a href="mailto:{{ support_email }}" style="color:#6366f1;text-decoration:none;">{{ support_email }}</a> with the invoice number above and we'll get back within 1 business day.
+                    Questions about this invoice? Email <a href="mailto:{{ support_email }}" style="color:{{ brand_color }};text-decoration:none;">{{ support_email }}</a> with the invoice number above and we'll get back within 1 business day.
                   </div>
                 </td>
               </tr>
