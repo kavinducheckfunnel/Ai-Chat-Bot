@@ -55,11 +55,23 @@ def truncate_chat_history(session, max_active=_MAX_ACTIVE, archive_batch=_ARCHIV
     If session.chat_history exceeds max_active entries, move the oldest
     archive_batch items into chat_history_archive.
 
+    Also shifts `summary_through_index` left by the same amount so the
+    rolling-summary pointer keeps referring to the same logical position
+    in the post-trim history. Without this, the summariser would re-scan
+    already-summarised messages on every subsequent run (or worse, skip
+    new ones because the index pointed past the new end).
+
     Returns the list of update_fields that need to be saved.
     """
     if len(session.chat_history) > max_active:
         overflow = session.chat_history[:archive_batch]
         session.chat_history_archive = (session.chat_history_archive or []) + overflow
         session.chat_history = session.chat_history[archive_batch:]
-        return ['chat_history', 'chat_history_archive']
+        fields = ['chat_history', 'chat_history_archive']
+        if hasattr(session, 'summary_through_index'):
+            session.summary_through_index = max(
+                0, (session.summary_through_index or 0) - archive_batch,
+            )
+            fields.append('summary_through_index')
+        return fields
     return ['chat_history']

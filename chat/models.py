@@ -136,6 +136,18 @@ class ChatSession(models.Model):
     chat_history_archive = models.JSONField(default=list)
     behavioral_context = models.JSONField(default=dict)
 
+    # Rolling LLM-generated recap of conversation turns that have scrolled
+    # past the verbatim window in the prompt (chat.prompts.CHAT_HISTORY_WINDOW).
+    # Re-built incrementally by chat.tasks.summarize_chat_session whenever
+    # `len(chat_history) - summary_through_index >= CHAT_SUMMARY_TRIGGER`.
+    # Empty string for short sessions that never overflow.
+    conversation_summary = models.TextField(blank=True, default='')
+    # How many chat_history entries the current `conversation_summary`
+    # already covers — pointer into the prefix of chat_history. The
+    # summariser only re-reads new messages past this index, so it stays
+    # cheap even on very long sessions.
+    summary_through_index = models.IntegerField(default=0)
+
     lead_email = models.EmailField(null=True, blank=True)
     lead_phone = models.CharField(max_length=50, null=True, blank=True)
 

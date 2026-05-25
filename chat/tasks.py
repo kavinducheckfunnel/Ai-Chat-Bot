@@ -554,3 +554,172 @@ def tag_session_outcomes(batch_size=500):
     if tagged:
         logger.info(f'[tag_session_outcomes] Tagged {sum(tagged.values())} sessions: {dict(tagged)}')
     return tagged
+
+
+# ─── Conversation memory: rolling summarisation ────────────────────────────
+#
+# The verbatim chat history sent to the LLM is capped (see
+# chat.prompts.CHAT_HISTORY_WINDOW / CHAT_HISTORY_HARD_CAP). Anything older
+# would be invisible to the model unless we summarise it. This task does
+# exactly that:
+#
+#   1. Reads chat_history past summary_through_index.
+#   2. Asks a cheap LLM to merge the new turns into the existing summary.
+#   3. Persists the new summary + advances summary_through_index.
+#
+# It's idempotent: re-running on the same session is a no-op when nothing
+# new has accumulated. Errors never propagate — a failed summary just means
+# the next chat reply doesn't get the recap; it never breaks the conversation.
+
+# How many unsummarised messages must accumulate before we kick off a new
+# summary. Env-tunable so we can change cadence without a deploy.
+SUMMARY_TRIGGER_THRESHOLD = int(__import__('os').environ.get('CHAT_SUMMARY_TRIGGER', '10'))
+
+# Hard cap on the summary length stored in the DB and pushed into every
+# subsequent prompt. ~600 words is plenty to remember a 100-turn session
+# while staying well under the token-budget of the prompt's static half.
+SUMMARY_MAX_CHARS = 4000
+
+
+def _format_history_for_summary(messages):
+    """Render a chat_history slice as 'user:'/'ai:' lines for the LLM."""
+    lines = []
+    for m in messages:
+        role = (m.get('role') or '').lower()
+        text = (m.get('message') or '').strip()
+        if not text:
+            continue
+        label = 'visitor' if role == 'user' else 'assistant' if role == 'ai' else role
+        lines.append(f'{label}: {text}')
+    return '\n'.join(lines)
+
+
+def _summarise_with_llm(client, prior_summary, new_history_text):
+    """
+    Call the LLM to merge `prior_summary` + `new_history_text` into a
+    single updated recap. Returns the recap text (already trimmed to
+    SUMMARY_MAX_CHARS) or '' on any error.
+
+    Uses the same _build_llm path as the chat reply so BYOK tenants stay
+    on their own key/cost line and platform tenants hit the platform model.
+    """
+    from chat.ai_service import _build_llm
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    system_prompt = (
+        "You are maintaining a running summary of an e-commerce sales chat. "
+        "Your output replaces the previous summary entirely. Keep it concise "
+        "(under 400 words), in third person, present tense. Capture:\n"
+        "  • What the visitor is looking for (product, use-case, recipient)\n"
+        "  • Any budget, size, variant, urgency, or delivery details they shared\n"
+        "  • Contact info given (email/phone/name)\n"
+        "  • Recommendations the assistant has already made\n"
+        "  • Objections raised and how they were handled\n"
+        "  • Commitments the visitor has confirmed ('yes I want X', 'I'll buy if Y')\n"
+        "Do NOT invent details. Do NOT include greetings or pleasantries. "
+        "Output ONLY the updated summary text — no preamble, no bullet headers, "
+        "no markdown."
+    )
+    user_prompt = (
+        f"PREVIOUS SUMMARY (may be empty for the first run):\n"
+        f"{prior_summary or '(none yet)'}\n\n"
+        f"NEW CONVERSATION TURNS TO MERGE IN:\n"
+        f"{new_history_text}\n\n"
+        f"Write the updated summary now."
+    )
+
+    try:
+        llm, _ = _build_llm(client)
+        result = llm.invoke([
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ])
+        text = (result.content if hasattr(result, 'content') else str(result)).strip()
+        # Strip accidental markdown fences.
+        if text.startswith('```'):
+            text = text.strip('`').strip()
+        if len(text) > SUMMARY_MAX_CHARS:
+            text = text[:SUMMARY_MAX_CHARS].rsplit(' ', 1)[0] + '…'
+        return text
+    except Exception as e:
+        logger.warning(f'[summarise] LLM call failed: {e}')
+        return ''
+
+
+@shared_task(bind=True, max_retries=1)
+def summarize_chat_session(self, session_id):
+    """
+    Incrementally update ChatSession.conversation_summary so the LLM never
+    loses long-tail context. Triggered from chat.ai_service after a reply
+    when the gap between len(chat_history) and summary_through_index has
+    grown past SUMMARY_TRIGGER_THRESHOLD.
+
+    Safe to run repeatedly — it bails when there's nothing new to fold in.
+    """
+    from chat.models import ChatSession
+
+    try:
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return 'no_session'
+
+    history = session.chat_history or []
+    start = session.summary_through_index or 0
+    new_slice = history[start:]
+    if len(new_slice) < SUMMARY_TRIGGER_THRESHOLD:
+        # Nothing meaningful to fold in yet — caller's threshold check is
+        # the primary gate; this is the second-line guard for direct calls.
+        return 'noop'
+
+    new_history_text = _format_history_for_summary(new_slice)
+    if not new_history_text:
+        # All-empty slice (e.g. system-only messages); just advance the
+        # pointer so we don't re-scan it next time.
+        ChatSession.objects.filter(session_id=session_id).update(
+            summary_through_index=len(history),
+        )
+        return 'empty_slice'
+
+    new_summary = _summarise_with_llm(
+        session.client, session.conversation_summary or '', new_history_text,
+    )
+    if not new_summary:
+        # LLM failed — leave the pointer alone so a future retry can fold
+        # the same slice. The conversation continues without a summary
+        # update; the verbatim window still covers the recent turns.
+        return 'llm_failed'
+
+    ChatSession.objects.filter(session_id=session_id).update(
+        conversation_summary=new_summary,
+        summary_through_index=len(history),
+    )
+    logger.info(
+        f'[summarize_chat_session] session={session_id} '
+        f'folded {len(new_slice)} new msgs '
+        f'(through_index {start}→{len(history)}, '
+        f'summary_chars={len(new_summary)})'
+    )
+    return 'updated'
+
+
+def maybe_schedule_summary(session):
+    """
+    Called synchronously from chat.ai_service after each AI reply.
+
+    If the unsummarised tail of chat_history has grown past
+    SUMMARY_TRIGGER_THRESHOLD, queue the Celery summarisation task. The
+    actual LLM call happens out-of-band so the user's reply latency is
+    never affected.
+    """
+    history = session.chat_history or []
+    unsummarised = len(history) - (session.summary_through_index or 0)
+    if unsummarised < SUMMARY_TRIGGER_THRESHOLD:
+        return False
+    try:
+        summarize_chat_session.delay(str(session.session_id))
+        return True
+    except Exception as e:
+        # If the broker is down we just skip — the next reply will try
+        # again. Never let this break the chat path.
+        logger.warning(f'[maybe_schedule_summary] enqueue failed: {e}')
+        return False

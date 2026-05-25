@@ -565,6 +565,7 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         website_domain=client_domain,
         qualification_block=qualification_block,
         faq_blurbs=faq_blurbs,
+        conversation_summary=session.conversation_summary or '',
     )
     system_prompt += (
         '\n\nCRITICAL: You MUST return ONLY a valid raw JSON object matching this schema. '
@@ -689,5 +690,13 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     from .utils import truncate_chat_history
     update_fields = truncate_chat_history(session)
     session.save(update_fields=update_fields)
+
+    # Kick the rolling-summary task if the unsummarised tail is large
+    # enough. Runs out-of-band in Celery — never blocks the reply.
+    try:
+        from .tasks import maybe_schedule_summary
+        maybe_schedule_summary(session)
+    except Exception as e:
+        logger.warning(f'[ai] maybe_schedule_summary failed: {e}')
 
     return result

@@ -1,4 +1,111 @@
 import json
+import os
+import re
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONVERSATION-MEMORY KNOBS
+#
+# Was hard-coded to 6, which made the bot "forget" anything older than ~3
+# exchanges. Bumped to 20 (env-overridable) so the LLM sees the full normal
+# session window verbatim. Phase 2 adds an EARLIER CONVERSATION SUMMARY
+# block for anything older than the verbatim window, and Phase 3 lets us
+# pin slot-bearing older messages (email, budget, urgency, etc.) up to
+# `CHAT_HISTORY_HARD_CAP` so a crucial detail dropped at turn 2 still
+# reaches the LLM at turn 25.
+# ─────────────────────────────────────────────────────────────────────────────
+
+CHAT_HISTORY_WINDOW   = int(os.environ.get('CHAT_HISTORY_WINDOW', '20'))
+CHAT_HISTORY_HARD_CAP = int(os.environ.get('CHAT_HISTORY_HARD_CAP', '25'))
+
+# Regex helpers used by _is_high_signal — kept local to avoid importing
+# `qualification` here (qualification imports from .prompts transitively
+# through chat.ai_service, which would create a cycle).
+_HS_EMAIL_RE = re.compile(r'[\w.+\-]+@[\w\-]+\.[\w.\-]+')
+_HS_PHONE_RE = re.compile(r'(?:\+?\d[\s\-()]?){7,}')
+_HS_MONEY_RE = re.compile(
+    r'[$£€₹¥]\s?\d|\b\d+\s*(?:dollars?|usd|euros?|pounds?|rs\.?|rupees?|gbp|inr)\b',
+    re.IGNORECASE,
+)
+_HS_URGENCY_KEYWORDS = (
+    'urgent', 'urgently', 'asap', 'right away', 'right now', 'immediately',
+    'today', 'tonight', 'tomorrow', 'rush', 'priority', 'time sensitive',
+    'need it now', 'need it today',
+)
+_HS_BUY_PHRASES = (
+    "i'll take it", "i will take it", "i'll buy", "i want to buy",
+    "i'd like to buy", 'place the order', 'place an order',
+    'ready to buy', 'ready to purchase', 'interested in buying',
+    "i'm sold", 'sign me up', 'go ahead',
+)
+_HS_SIZE_RE = re.compile(
+    r'\bsize\s*[:=]?\s*\w+|\b(?:xs|small|medium|large|xl|xxl)\b',
+    re.IGNORECASE,
+)
+
+
+def _is_high_signal(msg):
+    """
+    True when a chat-history entry carries info the bot should not lose
+    just because it scrolled past the verbatim window — explicit contact
+    info, money mention, urgency, buy intent, or a size/variant pick.
+
+    Conservative on purpose: false positives just keep one extra message
+    in context; false negatives drop important detail. Catalogue chatter
+    ("nice", "ok", "thanks") never matches and stays trimmed.
+    """
+    text = (msg or {}).get('message') or ''
+    if not text:
+        return False
+    if _HS_EMAIL_RE.search(text):
+        return True
+    if _HS_PHONE_RE.search(text):
+        return True
+    if _HS_MONEY_RE.search(text):
+        return True
+    if _HS_SIZE_RE.search(text):
+        return True
+    low = text.lower()
+    if any(kw in low for kw in _HS_URGENCY_KEYWORDS):
+        return True
+    if any(p in low for p in _HS_BUY_PHRASES):
+        return True
+    return False
+
+
+def _select_recent_history(chat_history):
+    """
+    Return the slice of `chat_history` to inject verbatim into the prompt.
+
+    • Always include the last `CHAT_HISTORY_WINDOW` messages (default 20).
+    • Plus any older messages flagged by `_is_high_signal` — these get
+      promoted into the window so a buy phrase / email / budget mentioned
+      early in a long session still reaches the model.
+    • Total output is capped at `CHAT_HISTORY_HARD_CAP` (default 25) so a
+      pathological session can't blow up the context window.
+
+    The Phase 2 summary covers everything that doesn't make it into this
+    slice.
+    """
+    if not chat_history:
+        return []
+
+    if len(chat_history) <= CHAT_HISTORY_WINDOW:
+        return list(chat_history)
+
+    recent = list(chat_history[-CHAT_HISTORY_WINDOW:])
+    older  = chat_history[:-CHAT_HISTORY_WINDOW]
+    extra_slots = max(0, CHAT_HISTORY_HARD_CAP - CHAT_HISTORY_WINDOW)
+    if extra_slots == 0 or not older:
+        return recent
+
+    # Find the older-window indices that look high-signal; keep the
+    # newest of them (most likely still relevant) up to extra_slots.
+    high_signal = [(i, m) for i, m in enumerate(older) if _is_high_signal(m)]
+    if not high_signal:
+        return recent
+
+    keepers = [m for _, m in high_signal[-extra_slots:]]
+    return keepers + recent
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SYSTEM PERSONA  (injected into every request)
@@ -431,6 +538,7 @@ def build_prompt(
     website_domain="",
     qualification_block="",
     faq_blurbs=None,
+    conversation_summary="",
 ):
     """
     Build the full system + user prompt pair.
@@ -439,6 +547,10 @@ def build_prompt(
     that tells the LLM what's been qualified (need/budget/urgency/size/contact)
     and what's still missing. This is the single biggest sales-enablement
     upgrade — without it the LLM has no idea what to ASK NEXT.
+
+    conversation_summary: rolling LLM-generated recap of messages that
+    have scrolled out of the verbatim window. Empty for short sessions.
+    Maintained by chat.tasks.summarize_chat_session (Phase 2).
     """
     # Persona is editable via the super-admin prompt editor (resolves
     # through prompt_service with file-constant fallback). State
@@ -460,8 +572,11 @@ def build_prompt(
 
     context_text = "\n\n---\n\n".join(context_blocks) if context_blocks else "No relevant content found."
 
-    # Trim chat history to last 6 exchanges to keep context manageable
-    recent_history = chat_history[-6:] if len(chat_history) > 6 else chat_history
+    # Select the verbatim slice of chat history that goes into the prompt.
+    # See `_select_recent_history` — keeps the last CHAT_HISTORY_WINDOW
+    # messages plus any older slot-bearing turns (contact info, money,
+    # urgency, buy intent), capped at CHAT_HISTORY_HARD_CAP total.
+    recent_history = _select_recent_history(chat_history)
 
     # Render browsing context as readable narrative for natural AI responses
     browsing_block = _format_browsing_context(behavior_matrix)
@@ -520,6 +635,25 @@ PRE-PURCHASE FAQ — answer these inline (RULE M)
 ════════════════════
 {faq_text}"""
 
+    # Earlier-conversation summary — only present once the session has
+    # outgrown the verbatim window (see chat.tasks.summarize_chat_session).
+    # Sits above RECENT CONVERSATION HISTORY so the LLM reads "background"
+    # before "latest turns" — the order most natural for human memory.
+    summary_text = (conversation_summary or '').strip()
+    if summary_text:
+        summary_block_str = (
+            "════════════════════\n"
+            "EARLIER CONVERSATION SUMMARY\n"
+            "(Recap of turns that have scrolled out of the verbatim history "
+            "below. Use it to remember the visitor's earlier statements, "
+            "slots already filled, and commitments already made — never "
+            "re-ask anything captured here.)\n"
+            "════════════════════\n"
+            f"{summary_text}\n\n"
+        )
+    else:
+        summary_block_str = ""
+
     dynamic_system = f"""════════════════════
 QUALIFICATION CHECKLIST
 (What you already know about this visitor vs. what's still missing.
@@ -539,7 +673,7 @@ VISITOR BROWSING CONTEXT
 ════════════════════
 {browsing_block}
 
-════════════════════
+{summary_block_str}════════════════════
 RECENT CONVERSATION HISTORY
 ════════════════════
 {json.dumps(recent_history, indent=2)}
