@@ -103,6 +103,58 @@
           </div>
         </div>
 
+        <!-- ── Brand logo ─────────────────────────────────────────────────
+             Shown top-left on monthly invoice emails and (eventually) the
+             widget header. Two ways to set it: paste a public URL, or
+             upload a PNG/JPEG/GIF/WebP up to 2 MB. -->
+        <div class="field">
+          <label>Brand logo</label>
+          <p class="field-hint">
+            Shown top-left on your monthly invoice. PNG, JPEG, GIF, or WebP — max 2 MB.
+            Either paste a public URL or upload a file.
+          </p>
+          <div class="logo-row">
+            <div class="logo-preview" :class="{ empty: !form.chatbot_logo_url }">
+              <img v-if="form.chatbot_logo_url" :src="form.chatbot_logo_url" alt="Brand logo" />
+              <span v-else>No logo</span>
+            </div>
+            <div class="logo-controls">
+              <input
+                v-model="form.chatbot_logo_url"
+                type="url"
+                class="input"
+                placeholder="https://your-cdn.com/logo.png"
+                @blur="logoError = ''"
+              />
+              <div class="logo-actions">
+                <button
+                  type="button"
+                  class="logo-upload-btn"
+                  :disabled="logoUploading"
+                  @click="triggerLogoUpload"
+                >
+                  <span v-if="logoUploading" class="mini-spinner"></span>
+                  <span v-else>📤 Upload file</span>
+                </button>
+                <button
+                  v-if="form.chatbot_logo_url"
+                  type="button"
+                  class="logo-remove-btn"
+                  @click="clearLogo"
+                >Remove</button>
+              </div>
+              <input
+                ref="logoFileInput"
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                style="display:none"
+                @change="onLogoFileChosen"
+              />
+              <p v-if="logoError" class="cta-error">{{ logoError }}</p>
+            </div>
+          </div>
+        </div>
+
         <div class="field">
           <label>Follow-up CTA</label>
           <p class="field-hint">
@@ -897,6 +949,7 @@ const telegramWebhookUrl = computed(() =>
 const form = ref({
   chatbot_name: '',
   chatbot_color: '#6366F1',
+  chatbot_logo_url: '',
   chatbot_theme: 'dark',
   notification_email: '',
   cta_mode: 'ai',
@@ -908,6 +961,13 @@ const form = ref({
   voice_input_enabled: false,
   image_input_enabled: false,
 })
+
+// Logo upload local state — surfaces inline errors and a "uploading…" spinner
+// while the file is in flight. The Save Changes button still drives chatbot_logo_url
+// for the paste-URL flow; the upload button writes directly via the dedicated endpoint.
+const logoUploading = ref(false)
+const logoError = ref('')
+const logoFileInput = ref(null)
 
 const presetColors = ['#ffffff', '#3B82F6', '#22c55e', '#ef4444', '#6366f1', '#f59e0b']
 
@@ -957,6 +1017,7 @@ watch(() => props.client, (c) => {
   if (!c) return
   form.value.chatbot_name = c.chatbot_name || ''
   form.value.chatbot_color = c.chatbot_color || '#6366F1'
+  form.value.chatbot_logo_url = c.chatbot_logo_url || ''
   form.value.chatbot_theme = c.chatbot_theme || 'dark'
   form.value.notification_email = c.notification_email || ''
   form.value.cta_mode = c.cta_mode || 'ai'
@@ -1131,6 +1192,58 @@ async function saveConfig() {
   } catch {} finally {
     saving.value = false
   }
+}
+
+// ── Logo upload ──────────────────────────────────────────────────────────────
+// Handles the "Upload" button next to the paste-URL field. POSTs the file to
+// the upload endpoint which validates the magic bytes, stores it under
+// MEDIA_ROOT/client_logos/<id>/, persists the URL on the client, and returns
+// the absolute URL. We then mirror it into form.chatbot_logo_url so the
+// preview updates instantly and a subsequent Save Changes is a no-op for
+// the logo field (the URL is already saved server-side).
+function triggerLogoUpload() {
+  logoError.value = ''
+  if (logoFileInput.value) logoFileInput.value.click()
+}
+
+async function onLogoFileChosen(event) {
+  if (!props.client) return
+  const file = event.target.files && event.target.files[0]
+  if (!file) return
+
+  // Client-side guard rails — the backend re-validates, but a fast bounce
+  // here saves a round trip when someone picks a 50 MB photo.
+  const MAX = 2 * 1024 * 1024
+  if (file.size > MAX) {
+    logoError.value = `File too large. Max ${MAX / (1024 * 1024)} MB.`
+    event.target.value = ''
+    return
+  }
+  const okTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
+  if (file.type && !okTypes.includes(file.type)) {
+    logoError.value = 'Use PNG, JPEG, GIF, or WebP.'
+    event.target.value = ''
+    return
+  }
+
+  logoUploading.value = true
+  logoError.value = ''
+  try {
+    const result = await api.uploadClientLogo(props.client.id, file)
+    form.value.chatbot_logo_url = result.logo_url
+    emit('client-updated', { ...props.client, chatbot_logo_url: result.logo_url })
+  } catch (e) {
+    logoError.value = e.message || 'Upload failed.'
+  } finally {
+    logoUploading.value = false
+    // Reset so picking the same file again still fires `change`.
+    event.target.value = ''
+  }
+}
+
+function clearLogo() {
+  form.value.chatbot_logo_url = ''
+  logoError.value = ''
 }
 
 async function triggerScrape() {
@@ -1498,6 +1611,34 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .color-custom { display: flex; align-items: center; gap: 7px; }
 .color-picker { width: 26px; height: 26px; border: none; border-radius: 50%; cursor: pointer; padding: 0; background: none; }
 .color-hex { font-size: 11px; color: var(--cf-text-muted); font-family: monospace; }
+
+/* Brand logo */
+.logo-row { display: flex; gap: 14px; align-items: flex-start; margin-top: 6px; }
+.logo-preview {
+  width: 72px; height: 72px; flex-shrink: 0;
+  border-radius: 10px; border: 1px dashed var(--cf-border-default);
+  background: var(--cf-bg-ghost);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.logo-preview.empty { color: var(--cf-text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+.logo-controls { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.logo-actions { display: flex; gap: 8px; align-items: center; }
+.logo-upload-btn {
+  padding: 7px 14px; border-radius: 8px; border: 1px solid var(--cf-border-default);
+  background: var(--cf-bg-ghost); color: var(--cf-text-default);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background 0.12s;
+}
+.logo-upload-btn:hover:not(:disabled) { background: rgba(99,102,241,0.10); border-color: #6366f1; }
+.logo-upload-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.logo-remove-btn {
+  padding: 7px 12px; border-radius: 8px; border: 1px solid transparent;
+  background: transparent; color: #ef4444; font-size: 12px; cursor: pointer;
+}
+.logo-remove-btn:hover { background: rgba(239,68,68,0.08); }
 
 /* Save */
 .btn-save {

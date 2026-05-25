@@ -192,6 +192,27 @@ export function useAdminApi() {
 
     deleteClient: (id) => apiFetch(`/api/admin/clients/${id}/`, { method: 'DELETE' }),
 
+    // Upload a logo image (PNG/JPEG/GIF/WebP, ≤2 MB). The backend writes
+    // it under MEDIA_ROOT, stores the absolute URL on chatbot_logo_url,
+    // and returns { logo_url }.
+    async uploadClientLogo(id, file) {
+      const form = new FormData()
+      form.append('logo', file)
+      const token = localStorage.getItem('cf_access_token')
+      const res = await fetch(`${API_BASE}/api/admin/clients/${id}/upload-logo/`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        const e = new Error(err.detail || 'Upload failed')
+        e.status = res.status
+        throw e
+      }
+      return res.json()
+    },
+
     getClientSessions(id, params = {}) {
       const qs = new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined && v !== false))

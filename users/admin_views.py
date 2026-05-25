@@ -404,6 +404,106 @@ def client_detail(request, client_id):
         return Response(status=204)
 
 
+# ─── Client logo upload ──────────────────────────────────────────────────────
+#
+# Accepts a multipart image (PNG / JPEG / GIF / WebP), saves it under
+# MEDIA_ROOT/client_logos/<client_id>/, and writes the resulting public
+# URL to client.chatbot_logo_url. SVG is intentionally NOT allowed —
+# SVG can carry <script> and would be served from our own domain.
+#
+# Validation:
+#   • Magic-byte sniff so a renamed .exe doesn't sneak in.
+#   • 2 MB cap — way more than any reasonable logo and small enough
+#     to keep the VPS disk happy.
+#   • Per-client folder + random filename to avoid collisions and to
+#     stop someone enumerating other tenants' logos by guessing names.
+
+_LOGO_MAX_BYTES = 2 * 1024 * 1024  # 2 MB
+
+# (magic_bytes, extension, mime). First match wins.
+_LOGO_SIGNATURES = (
+    (b'\x89PNG\r\n\x1a\n',       'png',  'image/png'),
+    (b'\xff\xd8\xff',             'jpg',  'image/jpeg'),
+    (b'GIF87a',                   'gif',  'image/gif'),
+    (b'GIF89a',                   'gif',  'image/gif'),
+    # WebP files start with RIFF....WEBP — sniff RIFF prefix + WEBP at byte 8.
+    # Handled separately below.
+)
+
+
+def _sniff_image_format(head: bytes) -> tuple[str, str] | None:
+    """Return (extension, mime) for a known image type, or None."""
+    for signature, ext, mime in _LOGO_SIGNATURES:
+        if head.startswith(signature):
+            return ext, mime
+    if len(head) >= 12 and head[0:4] == b'RIFF' and head[8:12] == b'WEBP':
+        return 'webp', 'image/webp'
+    return None
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_client_logo(request, client_id):
+    """
+    Upload a brand logo for `client_id` and persist its public URL on the
+    Client row. Returns {logo_url, chatbot_logo_url} on success.
+
+    Body: multipart/form-data with a single file field `logo`.
+    """
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    upload = request.FILES.get('logo')
+    if upload is None:
+        return Response({'detail': 'No file received under field "logo".'}, status=400)
+
+    if upload.size > _LOGO_MAX_BYTES:
+        return Response(
+            {'detail': f'File too large. Max {_LOGO_MAX_BYTES // (1024 * 1024)} MB.'},
+            status=400,
+        )
+
+    head = upload.read(32)
+    upload.seek(0)
+    sniff = _sniff_image_format(head)
+    if sniff is None:
+        return Response(
+            {'detail': 'Unsupported format. Use PNG, JPEG, GIF, or WebP.'},
+            status=400,
+        )
+    ext, _mime = sniff
+
+    # MEDIA_ROOT/client_logos/<client_id>/<random>.<ext>
+    from django.conf import settings as dj_settings
+    rel_dir = os.path.join('client_logos', str(client.id))
+    abs_dir = os.path.join(dj_settings.MEDIA_ROOT, rel_dir)
+    os.makedirs(abs_dir, exist_ok=True)
+
+    filename = f'{secrets.token_urlsafe(12)}.{ext}'
+    abs_path = os.path.join(abs_dir, filename)
+    with open(abs_path, 'wb') as fh:
+        for chunk in upload.chunks():
+            fh.write(chunk)
+
+    # Build the absolute URL — works for both `/media/...` (prod nginx)
+    # and `/media/...` served by Django in DEBUG.
+    rel_url = f'{dj_settings.MEDIA_URL.rstrip("/")}/{rel_dir}/{filename}'.replace('\\', '/')
+    public_url = request.build_absolute_uri(rel_url)
+
+    # Persist to the Client. Deliberately overwrite — we never want the
+    # invoice / widget to reference a deleted file.
+    client.chatbot_logo_url = public_url
+    client.save(update_fields=['chatbot_logo_url'])
+
+    return Response({
+        'logo_url': public_url,
+        'chatbot_logo_url': public_url,
+    })
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def telegram_webhook_status(request, client_id):

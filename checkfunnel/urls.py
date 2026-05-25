@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
 from . import widget_views, health_views
@@ -16,3 +18,8 @@ urlpatterns = [
     path('api/health/', health_views.health, name='health'),
     path('health/',     health_views.health, name='health-legacy'),
 ]
+
+# In DEBUG, Django serves uploaded media files itself. In production
+# nginx serves /media/ directly from disk — see the deploy notes.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

@@ -149,6 +149,13 @@ STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
+# Tenant-uploaded media (client logos, etc.). The upload endpoint writes
+# under MEDIA_ROOT/client_logos/<client_id>/. In production nginx serves
+# /media/ directly from disk; in DEV Django serves it via the urls
+# fallback in checkfunnel/urls.py.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 

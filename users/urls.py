@@ -19,6 +19,7 @@ urlpatterns = [
     # Clients
     path('clients/', admin_views.client_list, name='admin-clients'),
     path('clients/<uuid:client_id>/', admin_views.client_detail, name='admin-client-detail'),
+    path('clients/<uuid:client_id>/upload-logo/', admin_views.upload_client_logo, name='admin-client-upload-logo'),
     path('clients/<uuid:client_id>/sessions/', admin_views.client_sessions, name='admin-client-sessions'),
     path('clients/<uuid:client_id>/analytics/', admin_views.client_analytics, name='admin-client-analytics'),
     path('clients/<uuid:client_id>/kpis/', admin_views.client_kpis, name='admin-client-kpis'),
