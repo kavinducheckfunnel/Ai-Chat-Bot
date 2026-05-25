@@ -318,9 +318,9 @@ async function loadInvoices() {
 }
 
 function invoiceUrl(inv) {
-  // Backend returns a relative download_url like /api/admin/billing/invoices/<uuid>/html/
-  // To make this work in a new tab with auth, we'd need to attach the token; for now,
-  // open the same path via the API base — the user's session cookie carries auth.
+  // Backend returns a signed-token URL valid for 1 hour, so it opens in a
+  // new tab without needing the JWT Authorization header that browser-tab
+  // navigations can't carry.
   const base = (typeof window !== 'undefined' && window.location.origin) || ''
   return base + inv.download_url
 }

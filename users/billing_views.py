@@ -639,6 +639,18 @@ def _handle_payment_failed(invoice):
 # Invoices — list, view (HTML), download (HTML), send test email
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _invoice_signer():
+    """Time-bounded URL signer for the public view endpoint."""
+    from django.core.signing import TimestampSigner
+    return TimestampSigner(salt='invoice-view-v1')
+
+
+def _invoice_signed_url(invoice_id) -> str:
+    """Return the signed query string suffix for a viewable invoice URL."""
+    token = _invoice_signer().sign(str(invoice_id))
+    return f'/api/admin/billing/invoices/{invoice_id}/html/?token={token}'
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_invoices(request):
@@ -661,34 +673,63 @@ def list_invoices(request):
             'status':          inv.status,
             'created_at':      inv.created_at.isoformat(),
             'sent_at':         inv.sent_at.isoformat() if inv.sent_at else None,
-            'download_url':    f'/api/admin/billing/invoices/{inv.id}/html/',
+            # Signed URL (valid 1h) — opens in a new tab without needing
+            # the JWT Authorization header that browser-tab navigations
+            # can't carry. Frontend uses this directly as the href.
+            'download_url':    _invoice_signed_url(inv.id),
         }
         for inv in invoices
     ])
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])  # auth happens via signed token below
 def view_invoice_html(request, invoice_id):
-    """Return the rendered invoice HTML. Tenant can browser-print to PDF."""
+    """Return the rendered invoice HTML.
+
+    Auth model: requires either
+      (a) a valid signed `?token=…` (issued by list_invoices, 1h TTL), OR
+      (b) an authenticated tenant who owns the invoice (Authorization header)
+
+    Why both: option (a) makes the URL openable in a new tab / from an
+    email link without the browser carrying an Authorization header.
+    Option (b) lets internal/API consumers fetch via the normal session.
+    """
+    from django.core.signing import BadSignature, SignatureExpired
     from django.http import HttpResponse
     from users.models import Invoice
     from users.invoice_service import render_invoice_html
 
-    try:
-        tenant = request.user.tenant_profile
-    except TenantProfile.DoesNotExist:
-        return Response({'detail': 'No tenant profile.'}, status=403)
-
-    try:
-        invoice = Invoice.objects.get(pk=invoice_id, tenant=tenant)
-    except Invoice.DoesNotExist:
+    invoice = Invoice.objects.filter(pk=invoice_id).select_related('tenant').first()
+    if not invoice:
         return Response({'detail': 'Invoice not found.'}, status=404)
+
+    # Path (a): signed token in the URL — 1h TTL.
+    token = request.query_params.get('token')
+    if token:
+        try:
+            verified_id = _invoice_signer().unsign(token, max_age=3600)
+            if verified_id != str(invoice_id):
+                return Response({'detail': 'Token mismatch.'}, status=403)
+        except SignatureExpired:
+            return Response({'detail': 'Invoice link has expired. Open it from /portal/billing again.'}, status=403)
+        except BadSignature:
+            return Response({'detail': 'Invalid token.'}, status=403)
+    else:
+        # Path (b): JWT-authenticated tenant who owns this invoice
+        if not request.user.is_authenticated:
+            return Response({'detail': 'Authentication required (or use a signed link).'}, status=401)
+        try:
+            tenant = request.user.tenant_profile
+        except TenantProfile.DoesNotExist:
+            return Response({'detail': 'No tenant profile.'}, status=403)
+        if invoice.tenant_id != tenant.id and not request.user.is_superuser:
+            return Response({'detail': 'Not your invoice.'}, status=403)
 
     html = render_invoice_html(invoice)
     response = HttpResponse(html, content_type='text/html; charset=utf-8')
-    # Set as inline so browsers render it; tenant uses Cmd/Ctrl+P → Save as PDF
     response['Content-Disposition'] = f'inline; filename="{invoice.invoice_number}.html"'
+    response['X-Content-Type-Options'] = 'nosniff'
     return response
 
 
