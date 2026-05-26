@@ -123,9 +123,14 @@
               <span class="invoice-status" :class="`inv-${inv.status}`">{{ inv.status }}</span>
               <span class="invoice-total">${{ inv.total_usd }} USD</span>
             </div>
-            <a class="btn-invoice-view" :href="invoiceUrl(inv)" target="_blank" rel="noopener">
-              View / Download →
-            </a>
+            <div class="invoice-actions">
+              <a class="btn-invoice-pdf" :href="invoicePdfUrl(inv)" target="_blank" rel="noopener" title="Download as PDF">
+                ⬇ PDF
+              </a>
+              <a class="btn-invoice-view" :href="invoiceUrl(inv)" target="_blank" rel="noopener" title="Open invoice in a new tab">
+                View →
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -323,6 +328,12 @@ function invoiceUrl(inv) {
   // navigations can't carry.
   const base = (typeof window !== 'undefined' && window.location.origin) || ''
   return base + inv.download_url
+}
+
+function invoicePdfUrl(inv) {
+  // Same signed-link pattern, server-side renders WeasyPrint → PDF.
+  const base = (typeof window !== 'undefined' && window.location.origin) || ''
+  return base + (inv.pdf_url || inv.download_url)
 }
 
 function formatInvoicePeriod(iso) {
@@ -709,18 +720,28 @@ async function openPortal() {
 .invoice-status.inv-draft { background: rgba(245,158,11,0.12); color: #fbbf24; border-color: rgba(245,158,11,0.25); }
 .invoice-status.inv-void { background: rgba(239,68,68,0.1); color: #fca5a5; border-color: rgba(239,68,68,0.25); }
 .invoice-total { font-size: 14px; font-weight: 700; color: var(--cf-text-primary); font-variant-numeric: tabular-nums; }
-.btn-invoice-view {
+.invoice-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.btn-invoice-view,
+.btn-invoice-pdf {
   font-size: 12px;
   font-weight: 600;
-  color: #a5b4fc;
   text-decoration: none;
   padding: 6px 10px;
   border-radius: 6px;
-  background: rgba(99,102,241,0.08);
-  border: 1px solid rgba(99,102,241,0.25);
   white-space: nowrap;
 }
+.btn-invoice-view {
+  color: #a5b4fc;
+  background: rgba(99,102,241,0.08);
+  border: 1px solid rgba(99,102,241,0.25);
+}
 .btn-invoice-view:hover { background: rgba(99,102,241,0.18); }
+.btn-invoice-pdf {
+  color: #ffffff;
+  background: #6366f1;
+  border: 1px solid #6366f1;
+}
+.btn-invoice-pdf:hover { background: #4f46e5; border-color: #4f46e5; }
 
 /* Alert banners */
 .alert-banner {

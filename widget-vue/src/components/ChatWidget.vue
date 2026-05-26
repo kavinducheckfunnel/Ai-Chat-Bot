@@ -397,7 +397,7 @@ function sendQuickReply(text, sourceIndex) {
 // ── Send message ──────────────────────────────────────────────────────────────
 function sendMessage() {
   const text = inputValue.value.trim()
-  if ((!text && !pendingImage) || isTyping.value) return
+  if ((!text && !pendingImage.value) || isTyping.value) return
 
   // If there's a pending image, show it in chat first
   if (pendingImage.value) {
@@ -432,11 +432,54 @@ function sendMessage() {
 }
 
 // ── Image handling ────────────────────────────────────────────────────────────
+// Phone-camera photos are routinely 8-12 MB; base64 inflation makes the
+// WebSocket frame north of 16 MB, which blows past Channels' default
+// max_size (1 MB) and the vision model's per-request limit. We downscale
+// any side > IMG_MAX_DIMENSION client-side and re-encode as JPEG before
+// the upload ever leaves the browser.
+const IMG_MAX_DIMENSION = 1024  // pixels per longest side
+const IMG_JPEG_QUALITY  = 0.85   // 85% — visually lossless for chat use
+
+function _downscaleDataUrl(rawDataUrl) {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const { width: w, height: h } = img
+      const longest = Math.max(w, h)
+      // Small enough already? Re-encode to JPEG anyway so we always pass
+      // a known MIME to the backend (which sniffs the data URI prefix).
+      const scale = longest > IMG_MAX_DIMENSION ? IMG_MAX_DIMENSION / longest : 1
+      const newW = Math.round(w * scale)
+      const newH = Math.round(h * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = newW
+      canvas.height = newH
+      const ctx = canvas.getContext('2d')
+      // White background so PNGs with transparency don't go black when
+      // we re-encode as JPEG.
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, newW, newH)
+      ctx.drawImage(img, 0, 0, newW, newH)
+      try {
+        resolve(canvas.toDataURL('image/jpeg', IMG_JPEG_QUALITY))
+      } catch {
+        // Tainted canvas / mobile Safari quirk — fall back to the raw upload.
+        resolve(rawDataUrl)
+      }
+    }
+    img.onerror = () => resolve(rawDataUrl)
+    img.src = rawDataUrl
+  })
+}
+
 function handleFileSelect(e) {
   const file = e.target.files?.[0]
   if (!file) return
   const reader = new FileReader()
-  reader.onload = (ev) => { pendingImage.value = ev.target.result }
+  reader.onload = async (ev) => {
+    const raw = ev.target.result
+    pendingImage.value = await _downscaleDataUrl(raw)
+  }
   reader.readAsDataURL(file)
   e.target.value = ''   // reset so same file can be re-selected
 }

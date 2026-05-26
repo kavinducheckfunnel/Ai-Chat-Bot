@@ -37,6 +37,17 @@
       </button>
     </div>
 
+    <!-- Date-range filter banner — visible whenever the page was opened
+         with ?from=&to= query params (e.g. via the invoice email's
+         "View Monthly Conversations" CTA). -->
+    <div v-if="dateFilterLabel" class="date-filter-banner">
+      <span class="dfb-icon">📅</span>
+      <span class="dfb-text">
+        Showing conversations for <strong>{{ dateFilterLabel }}</strong>
+      </span>
+      <button class="dfb-clear" @click="clearDateFilter" type="button">Clear filter</button>
+    </div>
+
     <div class="inbox-layout">
       <!-- ── Session list ─────────────────────────────────────────────── -->
       <div class="session-list" :class="{ 'mobile-hidden': mobileView !== 'list' }">
@@ -419,6 +430,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const props = defineProps({ client: Object })
@@ -572,11 +584,44 @@ const filteredSessions = computed(() => {
   return sessions.value
 })
 
+// ── Date-range filter (driven by ?from=YYYY-MM-DD&to=YYYY-MM-DD) ──────────
+// Used by the invoice email's "View Monthly Conversations" CTA to land
+// the tenant on this page filtered to the invoice's billing month.
+const route = useRoute()
+const router = useRouter()
+const dateFrom = ref('')
+const dateTo = ref('')
+
+const dateFilterLabel = computed(() => {
+  if (!dateFrom.value && !dateTo.value) return ''
+  try {
+    const fmt = (s) => new Date(s + 'T00:00:00').toLocaleDateString(undefined, {
+      month: 'long', day: 'numeric', year: 'numeric',
+    })
+    if (dateFrom.value && dateTo.value) return `${fmt(dateFrom.value)} — ${fmt(dateTo.value)}`
+    if (dateFrom.value) return `From ${fmt(dateFrom.value)}`
+    return `Until ${fmt(dateTo.value)}`
+  } catch {
+    return `${dateFrom.value || ''} → ${dateTo.value || ''}`
+  }
+})
+
+function clearDateFilter() {
+  dateFrom.value = ''
+  dateTo.value = ''
+  // Strip the query params so a refresh doesn't restore the filter.
+  router.replace({ path: route.path, query: { ...route.query, from: undefined, to: undefined } })
+  loadSessions()
+}
+
 async function loadSessions() {
   if (!props.client) return
   loading.value = true
   try {
-    const data = await api.getPortalSessions(props.client.id, { limit: 50 })
+    const params = { limit: 50 }
+    if (dateFrom.value) params.date_from = dateFrom.value
+    if (dateTo.value)   params.date_to   = dateTo.value
+    const data = await api.getPortalSessions(props.client.id, params)
     sessions.value = Array.isArray(data) ? data : (data?.results || [])
   } catch {} finally {
     loading.value = false
@@ -858,8 +903,16 @@ function stopChannelPolling() {
   if (channelPollTimer) { clearInterval(channelPollTimer); channelPollTimer = null }
 }
 
+// Read ?from= / ?to= when the page first renders so deep-links from the
+// invoice email land on the right month's sessions.
+function _syncFiltersFromRoute() {
+  dateFrom.value = (route.query.from || '').toString()
+  dateTo.value   = (route.query.to   || '').toString()
+}
+
 onMounted(async () => {
   requestNotificationPermission()
+  _syncFiltersFromRoute()
   await loadSessions()
   ws = api.connectAdminDashboard((msg) => {
     if (msg.type === 'session_update') {
@@ -882,6 +935,12 @@ onUnmounted(() => {
 })
 
 watch(() => props.client, loadSessions)
+
+// React to back/forward nav and to programmatic `router.push({ query })`.
+watch(() => [route.query.from, route.query.to], () => {
+  _syncFiltersFromRoute()
+  loadSessions()
+})
 
 watch(selected, (s) => {
   if (s) {
@@ -969,6 +1028,26 @@ watch(selected, (s) => {
   padding: 1px 6px; border-radius: 10px;
 }
 .tab-badge.hot { background: rgba(239,68,68,0.15); color: #ef4444; }
+
+/* Date-range filter banner */
+.date-filter-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px;
+  margin: 0 16px 8px;
+  background: rgba(99,102,241,0.10);
+  border: 1px solid rgba(99,102,241,0.30);
+  border-radius: 9px;
+  font-size: 13px; color: var(--cf-text-default, #0f172a);
+}
+.date-filter-banner .dfb-icon { font-size: 14px; flex-shrink: 0; }
+.date-filter-banner .dfb-text { flex: 1; }
+.date-filter-banner .dfb-text strong { font-weight: 600; }
+.date-filter-banner .dfb-clear {
+  background: transparent; border: 1px solid rgba(99,102,241,0.40);
+  color: #6366f1; font-size: 12px; font-weight: 600;
+  padding: 5px 10px; border-radius: 6px; cursor: pointer;
+}
+.date-filter-banner .dfb-clear:hover { background: rgba(99,102,241,0.15); }
 
 /* ── 3-column layout ─────────────────────────────────────────────────── */
 .inbox-layout {

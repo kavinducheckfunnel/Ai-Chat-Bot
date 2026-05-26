@@ -75,6 +75,7 @@ urlpatterns = [
     # Invoices
     path('billing/invoices/', billing_views.list_invoices, name='billing-invoices-list'),
     path('billing/invoices/<uuid:invoice_id>/html/', billing_views.view_invoice_html, name='billing-invoices-view'),
+    path('billing/invoices/<uuid:invoice_id>/pdf/', billing_views.view_invoice_pdf, name='billing-invoices-pdf'),
     path('billing/invoices/test-email/', billing_views.send_test_invoice, name='billing-invoices-test-email'),
 
     # Tenant Management (superadmin only)

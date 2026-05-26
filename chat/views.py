@@ -44,11 +44,22 @@ def chat_message(request):
     session_id = request.data.get('session_id')
     message = request.data.get('message')
     behavior_matrix = request.data.get('behavior_matrix', {})
+    image_data = request.data.get('image_data')
 
-    if not session_id or not message:
-        return Response({'error': 'session_id and message are required'}, status=status.HTTP_400_BAD_REQUEST)
+    if not session_id:
+        return Response({'error': 'session_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+    # Image-only messages are allowed (visitor sends a screenshot with no
+    # caption). For text-only flows we still require `message`.
+    if not message and not image_data:
+        return Response({'error': 'message is required'}, status=status.HTTP_400_BAD_REQUEST)
 
     session, _ = ChatSession.objects.get_or_create(session_id=session_id)
+
+    # Mirror the WS guard: drop image_data if the tenant turned off
+    # image_input_enabled. Widget hides the upload control, but the REST
+    # endpoint is reachable from any HTTP client.
+    if image_data and session.client and not session.client.image_input_enabled:
+        image_data = None
 
     tenant = _get_tenant_for_client(session.client) if session.client else None
     if not _check_and_increment_message(tenant):
@@ -57,7 +68,9 @@ def chat_message(request):
             'reply_text': "I'm sorry, this chatbot has reached its monthly message limit. Please try again next month.",
         }, status=status.HTTP_200_OK)  # 200 so widget still renders the message
 
-    ai_response = generate_ai_response(session, message, behavior_matrix)
+    ai_response = generate_ai_response(
+        session, message or '', behavior_matrix, image_data=image_data,
+    )
     return Response(ai_response)
 
 

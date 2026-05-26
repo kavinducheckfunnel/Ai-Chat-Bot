@@ -69,6 +69,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
         session = await self.get_session(self.client_id, self.session_id)
 
+        # ── Defence-in-depth: drop image_data if the tenant's plan/client
+        # has image input turned off. The widget hides the upload button
+        # when the feature flag is off, but a hand-crafted WS frame could
+        # still slip a payload through. Strip it server-side so untrusted
+        # clients can't bypass the flag and force LLM image calls. ─────
+        if image_data and session.client and not session.client.image_input_enabled:
+            import logging as _log
+            _log.getLogger(__name__).info(
+                f'[ws] image_data stripped — client {session.client_id} '
+                f'has image_input_enabled=False'
+            )
+            image_data = None
+
         # ── WebSocket rate guard: drop messages within 1 s of the previous ─
         if session.last_visitor_message_at:
             gap = (timezone.now() - session.last_visitor_message_at).total_seconds()

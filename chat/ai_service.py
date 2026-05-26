@@ -155,6 +155,48 @@ _PLATFORM_FALLBACK_MODELS = [
     'meta-llama/llama-3.3-70b-instruct:free',
 ]
 
+# Separate chain used when the request carries an image. The text-only
+# llama is removed; if the geminis rate-limit we route to a small
+# vision-capable model instead so image messages never silently fail.
+_PLATFORM_VISION_FALLBACK_MODELS = [
+    'google/gemini-2.0-flash-001',
+    'google/gemini-flash-1.5-8b',
+    'openai/gpt-4o-mini',
+]
+
+# Image data URIs land here as `data:image/<subtype>;base64,<payload>`.
+# `_parse_image_data_uri` returns (mime, base64_payload). MIME is sniffed
+# instead of hard-coded so PNG / WebP / GIF aren't mislabeled as JPEG —
+# Anthropic via OpenRouter rejects mismatched MIME and even Gemini behaves
+# better with the real type.
+_ALLOWED_IMAGE_MIME = ('image/png', 'image/jpeg', 'image/gif', 'image/webp')
+
+
+def _parse_image_data_uri(image_data: str) -> tuple[str, str]:
+    """
+    Split a data URI into (mime, base64_payload).
+
+    Falls back to ('image/jpeg', <whole string>) when the input is a raw
+    base64 blob without a `data:` prefix — backwards-compatible with old
+    widget builds. Unknown MIMEs are normalised to image/jpeg so we never
+    pass an unsupported type downstream.
+    """
+    if not image_data:
+        return 'image/jpeg', ''
+    if not image_data.startswith('data:'):
+        return 'image/jpeg', image_data
+    try:
+        header, payload = image_data.split(',', 1)
+    except ValueError:
+        return 'image/jpeg', image_data
+    # header looks like `data:image/png;base64`
+    mime = 'image/jpeg'
+    if ';' in header:
+        mime_part = header.split(';', 1)[0].replace('data:', '', 1).strip().lower()
+        if mime_part in _ALLOWED_IMAGE_MIME:
+            mime = mime_part
+    return mime, payload
+
 
 def _get_platform_config():
     """Return (api_key, primary_model) from DB, cached 60 s to avoid a DB hit per message."""
@@ -291,10 +333,14 @@ def _hash_messages(messages):
         return ''
 
 
-def _invoke_with_fallback(messages, client):
+def _invoke_with_fallback(messages, client, vision_required: bool = False):
     """
     Invoke the LLM. For platform (non-BYOK) requests, walk the fallback chain
     on 429 rate-limit errors so users never see an error message.
+
+    When `vision_required=True` the platform path uses
+    `_PLATFORM_VISION_FALLBACK_MODELS` instead — the standard chain ends
+    with a text-only llama which 400s on multimodal content blocks.
 
     Every llm.invoke() — successful or failed — writes an LLMCallLog row
     so the MLOps dashboards can break down cost, latency, fallback rate,
@@ -330,7 +376,10 @@ def _invoke_with_fallback(messages, client):
 
     # Platform — try primary model then static fallbacks
     api_key, primary_model = _get_platform_config()
-    fallback_chain = [primary_model] + [m for m in _PLATFORM_FALLBACK_MODELS if m != primary_model]
+    base_chain = (
+        _PLATFORM_VISION_FALLBACK_MODELS if vision_required else _PLATFORM_FALLBACK_MODELS
+    )
+    fallback_chain = [primary_model] + [m for m in base_chain if m != primary_model]
     last_exc = None
     for i, model in enumerate(fallback_chain):
         llm = _make_openrouter_llm(model, api_key)
@@ -567,11 +616,34 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         faq_blurbs=faq_blurbs,
         conversation_summary=session.conversation_summary or '',
     )
-    system_prompt += (
-        '\n\nCRITICAL: You MUST return ONLY a valid raw JSON object matching this schema. '
-        'NO markdown formatting, NO conversational text outside the JSON block. schema:\n'
-        + json.dumps(GEMINI_SCHEMA)
-    )
+    # JSON-mode tail-prompt — used for text-only turns. Vision turns get a
+    # plain-text instruction instead: image-capable models reliably break
+    # strict-JSON output when an image is also in the request, so forcing
+    # JSON made every image upload fall into the "Sorry, I'm having a
+    # little trouble" fallback. For image turns we ask for a normal
+    # conversational reply and synthesise the scores ourselves from the
+    # keyword floors.
+    if image_data:
+        system_prompt += (
+            "\n\nThe visitor has attached an IMAGE along with their message. "
+            "Look at the image, identify what's in it (product / packaging / "
+            "screenshot / receipt / question), and answer the visitor's "
+            "question directly in 1-3 plain conversational sentences. "
+            "Do NOT return JSON, do NOT use markdown code blocks, do NOT "
+            "wrap the reply in quotes — just write the reply text the "
+            "visitor should see."
+        )
+        # Tighten the dynamic half too — Anthropic prompt-cache only sees
+        # the static portion, so changes here don't bust the cache.
+        dynamic_system += (
+            "\n\nIMAGE INPUT MODE: respond with plain text only (no JSON, no markdown fences)."
+        )
+    else:
+        system_prompt += (
+            '\n\nCRITICAL: You MUST return ONLY a valid raw JSON object matching this schema. '
+            'NO markdown formatting, NO conversational text outside the JSON block. schema:\n'
+            + json.dumps(GEMINI_SCHEMA)
+        )
 
     # 4. Build message list — multimodal if image attached
     # Anthropic prompt caching: wrap the static system portion in a
@@ -599,13 +671,12 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         system_content = system_prompt
 
     if image_data:
-        # Strip data URI prefix (e.g. "data:image/jpeg;base64,")
-        raw_b64 = image_data.split(',', 1)[1] if ',' in image_data else image_data
+        mime, raw_b64 = _parse_image_data_uri(image_data)
         human_content = [
             {'type': 'text', 'text': user_prompt},
             {
                 'type': 'image_url',
-                'image_url': {'url': f'data:image/jpeg;base64,{raw_b64}'},
+                'image_url': {'url': f'data:{mime};base64,{raw_b64}'},
             },
         ]
         messages = [
@@ -618,20 +689,54 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
             HumanMessage(content=user_prompt),
         ]
 
-    # 5. Call LLM (BYOK or platform default with fallback chain)
+    # 5. Call LLM (BYOK or platform default with fallback chain).
+    # Image turns route through the vision-only chain so a rate-limited
+    # primary doesn't fall through to a text-only fallback.
     try:
-        raw_result = _invoke_with_fallback(messages, session.client)
+        raw_result = _invoke_with_fallback(
+            messages, session.client, vision_required=bool(image_data),
+        )
         content = raw_result.content
 
-        # Strip markdown code fences if model wraps output
-        if '```json' in content:
-            content = content.split('```json')[1].split('```')[0].strip()
-        elif '```' in content:
-            content = content.split('```')[1].split('```')[0].strip()
+        if image_data:
+            # Plain-text mode for image turns. Strip optional fences/quotes
+            # and let the visitor see whatever the vision model wrote.
+            text = (content or '').strip()
+            if text.startswith('```'):
+                # Tolerate accidental markdown fences even though we asked
+                # for none — strip the first fenced block.
+                parts = text.split('```')
+                # parts looks like ['', 'maybe-lang\n actual text', '']
+                if len(parts) >= 2:
+                    inner = parts[1]
+                    if '\n' in inner:
+                        inner = inner.split('\n', 1)[1]
+                    text = inner.strip()
+            text = text.strip('"').strip("'").strip()
+            if not text:
+                raise ValueError('Empty image reply from LLM')
+            # Synthesise the rest of the schema. Intent/budget/urgency come
+            # from the keyword floors below (max() against these defaults
+            # in step 6) so a purchase phrase in the visitor's message
+            # still moves the EMAs even though the LLM didn't score.
+            result = {
+                'reply_text': text,
+                'intent_score': 0.5,
+                'budget_score': 0.5,
+                'urgency_score': 0.5,
+                'suggested_product_id': None,
+                'quick_replies': [],
+            }
+        else:
+            # Strip markdown code fences if model wraps output
+            if '```json' in content:
+                content = content.split('```json')[1].split('```')[0].strip()
+            elif '```' in content:
+                content = content.split('```')[1].split('```')[0].strip()
 
-        result = json.loads(content)
-        if not result:
-            raise ValueError('Empty response parsed from LLM')
+            result = json.loads(content)
+            if not result:
+                raise ValueError('Empty response parsed from LLM')
 
     except Exception as e:
         import traceback
@@ -683,8 +788,17 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         update_fields.append('kanban_state')
     session.save(update_fields=update_fields)
 
-    # 8. Persist chat history
-    session.chat_history.append({'role': 'user', 'message': user_message or '[image]'})
+    # 8. Persist chat history. For image turns store a `[image]` marker so
+    # the summariser, qualification scanner, and follow-up turns can see
+    # the visitor sent a picture. We deliberately don't archive the base64
+    # payload — it's huge and the LLM only needs to know one was sent.
+    if image_data and user_message:
+        user_entry_text = f'[image attached] {user_message}'
+    elif image_data:
+        user_entry_text = '[image attached]'
+    else:
+        user_entry_text = user_message
+    session.chat_history.append({'role': 'user', 'message': user_entry_text})
     session.chat_history.append({'role': 'ai', 'message': result.get('reply_text')})
 
     from .utils import truncate_chat_history

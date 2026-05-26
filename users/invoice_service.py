@@ -298,24 +298,92 @@ def render_invoice_html(invoice) -> str:
     })
 
 
-def email_invoice(invoice, to_email: str | None = None) -> bool:
-    """Send the invoice HTML to the tenant (or to_email override for tests)."""
+def render_invoice_pdf(invoice) -> bytes:
+    """Render the invoice as a real PDF document via WeasyPrint.
+
+    Imports WeasyPrint lazily so app startup doesn't pay the Cairo/Pango
+    cost on every container restart, and so the module can be imported on
+    machines without the system libraries installed (the underlying call
+    will still error if it's actually used there).
+
+    Returns the raw PDF bytes. The HTML template doubles as the PDF
+    source — its print stylesheet lives in `@media print` blocks so the
+    same `invoice.html` produces a clean letter-sized document.
+    """
+    from weasyprint import HTML  # local import — Cairo/Pango on demand
+    html = render_invoice_html(invoice)
+    return HTML(string=html, base_url='https://ai.checkfunnels.com').write_pdf()
+
+
+def render_invoice_email(invoice, pdf_url: str = '', view_html_url: str = '',
+                         conversations_url: str = '') -> str:
+    """Render the SHORT transactional email body (the shell).
+
+    This is NOT the invoice document — the document is attached as a PDF.
+    The shell is the email customers actually open: subject, hero amount,
+    three CTA buttons, quick stats, signoff. Keeps the email scannable
+    and lets Gmail/Outlook clip nothing important.
+    """
+    brand_color = _safe_brand_color(invoice.brand_color_at_issue)
+    brand_color_secondary = _lighten_hex(brand_color, 0.18)
+    return render_to_string('billing/invoice_email.html', {
+        'invoice': invoice,
+        'tenant_name': invoice.company_name_at_issue,
+        'company_brand': 'Checkfunnel',
+        'support_email': 'support@checkfunnels.com',
+        'brand_color': brand_color,
+        'brand_color_secondary': brand_color_secondary,
+        'brand_logo_url': (invoice.brand_logo_url_at_issue or '').strip(),
+        'pdf_url': pdf_url,
+        'view_html_url': view_html_url,
+        'conversations_url': conversations_url,
+        'usage': invoice.usage_summary or {},
+    })
+
+
+def email_invoice(invoice, to_email: str | None = None,
+                  pdf_url: str = '', view_html_url: str = '',
+                  conversations_url: str = '') -> bool:
+    """
+    Email the invoice — short HTML shell + the PDF as a real attachment.
+
+    Behaviour:
+      • Renders the PDF and attaches it (`Invoice <number>.pdf`).
+      • Sends an HTML email with the three CTAs (Download PDF / View
+        Online / View Monthly Conversations) and a quick-stats block.
+      • If PDF generation fails (e.g. Pango not installed on a misconfigured
+        host), we still send the email shell so the customer at least
+        gets the View Online + Conversations links.
+
+    `pdf_url` / `view_html_url` / `conversations_url` should be absolute
+    URLs (signed where appropriate) — callers (Celery task / portal test
+    button) build them and pass in. The template just renders them.
+    """
     recipient = to_email or invoice.recipient_email_at_issue
     if not recipient:
         logger.warning(f'[invoice] No recipient for {invoice.invoice_number}')
         return False
 
-    html = render_invoice_html(invoice)
-    subject = f'[Checkfunnel] Invoice {invoice.invoice_number} — {invoice.period_start.strftime("%B %Y")}'
+    shell_html = render_invoice_email(
+        invoice,
+        pdf_url=pdf_url,
+        view_html_url=view_html_url,
+        conversations_url=conversations_url,
+    )
+    subject = (
+        f'Invoice {invoice.invoice_number} · '
+        f'{invoice.period_start.strftime("%B %Y")} · ${invoice.total_usd}'
+    )
     plain = (
         f'Hi {invoice.company_name_at_issue},\n\n'
         f'Your Checkfunnel invoice for {invoice.period_start.strftime("%B %Y")} is ready.\n\n'
         f'Invoice number: {invoice.invoice_number}\n'
         f'Period: {invoice.period_start} to {invoice.period_end}\n'
         f'Total: ${invoice.total_usd}\n\n'
-        f'View the full HTML invoice in your email client or download it from\n'
-        f'https://ai.checkfunnels.com/portal/billing\n\n'
-        f'— The Checkfunnel Team'
+        + (f'Download PDF:\n{pdf_url}\n\n' if pdf_url else '')
+        + (f'View online:\n{view_html_url}\n\n' if view_html_url else '')
+        + (f'View this month\'s conversations:\n{conversations_url}\n\n' if conversations_url else '')
+        + '— Checkfunnel'
     )
 
     try:
@@ -325,7 +393,23 @@ def email_invoice(invoice, to_email: str | None = None) -> bool:
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[recipient],
         )
-        msg.attach_alternative(html, 'text/html')
+        msg.attach_alternative(shell_html, 'text/html')
+
+        # Best-effort PDF attachment. If WeasyPrint isn't installed on a
+        # misconfigured host, log and continue — the email still has the
+        # View Online link so the customer isn't blocked.
+        try:
+            pdf_bytes = render_invoice_pdf(invoice)
+            msg.attach(
+                f'Invoice-{invoice.invoice_number}.pdf',
+                pdf_bytes,
+                'application/pdf',
+            )
+        except Exception as pdf_exc:
+            logger.warning(
+                f'[invoice] PDF generation failed for {invoice.invoice_number}: {pdf_exc}'
+            )
+
         msg.send(fail_silently=False)
 
         invoice.status = 'sent'

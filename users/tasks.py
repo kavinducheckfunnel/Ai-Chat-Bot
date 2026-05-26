@@ -385,7 +385,13 @@ def send_monthly_invoices(self):
     """
     from datetime import date
     from users.models import TenantProfile
-    from users.invoice_service import generate_invoice, email_invoice
+    from users.invoice_service import generate_invoice, email_invoice, _primary_client
+    from users.billing_views import (
+        _public_origin,
+        _invoice_signed_url,
+        _invoice_signed_pdf_url,
+        _conversations_dashboard_url,
+    )
 
     today = date.today()
     # The invoice covers the PREVIOUS calendar month
@@ -396,6 +402,7 @@ def send_monthly_invoices(self):
 
     sent = 0
     failed = 0
+    origin = _public_origin()
     for tenant in TenantProfile.objects.select_related('plan', 'user').all():
         if not tenant.user.email:
             continue
@@ -403,7 +410,14 @@ def send_monthly_invoices(self):
             invoice = generate_invoice(tenant, period_year, period_month, force=False)
             if invoice.sent_at:
                 continue  # already emailed this period — don't spam
-            ok = email_invoice(invoice)
+
+            primary = _primary_client(tenant)
+            ok = email_invoice(
+                invoice,
+                pdf_url=f'{origin}{_invoice_signed_pdf_url(invoice.id)}',
+                view_html_url=f'{origin}{_invoice_signed_url(invoice.id)}',
+                conversations_url=f'{origin}{_conversations_dashboard_url(invoice.period_start, invoice.period_end, primary.id if primary else None)}',
+            )
             if ok:
                 sent += 1
             else:

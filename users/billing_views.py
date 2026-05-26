@@ -640,15 +640,42 @@ def _handle_payment_failed(invoice):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _invoice_signer():
-    """Time-bounded URL signer for the public view endpoint."""
+    """Time-bounded URL signer for the public view + PDF endpoints."""
     from django.core.signing import TimestampSigner
     return TimestampSigner(salt='invoice-view-v1')
 
 
+def _public_origin() -> str:
+    """Absolute origin used when building links the email needs to embed."""
+    from django.conf import settings as dj_settings
+    origin = getattr(dj_settings, 'BACKEND_PUBLIC_URL', '') or 'https://ai.checkfunnels.com'
+    return origin.rstrip('/')
+
+
 def _invoice_signed_url(invoice_id) -> str:
-    """Return the signed query string suffix for a viewable invoice URL."""
+    """Signed relative URL for the HTML invoice view (1h TTL)."""
     token = _invoice_signer().sign(str(invoice_id))
     return f'/api/admin/billing/invoices/{invoice_id}/html/?token={token}'
+
+
+def _invoice_signed_pdf_url(invoice_id) -> str:
+    """Signed relative URL for the PDF invoice download (1h TTL)."""
+    token = _invoice_signer().sign(str(invoice_id))
+    return f'/api/admin/billing/invoices/{invoice_id}/pdf/?token={token}'
+
+
+def _conversations_dashboard_url(period_start, period_end, client_id=None) -> str:
+    """Deep-link into the portal inbox filtered to the invoice's month.
+
+    Auth happens through the portal's normal JWT flow — the tenant clicks
+    the link, lands at /portal/inbox?from=YYYY-MM-DD&to=YYYY-MM-DD, the
+    portal reads the query params and asks the API for those sessions.
+    No signing here because anyone with the link still has to log in.
+    """
+    qs = f'from={period_start.isoformat()}&to={period_end.isoformat()}'
+    if client_id:
+        qs += f'&client={client_id}'
+    return f'/portal/inbox?{qs}'
 
 
 @api_view(['GET'])
@@ -673,10 +700,11 @@ def list_invoices(request):
             'status':          inv.status,
             'created_at':      inv.created_at.isoformat(),
             'sent_at':         inv.sent_at.isoformat() if inv.sent_at else None,
-            # Signed URL (valid 1h) — opens in a new tab without needing
-            # the JWT Authorization header that browser-tab navigations
-            # can't carry. Frontend uses this directly as the href.
-            'download_url':    _invoice_signed_url(inv.id),
+            # Signed URLs (valid 1h) — open in a new tab / direct download
+            # without needing the JWT Authorization header that browser-tab
+            # navigations can't carry. Frontend uses these directly as href.
+            'download_url':    _invoice_signed_url(inv.id),     # HTML view
+            'pdf_url':         _invoice_signed_pdf_url(inv.id),  # PDF download
         }
         for inv in invoices
     ])
@@ -733,6 +761,68 @@ def view_invoice_html(request, invoice_id):
     return response
 
 
+@api_view(['GET'])
+@permission_classes([AllowAny])  # auth via signed token below (mirrors HTML view)
+def view_invoice_pdf(request, invoice_id):
+    """Return the invoice as a downloadable PDF.
+
+    Same dual-auth model as `view_invoice_html`:
+      (a) signed `?token=…` (1h TTL) — used by the email "Download PDF"
+          button so customers don't need to be logged in their email client
+      (b) authenticated tenant who owns this invoice
+    """
+    from django.core.signing import BadSignature, SignatureExpired
+    from django.http import HttpResponse
+    from users.models import Invoice
+    from users.invoice_service import render_invoice_pdf
+
+    invoice = Invoice.objects.filter(pk=invoice_id).select_related('tenant').first()
+    if not invoice:
+        return Response({'detail': 'Invoice not found.'}, status=404)
+
+    token = request.query_params.get('token')
+    if token:
+        try:
+            verified_id = _invoice_signer().unsign(token, max_age=3600)
+            if verified_id != str(invoice_id):
+                return Response({'detail': 'Token mismatch.'}, status=403)
+        except SignatureExpired:
+            return Response(
+                {'detail': 'Invoice link has expired. Open it from /portal/billing again.'},
+                status=403,
+            )
+        except BadSignature:
+            return Response({'detail': 'Invalid token.'}, status=403)
+    else:
+        if not request.user.is_authenticated:
+            return Response({'detail': 'Authentication required (or use a signed link).'}, status=401)
+        try:
+            tenant = request.user.tenant_profile
+        except TenantProfile.DoesNotExist:
+            return Response({'detail': 'No tenant profile.'}, status=403)
+        if invoice.tenant_id != tenant.id and not request.user.is_superuser:
+            return Response({'detail': 'Not your invoice.'}, status=403)
+
+    try:
+        pdf_bytes = render_invoice_pdf(invoice)
+    except Exception as e:
+        logger.exception(f'[invoice] PDF render failed for {invoice.invoice_number}: {e}')
+        return Response(
+            {'detail': 'PDF generation is not available right now. '
+                       'Open the HTML invoice and print to PDF as a workaround.'},
+            status=503,
+        )
+
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    # `attachment` triggers a download; the email button gets the file
+    # named `Invoice-CF-0001-202605-01.pdf` in their downloads folder.
+    response['Content-Disposition'] = (
+        f'attachment; filename="Invoice-{invoice.invoice_number}.pdf"'
+    )
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def send_test_invoice(request):
@@ -754,7 +844,20 @@ def send_test_invoice(request):
     invoice = generate_invoice(tenant, today.year, today.month, force=True, status='sent')
 
     override_to = (request.data.get('to') or '').strip() or None
-    ok = email_invoice(invoice, to_email=override_to)
+
+    # Build the three CTA links the email shell needs. Use the tenant's
+    # first client for the conversations deep-link so the visitor lands
+    # on the right inbox if they manage multiple sites.
+    from users.invoice_service import _primary_client
+    primary = _primary_client(tenant)
+    origin = _public_origin()
+    ok = email_invoice(
+        invoice,
+        to_email=override_to,
+        pdf_url=f'{origin}{_invoice_signed_pdf_url(invoice.id)}',
+        view_html_url=f'{origin}{_invoice_signed_url(invoice.id)}',
+        conversations_url=f'{origin}{_conversations_dashboard_url(invoice.period_start, invoice.period_end, primary.id if primary else None)}',
+    )
     if not ok:
         return Response({
             'detail': 'Email send failed — check SMTP configuration. Invoice was still generated.',

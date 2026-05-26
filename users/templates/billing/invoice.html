@@ -4,222 +4,312 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Invoice {{ invoice.invoice_number }} · {{ company_brand }}</title>
+  <style>
+    /* Print styles — used when WeasyPrint renders this template as a PDF
+       and when a user prints the HTML view from their browser. Page size
+       set to A4 with sensible margins; everything else inherits the
+       screen styles below. */
+    @page {
+      size: A4;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+    @media print {
+      body { background: #ffffff !important; padding: 0 !important; }
+      .page-shell { box-shadow: none !important; border: none !important; border-radius: 0 !important; }
+      .page-note { display: none !important; }
+    }
+    /* Base */
+    body {
+      margin: 0; padding: 24px 16px;
+      background: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page-shell {
+      max-width: 680px; margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 4px 24px rgba(15,23,42,0.06);
+    }
+    /* Header band uses the tenant's brand colour */
+    .header {
+      padding: 28px 36px;
+      color: #ffffff;
+      background: linear-gradient(135deg, {{ brand_color }} 0%, {{ brand_color_secondary }} 100%);
+    }
+    .header-grid { display: table; width: 100%; }
+    .header-grid > div { display: table-cell; vertical-align: middle; }
+    .header-left .logo-wrap { display: inline-block; vertical-align: middle; margin-right: 12px; }
+    .header-left img {
+      display: block; max-height: 44px; max-width: 140px; width: auto;
+      border-radius: 8px; background: rgba(255,255,255,0.14); padding: 4px;
+    }
+    .header-left .brand-text {
+      display: inline-block; vertical-align: middle;
+    }
+    .header-left .tenant-name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.1; }
+    .header-left .from-line { font-size: 11px; opacity: 0.85; margin-top: 4px; }
+    .header-right { text-align: right; }
+    .header-right .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.10em; opacity: 0.85; }
+    .header-right .number { font-size: 17px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; }
+
+    /* Sections */
+    .section { padding: 24px 36px 0; }
+    .section.last { padding-bottom: 28px; }
+    .section-title {
+      font-size: 10px; font-weight: 600; color: #64748b;
+      text-transform: uppercase; letter-spacing: 0.08em;
+      margin: 0 0 10px;
+    }
+
+    /* Meta row — billed-to / period / issued */
+    .meta-grid { display: table; width: 100%; table-layout: fixed; }
+    .meta-cell { display: table-cell; vertical-align: top; padding-right: 16px; }
+    .meta-cell:last-child { padding-right: 0; }
+    .meta-cell .meta-value { font-size: 14px; font-weight: 600; color: #0f172a; line-height: 1.35; }
+    .meta-cell .meta-sub { font-size: 12px; color: #475569; margin-top: 2px; }
+
+    /* Line items table */
+    .line-table { width: 100%; border-collapse: collapse; }
+    .line-table th {
+      font-size: 11px; font-weight: 600; color: #64748b;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      text-align: left; padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .line-table th.r { text-align: right; }
+    .line-table td {
+      font-size: 13px; color: #0f172a; padding: 12px 0;
+      border-bottom: 1px solid #f1f5f9; line-height: 1.4;
+    }
+    .line-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
+    .line-table td.amount { font-weight: 600; }
+
+    /* Totals card */
+    .totals { display: table; margin-left: auto; margin-top: 16px; }
+    .totals .row { display: table-row; }
+    .totals .row > div { display: table-cell; padding: 4px 0 4px 24px; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .totals .row .label { color: #64748b; padding-left: 0; }
+    .totals .total-row { border-top: 2px solid #0f172a; }
+    .totals .total-row > div { padding-top: 12px; font-size: 16px; font-weight: 700; color: #0f172a; }
+
+    /* KPI tiles */
+    .kpi-grid {
+      display: table; width: 100%; table-layout: fixed;
+      border-spacing: 8px 0;
+      margin-left: -8px; margin-right: -8px;
+    }
+    .kpi-tile {
+      display: table-cell; padding: 14px 16px; vertical-align: top;
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+      width: 33.33%;
+    }
+    .kpi-tile .k-label { font-size: 10px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi-tile .k-value { font-size: 22px; font-weight: 700; color: #0f172a; margin-top: 6px; line-height: 1; font-variant-numeric: tabular-nums; }
+    .kpi-tile .k-sub { font-size: 11px; color: #64748b; margin-top: 4px; }
+    .kpi-tile.success .k-value { color: #16a34a; }
+    .kpi-tile.warning .k-value { color: #d97706; }
+    .kpi-grid + .kpi-grid { margin-top: 8px; }
+
+    /* Notes / footer */
+    .notes-grid { display: table; width: 100%; table-layout: fixed; }
+    .notes-cell { display: table-cell; vertical-align: top; padding-right: 16px; }
+    .notes-cell:last-child { padding-right: 0; padding-left: 16px; }
+    .notes-cell p { margin: 0; font-size: 12px; color: #475569; line-height: 1.5; }
+    .notes-cell a { color: {{ brand_color }}; text-decoration: none; }
+    .footer-band {
+      background: #f8fafc; padding: 14px 36px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 11px; color: #94a3b8;
+    }
+    .footer-band .footer-grid { display: table; width: 100%; }
+    .footer-band .footer-grid > div { display: table-cell; vertical-align: middle; }
+    .footer-band .right { text-align: right; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+    .page-note {
+      max-width: 680px; margin: 14px auto 0; text-align: center;
+      font-size: 11px; color: #94a3b8; line-height: 1.5;
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:#0f172a;-webkit-font-smoothing:antialiased;">
+<body>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
-  <tr>
-    <td align="center">
+  <div class="page-shell">
 
-      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:16px;border:1px solid #e2e8f0;overflow:hidden;max-width:640px;width:100%;box-shadow:0 4px 24px rgba(15,23,42,0.06);">
+    <!-- ── Header ───────────────────────────────────────────────────── -->
+    <div class="header">
+      <div class="header-grid">
+        <div class="header-left">
+          {% if brand_logo_url %}
+            <span class="logo-wrap">
+              <img src="{{ brand_logo_url }}" alt="{{ tenant_name }}" height="44" />
+            </span>
+          {% endif %}
+          <span class="brand-text">
+            <div class="tenant-name">{{ tenant_name|default:company_brand }}</div>
+            <div class="from-line">Invoice from {{ company_brand }}</div>
+          </span>
+        </div>
+        <div class="header-right">
+          <div class="label">Invoice</div>
+          <div class="number">{{ invoice.invoice_number }}</div>
+        </div>
+      </div>
+    </div>
 
-        <!-- ── Header band ───────────────────────────────────────────── -->
-        <!-- Uses the tenant's brand colour at issue time (snapshotted on
-             the Invoice). Falls back to Checkfunnel purple when missing.
-             Logo (top-left) renders only if the tenant has one configured. -->
-        <tr>
-          <td style="background:linear-gradient(135deg,{{ brand_color }} 0%,{{ brand_color_secondary }} 100%);padding:32px 40px;color:#ffffff;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+    <!-- ── Meta row ─────────────────────────────────────────────────── -->
+    <div class="section">
+      <div class="meta-grid">
+        <div class="meta-cell">
+          <div class="section-title">Billed to</div>
+          <div class="meta-value">{{ tenant_name }}</div>
+          {% if recipient_email %}<div class="meta-sub">{{ recipient_email }}</div>{% endif %}
+        </div>
+        <div class="meta-cell">
+          <div class="section-title">Billing period</div>
+          <div class="meta-value">{{ invoice.period_start|date:"F j" }} — {{ invoice.period_end|date:"F j, Y" }}</div>
+          <div class="meta-sub">Plan: {{ invoice.plan_name_at_issue|default:"Free" }}</div>
+        </div>
+        <div class="meta-cell">
+          <div class="section-title">Issued on</div>
+          <div class="meta-value">{{ invoice.created_at|date:"F j, Y" }}</div>
+          <div class="meta-sub">Status: {{ invoice.get_status_display }}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Charges ──────────────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-title">Charges</div>
+      <table class="line-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="r" style="width:60px;">Qty</th>
+            <th class="r" style="width:100px;">Unit</th>
+            <th class="r" style="width:110px;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if line_items %}
+            {% for item in line_items %}
               <tr>
-                <td style="vertical-align:middle;">
-                  {% if brand_logo_url %}
-                    <table role="presentation" cellpadding="0" cellspacing="0">
-                      <tr>
-                        <td style="padding-right:14px;vertical-align:middle;">
-                          <img src="{{ brand_logo_url }}" alt="{{ tenant_name }}" height="44" style="display:block;max-height:44px;max-width:160px;width:auto;border:0;border-radius:8px;background:rgba(255,255,255,0.12);padding:4px;" />
-                        </td>
-                        <td style="vertical-align:middle;">
-                          <div style="font-size:20px;font-weight:700;letter-spacing:-0.3px;line-height:1.1;">{{ tenant_name }}</div>
-                          <div style="font-size:11px;opacity:0.85;margin-top:4px;">Invoice from {{ company_brand }}</div>
-                        </td>
-                      </tr>
-                    </table>
-                  {% else %}
-                    <div style="font-size:22px;font-weight:700;letter-spacing:-0.4px;">{{ tenant_name|default:company_brand }}</div>
-                    <div style="font-size:12px;opacity:0.85;margin-top:4px;">Invoice from {{ company_brand }}</div>
-                  {% endif %}
-                </td>
-                <td align="right" style="vertical-align:top;">
-                  <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;opacity:0.85;">Invoice</div>
-                  <div style="font-size:18px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:4px;">{{ invoice.invoice_number }}</div>
-                </td>
+                <td>{{ item.description }}</td>
+                <td class="r">{{ item.quantity }}</td>
+                <td class="r">${{ item.unit_price_usd }}</td>
+                <td class="r amount">${{ item.amount_usd }}</td>
               </tr>
-            </table>
-          </td>
-        </tr>
-
-        <!-- ── Billing meta row ──────────────────────────────────────── -->
-        <tr>
-          <td style="padding:28px 40px 8px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td style="vertical-align:top;width:50%;padding-right:12px;">
-                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Billed To</div>
-                  <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;">{{ tenant_name }}</div>
-                  {% if recipient_email %}<div style="font-size:13px;color:#475569;margin-top:2px;">{{ recipient_email }}</div>{% endif %}
-                </td>
-                <td style="vertical-align:top;width:50%;padding-left:12px;">
-                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">Billing Period</div>
-                  <div style="font-size:15px;font-weight:600;color:#0f172a;line-height:1.4;">{{ invoice.period_start|date:"F j" }} — {{ invoice.period_end|date:"F j, Y" }}</div>
-                  <div style="font-size:12px;color:#64748b;margin-top:2px;">Plan: {{ invoice.plan_name_at_issue|default:"Free" }}</div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-
-        <!-- ── Line items table ──────────────────────────────────────── -->
-        <tr>
-          <td style="padding:24px 40px 0;">
-            <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Charges</div>
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-              <thead>
-                <tr>
-                  <th align="left" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;">Description</th>
-                  <th align="right" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;width:60px;">Qty</th>
-                  <th align="right" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;width:100px;">Unit</th>
-                  <th align="right" style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;padding:8px 0;border-bottom:1px solid #e2e8f0;width:100px;">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {% if line_items %}
-                  {% for item in line_items %}
-                    <tr>
-                      <td style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;line-height:1.4;">{{ item.description }}</td>
-                      <td align="right" style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;">{{ item.quantity }}</td>
-                      <td align="right" style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;">${{ item.unit_price_usd }}</td>
-                      <td align="right" style="font-size:13px;color:#0f172a;padding:14px 0;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums;font-weight:600;">${{ item.amount_usd }}</td>
-                    </tr>
-                  {% endfor %}
-                {% else %}
-                  <tr>
-                    <td colspan="4" style="font-size:13px;color:#64748b;padding:18px 0;text-align:center;border-bottom:1px solid #f1f5f9;">No charges this period.</td>
-                  </tr>
-                {% endif %}
-              </tbody>
-            </table>
-          </td>
-        </tr>
-
-        <!-- ── Totals -->
-        <tr>
-          <td style="padding:8px 40px 0;">
-            <table role="presentation" align="right" cellpadding="0" cellspacing="0" style="margin-top:16px;">
-              <tr>
-                <td style="font-size:13px;color:#64748b;padding:4px 16px 4px 0;">Subtotal</td>
-                <td align="right" style="font-size:13px;color:#0f172a;font-variant-numeric:tabular-nums;min-width:100px;">${{ invoice.subtotal_usd }}</td>
-              </tr>
-              {% if invoice.tax_usd %}
-              <tr>
-                <td style="font-size:13px;color:#64748b;padding:4px 16px 4px 0;">Tax ({{ invoice.tax_percent }}%)</td>
-                <td align="right" style="font-size:13px;color:#0f172a;font-variant-numeric:tabular-nums;">${{ invoice.tax_usd }}</td>
-              </tr>
-              {% endif %}
-              <tr>
-                <td style="font-size:15px;font-weight:600;color:#0f172a;padding:12px 16px 4px 0;border-top:2px solid #0f172a;">Total Due</td>
-                <td align="right" style="font-size:18px;font-weight:700;color:#0f172a;padding-top:12px;border-top:2px solid #0f172a;font-variant-numeric:tabular-nums;">${{ invoice.total_usd }} USD</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-
-        <!-- ── Usage summary panel ─────────────────────────────────── -->
-        <tr>
-          <td style="padding:40px 40px 0;">
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px 22px;">
-              <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;">Usage This Period</div>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="vertical-align:top;width:50%;padding-right:12px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Total chat sessions</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.sessions_total|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Active conversations</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.sessions_active|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">AI messages handled</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.ai_messages|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Image uploads</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.images|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Voice commands</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.voice|default:0 }}</td></tr>
-                    </table>
-                  </td>
-                  <td style="vertical-align:top;width:50%;padding-left:12px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Leads captured</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#22c55e;font-variant-numeric:tabular-nums;">{{ usage.leads|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Hot leads</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#f59e0b;font-variant-numeric:tabular-nums;">{{ usage.hot_leads|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Converted</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#22c55e;font-variant-numeric:tabular-nums;">{{ usage.converted|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Escalated to team</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ usage.escalated|default:0 }}</td></tr>
-                      <tr><td style="padding:5px 0;font-size:13px;color:#475569;">Abandoned mid-chat</td>
-                          <td align="right" style="padding:5px 0;font-size:13px;font-weight:600;color:#64748b;font-variant-numeric:tabular-nums;">{{ usage.abandoned|default:0 }}</td></tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-
-              {% if usage.top_pages %}
-                <div style="border-top:1px solid #e2e8f0;margin-top:14px;padding-top:12px;">
-                  <div style="font-size:11px;font-weight:600;color:#475569;margin-bottom:6px;">Top pages</div>
-                  {% for page in usage.top_pages %}
-                    <div style="display:flex;justify-content:space-between;font-size:12px;color:#475569;padding:2px 0;">
-                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:340px;">{{ page.url }}</span>
-                      <span style="font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;">{{ page.views }} views</span>
-                    </div>
-                  {% endfor %}
-                </div>
-              {% endif %}
-            </div>
-          </td>
-        </tr>
-
-        <!-- ── Notes / payment / support -->
-        <tr>
-          <td style="padding:24px 40px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td style="vertical-align:top;width:60%;padding-right:16px;">
-                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Payment</div>
-                  <div style="font-size:12px;color:#475569;line-height:1.5;">
-                    Your subscription is billed automatically via Stripe on the renewal date of each cycle. Add-on credits in this invoice (if any) were charged at purchase time. There is nothing to do — this document is for your records.
-                  </div>
-                </td>
-                <td style="vertical-align:top;width:40%;padding-left:16px;">
-                  <div style="font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Need Help?</div>
-                  <div style="font-size:12px;color:#475569;line-height:1.5;">
-                    Questions about this invoice? Email <a href="mailto:{{ support_email }}" style="color:{{ brand_color }};text-decoration:none;">{{ support_email }}</a> with the invoice number above and we'll get back within 1 business day.
-                  </div>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-
-        <!-- ── Footer -->
-        <tr>
-          <td style="background:#f8fafc;padding:18px 40px;border-top:1px solid #e2e8f0;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-              <tr>
-                <td style="font-size:11px;color:#94a3b8;">© {% now "Y" %} {{ company_brand }} · Sales Enablement AI</td>
-                <td align="right" style="font-size:11px;color:#94a3b8;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">{{ invoice.invoice_number }}</td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="4" style="text-align:center;color:#64748b;padding:18px 0;">No charges this period.</td>
+            </tr>
+          {% endif %}
+        </tbody>
       </table>
 
-      <!-- Page-footer note (outside the card) -->
-      <div style="font-size:11px;color:#94a3b8;margin-top:18px;text-align:center;max-width:640px;line-height:1.5;">
-        This invoice was generated automatically. To download a PDF copy, open this page in a browser and print to PDF (Cmd/Ctrl+P → Save as PDF).
+      <!-- Totals -->
+      <div class="totals">
+        <div class="row">
+          <div class="label">Subtotal</div>
+          <div>${{ invoice.subtotal_usd }}</div>
+        </div>
+        {% if invoice.tax_usd %}
+        <div class="row">
+          <div class="label">Tax ({{ invoice.tax_percent }}%)</div>
+          <div>${{ invoice.tax_usd }}</div>
+        </div>
+        {% endif %}
+        <div class="row total-row">
+          <div class="label">Total due</div>
+          <div>${{ invoice.total_usd }} USD</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Usage tiles ──────────────────────────────────────────────── -->
+    <div class="section">
+      <div class="section-title">Usage this period</div>
+
+      <div class="kpi-grid">
+        <div class="kpi-tile">
+          <div class="k-label">Sessions</div>
+          <div class="k-value">{{ usage.sessions_total|default:0 }}</div>
+          <div class="k-sub">{{ usage.sessions_active|default:0 }} active</div>
+        </div>
+        <div class="kpi-tile success">
+          <div class="k-label">Leads captured</div>
+          <div class="k-value">{{ usage.leads|default:0 }}</div>
+          <div class="k-sub">{{ usage.hot_leads|default:0 }} hot</div>
+        </div>
+        <div class="kpi-tile success">
+          <div class="k-label">Converted</div>
+          <div class="k-value">{{ usage.converted|default:0 }}</div>
+          <div class="k-sub">closed deals</div>
+        </div>
       </div>
 
-    </td>
-  </tr>
-</table>
+      <div class="kpi-grid">
+        <div class="kpi-tile">
+          <div class="k-label">AI messages</div>
+          <div class="k-value">{{ usage.ai_messages|default:0 }}</div>
+          <div class="k-sub">replies handled</div>
+        </div>
+        <div class="kpi-tile">
+          <div class="k-label">Images</div>
+          <div class="k-value">{{ usage.images|default:0 }}</div>
+          <div class="k-sub">uploads</div>
+        </div>
+        <div class="kpi-tile warning">
+          <div class="k-label">Escalated</div>
+          <div class="k-value">{{ usage.escalated|default:0 }}</div>
+          <div class="k-sub">to human team</div>
+        </div>
+      </div>
+
+      {% if usage.top_pages %}
+        <div style="margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;">
+          <div class="section-title" style="margin-bottom:6px;">Top pages</div>
+          {% for page in usage.top_pages %}
+            <div style="display:table;width:100%;font-size:12px;color:#475569;padding:3px 0;">
+              <span style="display:table-cell;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ page.url }}</span>
+              <span style="display:table-cell;text-align:right;font-weight:600;color:#0f172a;font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:12px;">{{ page.views }} views</span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- ── Notes ────────────────────────────────────────────────────── -->
+    <div class="section last">
+      <div class="notes-grid">
+        <div class="notes-cell">
+          <div class="section-title">Payment</div>
+          <p>Your subscription is billed automatically via Stripe on the renewal date. Add-on credits in this invoice were charged at purchase time — there is nothing to do.</p>
+        </div>
+        <div class="notes-cell">
+          <div class="section-title">Need help?</div>
+          <p>Email <a href="mailto:{{ support_email }}">{{ support_email }}</a> with the invoice number above and we'll get back within 1 business day.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Footer band ─────────────────────────────────────────────── -->
+    <div class="footer-band">
+      <div class="footer-grid">
+        <div>© {% now "Y" %} {{ company_brand }} · Sales Enablement AI</div>
+        <div class="right">{{ invoice.invoice_number }}</div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="page-note">
+    This invoice is generated automatically. The PDF version is attached to the email this came from.
+  </p>
 
 </body>
 </html>
