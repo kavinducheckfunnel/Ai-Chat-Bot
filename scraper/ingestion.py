@@ -494,53 +494,291 @@ def _fetch_with_playwright(url):
 
 
 # ── Strategy 4: Shopify JSON API ─────────────────────────────────────────────
+#
+# Public, no-auth Shopify endpoints. Each helper returns a flat list of
+# document dicts in the same shape the embedder expects:
+#   {title, content, url, product_id (optional), metadata: {type, ...}}
+#
+# `metadata.type` is one of {product, page, article, collection} so RAG
+# retrieval and the activity feed can route by resource type.
+# `metadata.shopify_resource` is a stable key
+# (e.g. `product_<id>`, `page_<id>`, `article_<id>`, `collection_<id>`)
+# used by the inventory + delete webhooks to find/update the right chunk
+# without having to re-scan the whole catalog.
 
-def fetch_shopify_data(site_url):
+def _shopify_paginate(api_url, key, site_url, max_pages=40, limit=250):
     """
-    Fetch products from Shopify's public /products.json endpoint (no auth needed).
-    Returns list of dicts: {title, content, url}
+    Walk a paginated Shopify JSON endpoint until empty / 4xx / max_pages.
+
+    Returns the concatenated list under `key`. Wrapped in try/except so a
+    transient blip doesn't abort the whole sync — `fetch_shopify_data`
+    keeps the partial results from earlier endpoints.
     """
-    api_url = f"{site_url.rstrip('/')}/products.json"
-    documents = []
-    page = 1
-    while True:
+    out = []
+    for page in range(1, max_pages + 1):
         try:
             resp = requests.get(
                 api_url,
-                params={'limit': 250, 'page': page},
+                params={'limit': limit, 'page': page},
                 headers=_HEADERS,
                 timeout=15,
             )
             if resp.status_code != 200:
                 break
-            products = resp.json().get('products', [])
-            if not products:
+            items = (resp.json() or {}).get(key, []) or []
+            if not items:
                 break
-            for p in products:
-                title = p.get('title', '')
-                body = BeautifulSoup(p.get('body_html', ''), 'html.parser').get_text(' ', True)
-                variants = ', '.join(
-                    f"{v['title']} ${v['price']}"
-                    for v in p.get('variants', [])
-                    if v.get('price')
-                )
-                handle = p.get('handle', '')
-                product_url = f"{site_url.rstrip('/')}/products/{handle}"
-                content_parts = [f"Product: {title}", f"URL: {product_url}", body]
-                if variants:
-                    content_parts.append(f"Variants: {variants}")
-                documents.append({
-                    'title': title,
-                    'content': '\n'.join(content_parts),
-                    'url': product_url,
-                    'product_id': str(p.get('id', '')),
-                })
-            page += 1
+            out.extend(items)
+            if len(items) < limit:
+                break  # last page
         except Exception as e:
-            logger.warning(f'[fetch_shopify_data] Error: {e}')
+            logger.warning(f'[_shopify_paginate] {api_url} page={page}: {e}')
             break
-    logger.info(f'[fetch_shopify_data] Fetched {len(documents)} products from {site_url}')
+    return out
+
+
+def _shopify_products(site_url):
+    """Fetch all products. Captures variants[].inventory_item_id so the
+    Phase-C inventory webhook can find affected chunks."""
+    base = site_url.rstrip('/')
+    products = _shopify_paginate(f'{base}/products.json', 'products', site_url)
+    docs = []
+    for p in products:
+        title = p.get('title') or ''
+        body = BeautifulSoup(p.get('body_html', '') or '', 'html.parser').get_text(' ', True)
+        handle = p.get('handle') or ''
+        url = f'{base}/products/{handle}'
+        variant_rows = p.get('variants', []) or []
+        # Human-readable variant blurb for the AI to read out
+        variants_blurb = ', '.join(
+            f"{v.get('title', '?')} ${v.get('price')}"
+            for v in variant_rows if v.get('price')
+        )
+        # Structured variant list for inventory bookkeeping. Each entry
+        # carries the inventory_item_id that Shopify's
+        # `inventory_levels/update` webhook references.
+        variants_struct = [
+            {
+                'variant_id': v.get('id'),
+                'inventory_item_id': v.get('inventory_item_id'),
+                'sku': v.get('sku') or '',
+                'price': v.get('price') or '',
+                'available': v.get('available'),
+            }
+            for v in variant_rows
+        ]
+        content_parts = [f'Product: {title}', f'URL: {url}', body]
+        if variants_blurb:
+            content_parts.append(f'Variants: {variants_blurb}')
+        docs.append({
+            'title': title,
+            'content': '\n'.join(content_parts),
+            'url': url,
+            'product_id': str(p.get('id', '')),
+            'metadata': {
+                'title': title,
+                'type': 'product',
+                'shopify_resource': f"product_{p.get('id', '')}",
+                'variants': variants_struct,
+                'is_active': True,
+            },
+        })
+    return docs
+
+
+def _shopify_pages(site_url):
+    """Static pages: About, Shipping, FAQ, Returns, Privacy, T&C, etc."""
+    base = site_url.rstrip('/')
+    pages = _shopify_paginate(f'{base}/pages.json', 'pages', site_url)
+    docs = []
+    for p in pages:
+        title = p.get('title') or ''
+        body = BeautifulSoup(p.get('body_html', '') or '', 'html.parser').get_text(' ', True)
+        handle = p.get('handle') or ''
+        url = f'{base}/pages/{handle}'
+        docs.append({
+            'title': title,
+            'content': f'Page: {title}\nURL: {url}\n{body}',
+            'url': url,
+            'metadata': {
+                'title': title,
+                'type': 'page',
+                'shopify_resource': f"page_{p.get('id', '')}",
+            },
+        })
+    return docs
+
+
+def _shopify_blogs_and_articles(site_url, max_blogs=20):
+    """Blog articles (capped at `max_blogs` blogs per tenant to avoid
+    pathological multi-blog stores)."""
+    base = site_url.rstrip('/')
+    blogs = _shopify_paginate(f'{base}/blogs.json', 'blogs', site_url)
+    if len(blogs) > max_blogs:
+        logger.warning(
+            f'[_shopify_blogs_and_articles] {site_url} has {len(blogs)} blogs; '
+            f'capping at {max_blogs}'
+        )
+        blogs = blogs[:max_blogs]
+    docs = []
+    for blog in blogs:
+        blog_handle = blog.get('handle') or ''
+        articles = _shopify_paginate(
+            f'{base}/blogs/{blog_handle}/articles.json',
+            'articles',
+            site_url,
+        )
+        for a in articles:
+            title = a.get('title') or ''
+            body = BeautifulSoup(a.get('body_html', '') or '', 'html.parser').get_text(' ', True)
+            handle = a.get('handle') or ''
+            url = f'{base}/blogs/{blog_handle}/{handle}'
+            docs.append({
+                'title': title,
+                'content': f'Article: {title}\nURL: {url}\n{body}',
+                'url': url,
+                'metadata': {
+                    'title': title,
+                    'type': 'article',
+                    'shopify_resource': f"article_{a.get('id', '')}",
+                    'blog_handle': blog_handle,
+                },
+            })
+    return docs
+
+
+def _shopify_collections(site_url):
+    """Product collections. Shopify exposes `/collections.json` (custom
+    collections) and `/smart_collections` style endpoints; the public
+    `/collections.json` returns both kinds for most stores."""
+    base = site_url.rstrip('/')
+    collections = _shopify_paginate(f'{base}/collections.json', 'collections', site_url)
+    docs = []
+    for c in collections:
+        title = c.get('title') or ''
+        body = BeautifulSoup(c.get('body_html', '') or '', 'html.parser').get_text(' ', True)
+        handle = c.get('handle') or ''
+        url = f'{base}/collections/{handle}'
+        content = f'Collection: {title}\nURL: {url}\n{body}'.strip()
+        docs.append({
+            'title': title,
+            'content': content,
+            'url': url,
+            'metadata': {
+                'title': title,
+                'type': 'collection',
+                'shopify_resource': f"collection_{c.get('id', '')}",
+            },
+        })
+    return docs
+
+
+def fetch_shopify_data(site_url):
+    """
+    Fetch the full public Shopify catalog: products, pages, blog articles,
+    and collections. All endpoints are unauthenticated. Returns a flat
+    list of document dicts ready for embedding.
+
+    Individual sub-fetches swallow their own errors so a single failing
+    endpoint (e.g. a tenant with `/pages.json` disabled by their theme)
+    doesn't drop the rest of the catalog.
+    """
+    documents = []
+    documents.extend(_shopify_products(site_url))
+    documents.extend(_shopify_pages(site_url))
+    documents.extend(_shopify_blogs_and_articles(site_url))
+    documents.extend(_shopify_collections(site_url))
+
+    # Tally per-type for the log line so we can spot e.g. "products fetched
+    # but pages always 0" patterns in production logs.
+    by_type = {}
+    for d in documents:
+        t = (d.get('metadata') or {}).get('type', 'unknown')
+        by_type[t] = by_type.get(t, 0) + 1
+    logger.info(
+        f'[fetch_shopify_data] Fetched {len(documents)} docs from {site_url} '
+        f'(breakdown: {by_type})'
+    )
     return documents
+
+
+# ── Platform auto-detection (Phase D) ────────────────────────────────────────
+
+def detect_platform(site_url: str, timeout: int = 6) -> str:
+    """
+    Inspect a public site URL and return the most likely Client.platform value.
+
+    Returns one of: 'SHOPIFY', 'WORDPRESS', 'CUSTOM'.
+
+    Detection ladder (fast → slow):
+      1. `*.myshopify.com` host → Shopify (no network call needed).
+      2. `/products.json` returns JSON with a `products` key → Shopify.
+      3. Homepage HTML contains `window.Shopify`, `cdn.shopify.com`, or a
+         `Shopify-` cookie hint → Shopify.
+      4. `/wp-json/` returns 200 with a `namespaces` field → WordPress.
+      5. Homepage HTML contains `wp-content/`, `wp-includes/`, or a
+         `generator` meta tag mentioning WordPress → WordPress.
+      6. Otherwise → CUSTOM (caller can keep manual choice).
+
+    Conservative on purpose — false positives are worse than false negatives
+    because a misidentified platform routes the catalog through the wrong
+    scraper. When uncertain we return CUSTOM and let the merchant choose.
+    """
+    if not site_url:
+        return 'CUSTOM'
+
+    # 1. Cheap shortcut: domain pattern. `*.myshopify.com` is always Shopify.
+    try:
+        from urllib.parse import urlparse
+        host = (urlparse(site_url).hostname or '').lower()
+    except Exception:
+        host = ''
+    if host.endswith('.myshopify.com'):
+        return 'SHOPIFY'
+
+    # 2. /products.json — Shopify's tell-tale public endpoint.
+    base = site_url.rstrip('/')
+    try:
+        r = requests.get(
+            f'{base}/products.json',
+            params={'limit': 1},
+            headers=_HEADERS,
+            timeout=timeout,
+        )
+        if r.status_code == 200:
+            try:
+                if 'products' in (r.json() or {}):
+                    return 'SHOPIFY'
+            except ValueError:
+                pass
+    except Exception:
+        pass
+
+    # 4. /wp-json/ — WordPress REST API root.
+    try:
+        r = requests.get(f'{base}/wp-json/', headers=_HEADERS, timeout=timeout)
+        if r.status_code == 200:
+            try:
+                if 'namespaces' in (r.json() or {}):
+                    return 'WORDPRESS'
+            except ValueError:
+                pass
+    except Exception:
+        pass
+
+    # 3+5. Last-ditch homepage sniff for embedded markers.
+    try:
+        r = requests.get(base, headers=_HEADERS, timeout=timeout)
+        if r.status_code == 200:
+            body = (r.text or '')[:200_000].lower()  # cap to avoid huge SPA bundles
+            if 'cdn.shopify.com' in body or 'window.shopify' in body or 'shopify.theme' in body:
+                return 'SHOPIFY'
+            if 'wp-content/' in body or 'wp-includes/' in body or '<meta name="generator" content="wordpress' in body:
+                return 'WORDPRESS'
+    except Exception:
+        pass
+
+    return 'CUSTOM'
 
 
 # ── Master scraper: auto-detect strategy ─────────────────────────────────────
@@ -620,6 +858,12 @@ def ingest_documents(client, documents, progress_cb=None):
         title      = doc.get('title', '')
         text       = doc.get('content', '') or title
         source_url = doc.get('url', '')
+        # `metadata` on the input doc is optional — Shopify ingestion sets
+        # `{type, shopify_resource, variants, is_active}` so the inventory
+        # webhook + RAG retrieval can route by resource type. Older
+        # producers (WordPress, generic crawl) leave it empty and just get
+        # the `{title}` default.
+        doc_meta = dict(doc.get('metadata') or {})
 
         if not text or len(text.strip()) < 30:
             continue
@@ -642,6 +886,7 @@ def ingest_documents(client, documents, progress_cb=None):
                 'source_url': source_url,
                 'product_id': doc.get('product_id', ''),
                 'title': title,
+                'doc_meta': doc_meta,
             })
 
     if not chunks_text:
@@ -678,7 +923,10 @@ def ingest_documents(client, documents, progress_cb=None):
             embedding=all_embeddings[i],
             source_url=chunks_meta[i]['source_url'],
             product_id=chunks_meta[i]['product_id'] or None,
-            metadata={'title': chunks_meta[i]['title']},
+            # Merge the doc-level metadata (Shopify type, variants, etc.)
+            # with the canonical {title} so downstream code always sees
+            # title where it expects it.
+            metadata={'title': chunks_meta[i]['title'], **(chunks_meta[i].get('doc_meta') or {})},
         )
         for i in range(len(chunks_text))
     ]

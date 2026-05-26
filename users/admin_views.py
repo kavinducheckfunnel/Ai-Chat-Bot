@@ -443,6 +443,43 @@ def _sniff_image_format(head: bytes) -> tuple[str, str] | None:
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def detect_client_platform(request):
+    """
+    Inspect a public domain URL and return our best guess at the e-commerce
+    platform powering it (SHOPIFY / WORDPRESS / CUSTOM). Used by the
+    onboarding wizard to pre-select the platform field so the merchant
+    doesn't have to choose manually.
+
+    Body: { "url": "https://example.com" }
+    Response: { "platform": "SHOPIFY", "detected": true }
+
+    Always returns 200 — `detected: false` means we couldn't identify the
+    platform with confidence and the UI should fall back to manual choice.
+    The call is best-effort and never raises to the user.
+    """
+    url = (request.data.get('url') or '').strip()
+    if not url:
+        return Response({'detail': 'url is required'}, status=400)
+
+    # Normalise — accept "example.com" and "https://example.com" alike.
+    if not url.startswith(('http://', 'https://')):
+        url = 'https://' + url
+
+    from scraper.ingestion import detect_platform
+    try:
+        platform = detect_platform(url)
+    except Exception as exc:
+        logger.warning(f'[detect_client_platform] {url}: {exc}')
+        platform = 'CUSTOM'
+
+    return Response({
+        'platform': platform,
+        'detected': platform != 'CUSTOM',
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def upload_client_logo(request, client_id):
     """
     Upload a brand logo for `client_id` and persist its public URL on the

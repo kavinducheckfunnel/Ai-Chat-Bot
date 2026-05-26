@@ -314,7 +314,25 @@ async function triggerScrape() {
   scrapeStatus.value = 'RUNNING'
   scrapePages.value = 0
   try {
-    await api.updatePortalClient(client.value.id, { domain_url: form.value.domain_url })
+    // Phase D — sniff the platform from the public site so the right
+    // scraper strategy runs. Best-effort: if detect returns CUSTOM or
+    // errors, we leave whatever platform the merchant chose untouched.
+    let detectedPlatform = null
+    try {
+      const det = await api.detectPlatform(form.value.domain_url)
+      if (det && det.detected && det.platform) {
+        detectedPlatform = det.platform
+      }
+    } catch (_) {
+      // Detection is a nice-to-have; never block the scrape on it.
+    }
+
+    const patch = { domain_url: form.value.domain_url }
+    if (detectedPlatform) patch.platform = detectedPlatform
+    await api.updatePortalClient(client.value.id, patch)
+    if (detectedPlatform && client.value) {
+      client.value.platform = detectedPlatform
+    }
     await api.triggerScrape(client.value.id)
     pollScrape()
   } catch {

@@ -192,6 +192,12 @@ export function useAdminApi() {
 
     deleteClient: (id) => apiFetch(`/api/admin/clients/${id}/`, { method: 'DELETE' }),
 
+    // Phase D — onboarding auto-detect. Returns { platform, detected }
+    // where platform is one of 'SHOPIFY' | 'WORDPRESS' | 'CUSTOM'.
+    detectPlatform: (url) => apiFetch('/api/admin/platform/detect/', {
+      method: 'POST', body: JSON.stringify({ url }),
+    }),
+
     // Upload a logo image (PNG/JPEG/GIF/WebP, ≤2 MB). The backend writes
     // it under MEDIA_ROOT, stores the absolute URL on chatbot_logo_url,
     // and returns { logo_url }.

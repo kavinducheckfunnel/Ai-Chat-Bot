@@ -564,6 +564,18 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     KB_TOP_K = KB_TOP_K_BY_STATE.get(session.conversation_state, 8)
     if session.client_id:
         chunk_qs = DocumentChunk.objects.filter(client_id=session.client_id)
+        # Suppress chunks that were flagged sold-out by the Shopify
+        # inventory webhook (Phase C). `is_active=False` on metadata
+        # means every variant is out of stock — recommending it would be
+        # a worse experience than skipping it. Chunks without the flag
+        # (everything from WordPress, WC, custom crawl) stay visible.
+        try:
+            chunk_qs = chunk_qs.exclude(metadata__is_active=False)
+        except Exception:
+            # Some DB backends (SQLite in tests) don't support JSONField
+            # `__is_active=False` lookups; the suppression is a soft
+            # filter so falling back silently is fine.
+            pass
         top_chunks = chunk_qs.annotate(
             distance=CosineDistance('embedding', query_embedding)
         ).order_by('distance')[:KB_TOP_K]

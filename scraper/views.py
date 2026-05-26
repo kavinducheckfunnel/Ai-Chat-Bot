@@ -96,6 +96,27 @@ def shopify_webhook(request, client_id):
     topic = request.headers.get('X-Shopify-Topic', '')
     product_id = data.get('id')
 
+    # ── INVENTORY branch — stock-level changes ───────────────────────────
+    # Shopify fires `inventory_levels/update` whenever stock count changes
+    # at any location, with a payload like
+    # {inventory_item_id, location_id, available, updated_at}. The variant
+    # is found by inventory_item_id, which we stored on the chunk during
+    # the catalog scrape (see scraper.ingestion._shopify_products).
+    if topic == 'inventory_levels/update':
+        inventory_item_id = data.get('inventory_item_id')
+        available = data.get('available')
+        if inventory_item_id is None or available is None:
+            return Response({'status': 'skipped — missing inventory_item_id or available'}, status=400)
+        event = _log_event(
+            client, 'shopify', topic,
+            str(inventory_item_id), f'available={available}',
+        )
+        from scraper.tasks import update_inventory_for_variant
+        update_inventory_for_variant.delay(
+            str(client.pk), str(inventory_item_id), int(available), event.id,
+        )
+        return Response({'status': 'inventory queued', 'event_id': event.id}, status=202)
+
     # ── DELETE branch — fire-and-purge ───────────────────────────────────
     # Shopify only sends {id, ...} on products/delete (no title), so we
     # gate on the topic header rather than the payload shape.

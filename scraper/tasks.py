@@ -325,6 +325,129 @@ def re_embed_url(self, client_id, url, event_id=None):
         raise self.retry(exc=exc, countdown=60)
 
 
+# ─── Phase C: Real-time inventory sync (Shopify) ──────────────────────────────
+
+
+@shared_task(bind=True, max_retries=3)
+def update_inventory_for_variant(self, client_id, inventory_item_id, available, event_id=None):
+    """
+    Apply a Shopify `inventory_levels/update` webhook to the affected
+    DocumentChunk.
+
+    Lookup path:
+      chunk.metadata.variants[].inventory_item_id == inventory_item_id
+      (captured during the catalog scrape by `_shopify_products`).
+
+    What we update:
+      • the matching variant's `available` count in metadata.variants
+      • a top-level metadata.is_active flag so RAG can suppress sold-out chunks
+      • the chunk content gets a stable `Stock: N units` / `Stock: SOLD OUT`
+        line so the LLM picks up the change at retrieval time without
+        having to re-read metadata at runtime
+      • re-embed the chunk so similarity search reflects the new wording
+
+    This is a *write-affected-only* path — we never touch chunks that
+    don't reference this inventory_item_id, so a 50-product store with
+    one stock change does exactly one embedding call.
+    """
+    from django.utils import timezone
+    from users.models import Client
+    from scraper.models import DocumentChunk
+    from scraper.embeddings import batch_embed_texts
+
+    started = time.time()
+    try:
+        client = Client.objects.get(pk=client_id)
+    except Client.DoesNotExist:
+        _close_event(event_id, 'failed', 'Client not found', started)
+        return 'no_client'
+
+    try:
+        # Postgres JSONB contains query — fast & uses the GIN index if
+        # one's added later. Falls back to a Python filter for tests that
+        # use SQLite, which doesn't support `__contains` on JSONField for
+        # nested arrays.
+        try:
+            candidate_chunks = list(
+                DocumentChunk.objects.filter(
+                    client=client,
+                    metadata__variants__contains=[{'inventory_item_id': int(inventory_item_id)}],
+                )
+            )
+        except Exception:
+            candidate_chunks = []
+        if not candidate_chunks:
+            # Fallback: in-memory scan of this client's product chunks.
+            # Only relevant if the JSONB query above isn't available
+            # (e.g. SQLite in tests) or if inventory_item_id stored as str.
+            candidate_chunks = [
+                c for c in DocumentChunk.objects.filter(client=client)
+                if any(
+                    str(v.get('inventory_item_id')) == str(inventory_item_id)
+                    for v in (c.metadata or {}).get('variants', []) or []
+                )
+            ]
+
+        if not candidate_chunks:
+            _close_event(event_id, 'done', 'No matching chunk', started)
+            logger.info(
+                f'[update_inventory_for_variant] No chunk for '
+                f'inventory_item_id={inventory_item_id} on client {client_id}'
+            )
+            return 'no_chunk'
+
+        updated_count = 0
+        for chunk in candidate_chunks:
+            md = dict(chunk.metadata or {})
+            variants = list(md.get('variants') or [])
+            for v in variants:
+                if str(v.get('inventory_item_id')) == str(inventory_item_id):
+                    v['available'] = int(available)
+            md['variants'] = variants
+            # Top-level flag: any variant available → active; all 0 → inactive.
+            any_in_stock = any((v.get('available') or 0) > 0 for v in variants)
+            md['is_active'] = bool(any_in_stock)
+
+            # Append / refresh a stable stock line in the chunk content
+            # so the LLM sees it as part of the retrieved context.
+            stock_line = (
+                f'Stock: {int(available)} units'
+                if int(available) > 0 else 'Stock: SOLD OUT'
+            )
+            content_lines = [
+                ln for ln in (chunk.content or '').splitlines()
+                if not ln.startswith('Stock:')
+            ]
+            content_lines.append(stock_line)
+            new_content = '\n'.join(content_lines)
+
+            embeddings = batch_embed_texts([new_content])
+            emb = embeddings[0] if embeddings else [0.0] * 1024
+            if len(emb) < 1024:
+                emb = emb + [0.0] * (1024 - len(emb))
+            elif len(emb) > 1024:
+                emb = emb[:1024]
+
+            chunk.metadata = md
+            chunk.content = new_content
+            chunk.embedding = emb
+            chunk.save(update_fields=['metadata', 'content', 'embedding'])
+            updated_count += 1
+
+        Client.objects.filter(pk=client_id).update(updated_at=timezone.now())
+        _close_event(event_id, 'done', f'Updated {updated_count} chunk(s)', started)
+        logger.info(
+            f'[update_inventory_for_variant] Updated {updated_count} chunk(s) '
+            f'for inventory_item_id={inventory_item_id}, client {client_id}'
+        )
+        return f'updated:{updated_count}'
+
+    except Exception as exc:
+        logger.error(f'[update_inventory_for_variant] Failed: {exc}')
+        _close_event(event_id, 'failed', str(exc), started)
+        raise self.retry(exc=exc, countdown=30)
+
+
 # ─── Phase 2: DELETE handler (Shopify/WC/WP product or post deleted) ─────────
 
 @shared_task

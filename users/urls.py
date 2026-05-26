@@ -16,6 +16,9 @@ urlpatterns = [
     path('plans/', admin_views.plan_list, name='admin-plans'),
     path('plans/<int:plan_id>/', admin_views.plan_detail, name='admin-plan-detail'),
 
+    # Platform auto-detect (used by onboarding wizard)
+    path('platform/detect/', admin_views.detect_client_platform, name='admin-platform-detect'),
+
     # Clients
     path('clients/', admin_views.client_list, name='admin-clients'),
     path('clients/<uuid:client_id>/', admin_views.client_detail, name='admin-client-detail'),

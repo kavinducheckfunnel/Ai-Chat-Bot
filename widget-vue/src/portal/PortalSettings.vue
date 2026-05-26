@@ -44,7 +44,39 @@
 
           <p class="embed-instruction" v-if="embedFormat === 'wordpress'">Paste into your theme's <code>functions.php</code>, or use the "Insert Headers and Footers" plugin → Footer section.</p>
           <p class="embed-instruction" v-else-if="embedFormat === 'react'">Drop this component anywhere in your React app tree.</p>
+          <p class="embed-instruction" v-else-if="embedFormat === 'shopify'">Open <strong>Shopify Admin → Online Store → Themes → Edit code → Layout/theme.liquid</strong>, find <code>&lt;/body&gt;</code> near the bottom, paste the snippet right before it, and Save.</p>
           <p class="embed-instruction" v-else>Paste before the <code>&lt;/body&gt;</code> tag on every page.</p>
+
+          <!-- Detailed Shopify install card — shown only on the Shopify tab.
+               Three-step walkthrough plus a fallback for non-technical
+               merchants who don't want to touch theme code. -->
+          <div v-if="embedFormat === 'shopify'" class="shopify-card">
+            <ol class="shopify-steps">
+              <li>
+                <strong>Open theme editor.</strong>
+                In your Shopify admin, go to <em>Online Store → Themes</em>,
+                find your active theme, and click <em>Actions → Edit code</em>.
+              </li>
+              <li>
+                <strong>Open <code>theme.liquid</code>.</strong>
+                Under the <em>Layout</em> folder, click <code>theme.liquid</code>.
+                Scroll to the bottom and find the closing
+                <code>&lt;/body&gt;</code> tag.
+              </li>
+              <li>
+                <strong>Paste &amp; save.</strong>
+                Paste the snippet above on its own line just before
+                <code>&lt;/body&gt;</code>, then click <em>Save</em>. The widget
+                appears within seconds on the next page reload.
+              </li>
+            </ol>
+            <p class="shopify-alt">
+              <strong>Prefer not to edit theme code?</strong>
+              Install a free <em>Custom Code Editor</em> Shopify app
+              (Shop Circle, GLO, or similar) and paste the snippet into its
+              "Before <code>&lt;/body&gt;</code>" slot — same result, no Liquid edit.
+            </p>
+          </div>
 
           <!-- Code block -->
           <div class="code-block" v-if="props.client">
@@ -973,6 +1005,7 @@ const presetColors = ['#ffffff', '#3B82F6', '#22c55e', '#ef4444', '#6366f1', '#f
 
 const formats = [
   { id: 'html',      label: 'HTML',      icon: '<span style="font-weight:700;font-size:11px;letter-spacing:-0.5px;font-family:monospace">&lt;/&gt;</span>' },
+  { id: 'shopify',   label: 'Shopify',   icon: '<span style="color:#96bf48;font-weight:700;font-size:13px;line-height:1">S</span>' },
   { id: 'wordpress', label: 'WordPress', icon: '<span style="color:#21759b;font-weight:700;font-size:11px">WP</span>' },
   { id: 'react',     label: 'React',     icon: '<span style="font-size:14px;line-height:1">⚛</span>' },
 ]
@@ -1486,6 +1519,55 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 
 .embed-instruction { font-size: 12px; color: #94a3b8; }
 .embed-instruction code { background: rgba(255,255,255,0.08); padding: 1px 5px; border-radius: 4px; font-family: monospace; color: #a5b4fc; }
+
+/* Shopify install card */
+.shopify-card {
+  margin-top: 14px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, rgba(150,191,72,0.08) 0%, rgba(150,191,72,0.02) 100%);
+  border: 1px solid rgba(150,191,72,0.25);
+  border-radius: 10px;
+}
+.shopify-steps {
+  list-style: decimal;
+  padding-left: 22px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--cf-text-default);
+}
+.shopify-steps strong { color: var(--cf-text-default); }
+.shopify-steps em { color: #96bf48; font-style: normal; font-weight: 600; }
+.shopify-steps code {
+  background: rgba(255,255,255,0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  color: #a5b4fc;
+}
+.shopify-alt {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--cf-text-muted);
+}
+.shopify-alt strong { color: var(--cf-text-secondary); }
+.shopify-alt em { color: #c0d8ff; font-style: normal; font-weight: 600; }
+.shopify-alt code {
+  background: rgba(255,255,255,0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 11px;
+  color: #a5b4fc;
+}
 
 /* Format tabs inside embed-box always on dark bg — force dark-mode palette */
 .embed-box .format-tab {

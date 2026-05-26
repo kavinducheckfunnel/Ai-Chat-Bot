@@ -844,6 +844,22 @@ $('cf-lead-em').addEventListener('keydown',function(e){if(e.key==='Enter')submit
   // ───────────── Format wrappers ─────────────────
   const fullSnippet = '<!-- Start of Checkfunnel code -->\n' + css + '\n' + html + '\n' + js + '\n<!-- End of Checkfunnel code -->'
 
+  if (format === 'shopify') {
+    // Liquid is HTML-compatible — raw <script>/<style>/<div> pass through
+    // untouched because Liquid only processes `{% %}` and `{{ }}`. Wrap
+    // the snippet with merchant-facing headers so it's obvious in
+    // theme.liquid what was pasted and why.
+    return [
+      '{% comment %}',
+      '  Checkfunnel AI chat widget — paste this block right before',
+      '  </body> in Layout/theme.liquid (Online Store → Themes → Edit code).',
+      '  Branding, color, name, and CTA stay live-editable from the',
+      '  Checkfunnel portal — no re-paste needed.',
+      '{% endcomment %}',
+      fullSnippet,
+    ].join('\n')
+  }
+
   if (format === 'wordpress') {
     return [
       '<?php',
