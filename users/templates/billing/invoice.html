@@ -36,25 +36,31 @@
     }
     /* Header band uses the tenant's brand colour */
     .header {
-      padding: 28px 36px;
+      padding: 24px 36px;
       color: #ffffff;
       background: linear-gradient(135deg, {{ brand_color }} 0%, {{ brand_color_secondary }} 100%);
     }
-    .header-grid { display: table; width: 100%; }
-    .header-grid > div { display: table-cell; vertical-align: middle; }
-    .header-left .logo-wrap { display: inline-block; vertical-align: middle; margin-right: 12px; }
-    .header-left img {
-      display: block; max-height: 44px; max-width: 140px; width: auto;
+    .header-table { width: 100%; border-collapse: collapse; }
+    .header-table td { vertical-align: middle; padding: 0; }
+    .header-table .h-logo-cell { width: 56px; padding-right: 14px; }
+    .header-table .h-logo {
+      display: block; max-height: 44px; max-width: 56px; width: auto; height: auto;
       border-radius: 8px; background: rgba(255,255,255,0.14); padding: 4px;
     }
-    .header-left .brand-text {
-      display: inline-block; vertical-align: middle;
+    .header-table .h-right { width: 200px; text-align: right; vertical-align: top; }
+    .header-table .tenant-name {
+      font-size: 22px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.15;
+      word-break: break-word;
     }
-    .header-left .tenant-name { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; line-height: 1.1; }
-    .header-left .from-line { font-size: 11px; opacity: 0.85; margin-top: 4px; }
-    .header-right { text-align: right; }
-    .header-right .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.10em; opacity: 0.85; }
-    .header-right .number { font-size: 17px; font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; }
+    .header-table .from-line { font-size: 11px; opacity: 0.85; margin-top: 4px; }
+    .header-table .h-right .label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.10em; opacity: 0.85;
+    }
+    .header-table .h-right .number {
+      font-size: 16px; font-weight: 600;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      margin-top: 4px; white-space: nowrap;
+    }
 
     /* Sections */
     .section { padding: 24px 36px 0; }
@@ -65,12 +71,20 @@
       margin: 0 0 10px;
     }
 
-    /* Meta row — billed-to / period / issued */
-    .meta-grid { display: table; width: 100%; table-layout: fixed; }
-    .meta-cell { display: table-cell; vertical-align: top; padding-right: 16px; }
-    .meta-cell:last-child { padding-right: 0; }
-    .meta-cell .meta-value { font-size: 14px; font-weight: 600; color: #0f172a; line-height: 1.35; }
-    .meta-cell .meta-sub { font-size: 12px; color: #475569; margin-top: 2px; }
+    /* Meta row — billed-to / period / issued.
+       Real <table> with fixed widths so a long email in the "Billed to"
+       column wraps within its cell instead of running into the next column. */
+    .meta-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .meta-table td {
+      vertical-align: top;
+      padding: 0 16px 0 0;
+      width: 33.33%;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .meta-table td:last-child { padding-right: 0; }
+    .meta-value { font-size: 14px; font-weight: 600; color: #0f172a; line-height: 1.35; }
+    .meta-sub { font-size: 12px; color: #475569; margin-top: 2px; }
 
     /* Line items table */
     .line-table { width: 100%; border-collapse: collapse; }
@@ -139,46 +153,54 @@
 
   <div class="page-shell">
 
-    <!-- ── Header ───────────────────────────────────────────────────── -->
+    <!-- ── Header ─────────────────────────────────────────────────────
+         Real table with explicit widths so the brand text never gets
+         squeezed by the right-side invoice number. Logo (if any) sits
+         in a fixed 56px column; brand text owns the remaining width. -->
     <div class="header">
-      <div class="header-grid">
-        <div class="header-left">
+      <table class="header-table">
+        <tr>
           {% if brand_logo_url %}
-            <span class="logo-wrap">
-              <img src="{{ brand_logo_url }}" alt="{{ tenant_name }}" height="44" />
-            </span>
+          <td class="h-logo-cell">
+            <img class="h-logo" src="{{ brand_logo_url }}" alt="{{ tenant_name }}" />
+          </td>
           {% endif %}
-          <span class="brand-text">
+          <td>
             <div class="tenant-name">{{ tenant_name|default:company_brand }}</div>
             <div class="from-line">Invoice from {{ company_brand }}</div>
-          </span>
-        </div>
-        <div class="header-right">
-          <div class="label">Invoice</div>
-          <div class="number">{{ invoice.invoice_number }}</div>
-        </div>
-      </div>
+          </td>
+          <td class="h-right">
+            <div class="label">Invoice</div>
+            <div class="number">{{ invoice.invoice_number }}</div>
+          </td>
+        </tr>
+      </table>
     </div>
 
-    <!-- ── Meta row ─────────────────────────────────────────────────── -->
+    <!-- ── Meta row ───────────────────────────────────────────────────
+         Real table with table-layout: fixed and 33.33% per column +
+         word-break, so long emails wrap within "Billed to" instead of
+         spilling into "Billing period". -->
     <div class="section">
-      <div class="meta-grid">
-        <div class="meta-cell">
-          <div class="section-title">Billed to</div>
-          <div class="meta-value">{{ tenant_name }}</div>
-          {% if recipient_email %}<div class="meta-sub">{{ recipient_email }}</div>{% endif %}
-        </div>
-        <div class="meta-cell">
-          <div class="section-title">Billing period</div>
-          <div class="meta-value">{{ invoice.period_start|date:"F j" }} — {{ invoice.period_end|date:"F j, Y" }}</div>
-          <div class="meta-sub">Plan: {{ invoice.plan_name_at_issue|default:"Free" }}</div>
-        </div>
-        <div class="meta-cell">
-          <div class="section-title">Issued on</div>
-          <div class="meta-value">{{ invoice.created_at|date:"F j, Y" }}</div>
-          <div class="meta-sub">Status: {{ invoice.get_status_display }}</div>
-        </div>
-      </div>
+      <table class="meta-table">
+        <tr>
+          <td>
+            <div class="section-title">Billed to</div>
+            <div class="meta-value">{{ tenant_name }}</div>
+            {% if recipient_email %}<div class="meta-sub">{{ recipient_email }}</div>{% endif %}
+          </td>
+          <td>
+            <div class="section-title">Billing period</div>
+            <div class="meta-value">{{ invoice.period_start|date:"F j" }} — {{ invoice.period_end|date:"F j, Y" }}</div>
+            <div class="meta-sub">Plan: {{ invoice.plan_name_at_issue|default:"Free" }}</div>
+          </td>
+          <td>
+            <div class="section-title">Issued on</div>
+            <div class="meta-value">{{ invoice.created_at|date:"F j, Y" }}</div>
+            <div class="meta-sub">Status: {{ invoice.get_status_display }}</div>
+          </td>
+        </tr>
+      </table>
     </div>
 
     <!-- ── Charges ──────────────────────────────────────────────────── -->

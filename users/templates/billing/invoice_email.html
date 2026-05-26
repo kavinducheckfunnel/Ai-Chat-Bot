@@ -22,27 +22,20 @@
       <!-- ── Header band ──────────────────────────────────────────── -->
       <tr>
         <td style="background:linear-gradient(135deg,{{ brand_color }} 0%,{{ brand_color_secondary }} 100%);padding:24px 32px;color:#ffffff;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;">
             <tr>
-              <td style="vertical-align:middle;">
-                {% if brand_logo_url %}
-                  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-                    <td style="vertical-align:middle;padding-right:12px;">
-                      <img src="{{ brand_logo_url }}" alt="{{ tenant_name }}" height="40" style="display:block;max-height:40px;max-width:120px;width:auto;border:0;border-radius:8px;background:rgba(255,255,255,0.14);padding:4px;" />
-                    </td>
-                    <td style="vertical-align:middle;">
-                      <div style="font-size:17px;font-weight:700;letter-spacing:-0.3px;line-height:1.1;">{{ tenant_name|default:company_brand }}</div>
-                      <div style="font-size:11px;opacity:0.85;margin-top:3px;">Invoice from {{ company_brand }}</div>
-                    </td>
-                  </tr></table>
-                {% else %}
-                  <div style="font-size:19px;font-weight:700;letter-spacing:-0.3px;">{{ tenant_name|default:company_brand }}</div>
-                  <div style="font-size:11px;opacity:0.85;margin-top:4px;">Invoice from {{ company_brand }}</div>
-                {% endif %}
+              {% if brand_logo_url %}
+              <td width="56" style="vertical-align:middle;padding-right:12px;width:56px;">
+                <img src="{{ brand_logo_url }}" alt="{{ tenant_name }}" height="40" style="display:block;max-height:40px;max-width:56px;width:auto;border:0;border-radius:8px;background:rgba(255,255,255,0.14);padding:4px;" />
               </td>
-              <td align="right" style="vertical-align:top;">
+              {% endif %}
+              <td style="vertical-align:middle;word-break:break-word;overflow-wrap:anywhere;">
+                <div style="font-size:18px;font-weight:700;letter-spacing:-0.3px;line-height:1.15;">{{ tenant_name|default:company_brand }}</div>
+                <div style="font-size:11px;opacity:0.85;margin-top:3px;">Invoice from {{ company_brand }}</div>
+              </td>
+              <td width="170" align="right" style="vertical-align:top;width:170px;">
                 <div style="font-size:10px;text-transform:uppercase;letter-spacing:0.1em;opacity:0.85;">Invoice</div>
-                <div style="font-size:14px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:3px;white-space:nowrap;">{{ invoice.invoice_number }}</div>
+                <div style="font-size:13px;font-weight:600;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;margin-top:3px;white-space:nowrap;">{{ invoice.invoice_number }}</div>
               </td>
             </tr>
           </table>
