@@ -300,9 +300,11 @@ watch(() => props.client, loadLeads)
   outline: none; cursor: pointer;
 }
 
-.table-wrap { overflow-x: auto; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
 
-.leads-table { width: 100%; border-collapse: collapse; }
+/* min-width keeps the table readable while letting .table-wrap scroll
+   on phones — otherwise narrow viewports crush each column. */
+.leads-table { width: 100%; min-width: 560px; border-collapse: collapse; }
 
 .leads-table th {
   padding: 10px 14px;

@@ -683,8 +683,20 @@ watch(() => props.client, load)
 .page-sub { font-size: 13px; color: var(--cf-text-muted); margin-top: 3px; }
 .header-right { display: flex; gap: 10px; align-items: center; }
 
-.period-tabs { display: flex; gap: 4px; background: var(--cf-bg-surface-raised); border: 1px solid var(--cf-border-subtle); border-radius: 9px; padding: 3px; }
-.period-btn { padding: 6px 14px; background: none; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--cf-text-muted); cursor: pointer; transition: all 0.12s; }
+/* Period tabs scroll horizontally on phones so all 4 stay reachable
+   even at 320px width without clipping. */
+.period-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--cf-bg-surface-raised);
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 9px;
+  padding: 3px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+.period-btn { padding: 6px 14px; background: none; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--cf-text-muted); cursor: pointer; transition: all 0.12s; white-space: nowrap; flex-shrink: 0; }
 .period-btn:hover { color: var(--cf-text-secondary); }
 .period-btn.active { background: rgba(99,102,241,0.15); color: #a5b4fc; }
 .export-btn { display: flex; align-items: center; gap: 6px; padding: 6px 14px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); border-radius: 9px; font-size: 12px; font-weight: 500; color: #a5b4fc; cursor: pointer; transition: all 0.12s; }
@@ -885,10 +897,16 @@ watch(() => props.client, load)
 .na-hint  { font-size: 10px; color: #1e293b; margin-top: 5px; line-height: 1.4; }
 
 /* Recent sessions */
-.recent-card {}
-.activity-table { width: 100%; border-collapse: collapse; }
-.activity-table th { padding: 8px 12px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cf-text-muted); text-align: left; border-bottom: 1px solid var(--cf-border-subtle); }
-.activity-table td { padding: 10px 12px; font-size: 13px; color: var(--cf-text-muted); border-bottom: 1px solid var(--cf-border-subtle); vertical-align: middle; }
+.recent-card {
+  /* The activity table has 6 columns; on phones it can't all fit so
+     we let the inside scroll horizontally rather than clip headers. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+.activity-table { width: 100%; min-width: 560px; border-collapse: collapse; }
+.activity-table th { padding: 8px 12px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cf-text-muted); text-align: left; border-bottom: 1px solid var(--cf-border-subtle); white-space: nowrap; }
+.activity-table td { padding: 10px 12px; font-size: 13px; color: var(--cf-text-muted); border-bottom: 1px solid var(--cf-border-subtle); vertical-align: middle; white-space: nowrap; }
 .activity-table tr:hover td { background: rgba(255,255,255,0.02); }
 .activity-table tr:last-child td { border-bottom: none; }
 
@@ -968,10 +986,21 @@ watch(() => props.client, load)
 
 @media (max-width: 768px) {
   .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
+  .header-right { width: 100%; flex-wrap: wrap; }
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .secondary-row { grid-template-columns: repeat(2, 1fr); }
   .section-row { grid-template-columns: 1fr; }
   .breakdown-grid { grid-template-columns: 1fr; }
   .events-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* Phone-width safety net: KPI cards stack to a single column on small
+   screens so neither the value nor the "+X vs prev period" label gets
+   cut off the right edge of the viewport. */
+@media (max-width: 480px) {
+  .metric-grid,
+  .secondary-row,
+  .events-grid { grid-template-columns: 1fr; }
+  .export-btn { flex: 1 1 auto; justify-content: center; }
 }
 </style>

@@ -697,10 +697,20 @@ async function openPortal() {
   gap: 12px;
   background: var(--cf-bg-input);
   border-radius: 10px;
+  flex-wrap: wrap;
   padding: 12px 14px;
 }
-.invoice-left { flex: 1; min-width: 0; }
-.invoice-number { font-family: ui-monospace, monospace; font-size: 12px; color: var(--cf-text-secondary); }
+.invoice-left { flex: 1 1 160px; min-width: 0; }
+/* Long hyphenated invoice numbers must NOT break per character on mobile —
+   keep them on one line and let them scroll within their cell if needed. */
+.invoice-number {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--cf-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .invoice-period { font-size: 14px; font-weight: 600; color: var(--cf-text-primary); margin-top: 2px; }
 .invoice-center { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .invoice-status {
@@ -957,5 +967,20 @@ async function openPortal() {
 @media (max-width: 768px) {
   .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
   .current-plan-card { flex-direction: column; }
+}
+
+/* Phone-width tightening for the invoice list — labels, totals, and
+   View/Download buttons re-flow into three rows so nothing is clipped. */
+@media (max-width: 480px) {
+  .invoice-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .invoice-left { flex: 1 1 auto; width: 100%; }
+  .invoice-center { width: 100%; justify-content: space-between; }
+  .invoice-actions { width: 100%; gap: 8px; }
+  .invoice-actions > * { flex: 1 1 auto; text-align: center; }
 }
 </style>

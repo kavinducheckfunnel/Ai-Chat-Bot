@@ -1460,6 +1460,17 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   display: flex;
   align-items: center;
   gap: 14px;
+  flex-wrap: wrap;
+}
+/* Title block needs to be able to shrink so the row can fit on phones. */
+.section-title-row > div:not(.channel-icon):not(.status-badge) {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+/* Allow the title text itself to wrap rather than push the row wider. */
+.section-title-row .section-title,
+.section-title-row .section-sub {
+  word-break: break-word;
 }
 
 .channel-icon {
@@ -1498,7 +1509,17 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 /* Force light text inside embed-box since its bg is always dark */
 .embed-title { font-size: 14px; font-weight: 600; color: #e2e8f0; }
 
-.format-tabs { display: flex; gap: 6px; }
+/* Format tabs scroll horizontally on narrow screens so the rightmost
+   option (React) is never clipped off the viewport. Touch users can
+   swipe to reach hidden tabs. */
+.format-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
 .format-tab {
   display: flex;
   align-items: center;
@@ -1510,6 +1531,8 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   font-size: 12px;
   font-weight: 500;
   color: var(--cf-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: all 0.12s;
 }
@@ -1584,6 +1607,21 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   border-radius: 10px;
   padding: 16px;
   position: relative;
+  /* Long URLs and snippets inside a code-block must not push the parent
+     card wider than the viewport. The block itself never widens; long
+     unbreakable content scrolls horizontally inside it. */
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+/* When a code-block holds a single inline <code> (URL fields in the
+   WhatsApp / Messenger panels), keep it on one line and let the box
+   scroll — the same pattern we use for .wh-paste-code. */
+.code-block > code {
+  display: block;
+  white-space: nowrap;
 }
 
 .code-pre {
@@ -2158,9 +2196,23 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap;
 }
 .wh-paste-code {
-  flex: 1; font-family: 'Fira Mono', 'JetBrains Mono', monospace;
-  font-size: 12px; color: #a5b4fc; word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  font-family: 'Fira Mono', 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #a5b4fc;
+  /* Long URLs were wrapping one character per line on mobile because
+     `word-break: break-all` lets the browser break anywhere. Switch to
+     a single-line layout that scrolls horizontally inside the box —
+     the touch user can swipe to read the rest, the layout stays clean. */
+  white-space: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
 }
+.wh-paste-code::-webkit-scrollbar { height: 4px; }
+.wh-paste-code::-webkit-scrollbar-thumb { background: rgba(165,180,252,0.3); border-radius: 4px; }
 .wh-secret-code { color: var(--cf-text-primary); }
 .wh-copy, .wh-rotate {
   background: var(--cf-bg-ghost-hover); border: 1px solid var(--cf-border-default);
@@ -2227,5 +2279,37 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   .wh-refresh  { width: 100%; justify-content: center; }
   .wh-paste-row, .wh-secret-row { flex-wrap: wrap; }
   .wh-paste-code { width: 100%; }
+}
+
+/* ── Phone-width safety net ───────────────────────────────────────────────
+   Last-line-of-defence rules for screens ≤ 480px. Every form / card on
+   this page is constrained to the visible viewport so a long URL or a
+   wide table can never produce horizontal page scroll (which was what
+   caused the WhatsApp panel's labels to be cut off on the left).
+   ──────────────────────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Cards never bleed past the viewport. */
+  .section-card,
+  .gate-wrap,
+  .embed-box,
+  .wh-setup-card {
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  /* Header rows stack — icon + title block + status badge can't fit
+     side-by-side on a 360px phone. */
+  .section-title-row { gap: 10px; }
+  .status-badge {
+    margin-left: 0;
+    align-self: flex-start;
+  }
+  /* Inputs and pre blocks have to respect the card width. */
+  .input, .code-block, .code-pre {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  /* Form grids collapse to single column. */
+  .form-grid { grid-template-columns: 1fr; }
 }
 </style>
