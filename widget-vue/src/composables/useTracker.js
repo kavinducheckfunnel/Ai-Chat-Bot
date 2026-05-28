@@ -432,23 +432,50 @@ export function useTracker() {
   };
 
   // ── Exit-intent detection ─────────────────────────────────────────────────
-  // Fires when the cursor moves toward the top of the viewport (about to
-  // close the tab / hit the back button). Threshold tuned in C7:
-  //   - mouse Y near top of viewport (within 20px)
-  //   - visitor on page at least 10s (avoid mouse-jump-on-arrival false fires)
-  //   - hasn't already fired this session
+  // Fires when the visitor signals they're about to leave.
+  //
+  //   • Desktop  → cursor crosses top of viewport (`mouseleave` with clientY < 20)
+  //   • Mobile   → `visibilitychange` to hidden, OR `pagehide` — both are
+  //                the closest analogue to "I'm leaving" on touch devices.
+  //                Touch devices never fire `mouseleave`, which is why this
+  //                trigger never worked on phones before.
+  //
+  // Gates (same on both): time on site ≥ 10s, not already fired.
   const trackExitIntent = () => {
-    const handleMouseLeave = (e) => {
-      if (e.clientY > 20) return;
+    const fireExitIntent = (source) => {
       if (behaviorMatrix.exitIntentFired) return;
       if (behaviorMatrix.timeOnSite < 10) return;
       behaviorMatrix.exitIntentFired = true;
-      logEvent('exit_intent', window.location.pathname);
+      logEvent('exit_intent', `${window.location.pathname} (${source})`);
       fireTrigger('exit_intent');
       flushBeacon(true);
     };
+
+    // Desktop path
+    const handleMouseLeave = (e) => {
+      if (e.clientY > 20) return;
+      fireExitIntent('mouse');
+    };
     document.addEventListener('mouseleave', handleMouseLeave);
-    return () => document.removeEventListener('mouseleave', handleMouseLeave);
+
+    // Mobile path 1 — visitor backgrounded the tab / locked the screen /
+    // hit the home button. This is what a mobile user does instead of
+    // moving a cursor off the top of the screen.
+    const handleVisibility = () => {
+      if (document.hidden) fireExitIntent('visibility');
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Mobile path 2 — `pagehide` fires when the visitor actually navigates
+    // away on iOS Safari (where `beforeunload` is unreliable). Same gate.
+    const handlePageHide = () => fireExitIntent('pagehide');
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      document.removeEventListener('mouseleave', handleMouseLeave);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
   };
 
   // ── Tab visibility tracking ───────────────────────────────────────────────
@@ -466,14 +493,29 @@ export function useTracker() {
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   };
 
-  // ── Mouse idle tracking ───────────────────────────────────────────────────
+  // ── Activity-idle tracking ────────────────────────────────────────────────
+  // Renamed conceptually from "mouse" idle to "activity" idle because mobile
+  // users never fire `mousemove`. Before this fix, `lastMove` was set once on
+  // init and never updated on mobile → every mobile session showed
+  // perpetually idle, polluting the AFK trigger logic and pushing nudges
+  // when the visitor was actually scrolling and reading.
+  //
+  // We now reset the activity timestamp on ANY of: mousemove, touchstart,
+  // touchmove, scroll, keydown. That covers every reasonable definition of
+  // "the visitor is still here" on both desktop and touch.
   const trackMouseIdle = () => {
     if (!trackingEnabled) return () => {};
     let lastMove = Date.now();
     let idleInterval = null;
 
-    const onMove = () => { lastMove = Date.now(); };
-    document.addEventListener('mousemove', onMove, { passive: true });
+    const markActive = () => { lastMove = Date.now(); };
+
+    // Passive listeners so we never block native scroll on touch devices.
+    document.addEventListener('mousemove',  markActive, { passive: true });
+    document.addEventListener('touchstart', markActive, { passive: true });
+    document.addEventListener('touchmove',  markActive, { passive: true });
+    document.addEventListener('scroll',     markActive, { passive: true });
+    document.addEventListener('keydown',    markActive, { passive: true });
 
     idleInterval = setInterval(() => {
       const idleSec = Math.round((Date.now() - lastMove) / 1000);
@@ -484,7 +526,11 @@ export function useTracker() {
     }, 5000);
 
     return () => {
-      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mousemove',  markActive);
+      document.removeEventListener('touchstart', markActive);
+      document.removeEventListener('touchmove',  markActive);
+      document.removeEventListener('scroll',     markActive);
+      document.removeEventListener('keydown',    markActive);
       clearInterval(idleInterval);
     };
   };
@@ -595,7 +641,31 @@ export function useTracker() {
     }, 15000);
 
     nudgeTimeout = setTimeout(evaluateAndTriggerNudge, 60000);
+
+    // Final-flush listeners.
+    //
+    //   • `beforeunload` — reliable on desktop, flaky on iOS Safari.
+    //   • `pagehide`     — fires consistently on mobile when the tab is
+    //                      replaced / the user navigates away.
+    //   • `visibilitychange` (→ hidden) — fires when the user backgrounds
+    //                      the tab. This is the ONLY reliable "I'm about
+    //                      to lose this session's data" signal on iOS
+    //                      Safari. Without it, mobile sessions routinely
+    //                      lost their last 15 seconds of events.
+    //
+    // All three call the same `sendBeacon`, which uses `navigator.sendBeacon`
+    // — the only request type the browser is guaranteed to complete during
+    // page tear-down.
     window.addEventListener('beforeunload', sendBeacon);
+    window.addEventListener('pagehide',     sendBeacon);
+    const onVisibilityHidden = () => { if (document.hidden) sendBeacon(); };
+    document.addEventListener('visibilitychange', onVisibilityHidden);
+    // Stash so onUnmounted can detach symmetrically.
+    cleanupFns.push(() => {
+      window.removeEventListener('beforeunload', sendBeacon);
+      window.removeEventListener('pagehide',     sendBeacon);
+      document.removeEventListener('visibilitychange', onVisibilityHidden);
+    });
   });
 
   onUnmounted(() => {
@@ -603,7 +673,6 @@ export function useTracker() {
     clearInterval(periodicFlushInterval);
     clearTimeout(nudgeTimeout);
     cleanupFns.forEach(fn => fn && fn());
-    window.removeEventListener('beforeunload', sendBeacon);
     sendBeacon();
   });
 
