@@ -268,6 +268,64 @@
 #cf-w[data-cf-theme="light"] .cf-rb.on { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.55); }
 #cf-w[data-cf-theme="light"] .cf-typ { background: #f1f5f9; border-color: #e2e8f0; }
 #cf-w[data-cf-theme="light"] .cf-typ span { background: #94a3b8; }
+
+/* ── Mobile responsive ────────────────────────────────────────────────
+   Before this block the widget was unusable on phones:
+     • #cf-win was width:370px → overflowed 360-390px viewports
+     • #cf-pill at bottom:24px landed under the iOS home-indicator
+     • Nothing accounted for env(safe-area-inset-*) on notched devices
+   Now everything respects the visible viewport plus the safe-area
+   insets — pill stays reachable, full chat window fits on screen,
+   and message scroll area sizes to the available height. */
+@media (max-width: 480px) {
+  #cf-w {
+    bottom: max(12px, env(safe-area-inset-bottom, 12px));
+    right: max(8px, env(safe-area-inset-right, 8px));
+    left: max(8px, env(safe-area-inset-left, 8px));
+    align-items: flex-end;
+  }
+  #cf-pill {
+    min-width: 0;
+    max-width: 100%;
+    padding: 11px 13px 11px 10px;
+  }
+  /* The chat window now anchors to all four edges so it occupies the
+     full mobile viewport when open — Stripe Checkout / Tidio / Drift
+     all do the same on phones because side-anchored 370px popups
+     blow off-screen on iPhone SE-class devices. */
+  #cf-win {
+    position: fixed;
+    bottom: max(12px, env(safe-area-inset-bottom, 12px));
+    left: max(8px, env(safe-area-inset-left, 8px));
+    right: max(8px, env(safe-area-inset-right, 8px));
+    width: auto;
+    max-height: calc(100vh - 24px - env(safe-area-inset-top, 0px));
+    max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px));
+    border-radius: 16px;
+  }
+  /* Header / input padding tightens on phones — no horizontal scroll. */
+  #cf-head { padding: 11px 13px; }
+  /* Messages area uses the rest of the viewport, capped so the input
+     bar always stays visible above the on-screen keyboard. */
+  #cf-msgs {
+    padding: 12px 11px;
+    max-height: none;
+    /* Keep room for header (≈58px) + input (≈64px) + powered-by (≈22px). */
+    min-height: 120px;
+  }
+  /* Lead-capture overlay must also fit small screens. */
+  .cf-lead-card {
+    left: 8px !important;
+    right: 8px !important;
+    width: auto !important;
+  }
+}
+
+/* Notched iOS — add safe-area cushioning even on larger viewports so
+   the floating pill never collides with the home indicator. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  #cf-w { padding-bottom: env(safe-area-inset-bottom, 0px); }
+}
 </style>`,p=`<div id="cf-w" data-cf-theme="dark">
 <div id="cf-win" role="dialog" aria-label="Chat with ${c}">
 <div id="cf-head">
@@ -476,12 +534,22 @@ function sendVisitorMeta(){
 // We send the accumulated page_visits from prior pages PLUS a LIVE snapshot
 // of the current page so the bot sees the visitor's full journey, not just
 // the page they happened to be on when the timer fired.
-setTimeout(function(){
+// Mobile networks routinely take 3-8s to complete the WebSocket
+// handshake, so the original "send at exactly 10s" was a silent miss
+// whenever the WS wasn't open at that instant. We now schedule the
+// proactive trigger to RETRY up to 3 times (at 10s / 15s / 22s) until
+// the WS is open and the visitor still hasn't engaged.
+var _proactiveAttempts=0;
+function _sendProactive(){
   try{
     var k='cf_proactive_'+C+'_'+sid;
     if(sessionStorage.getItem(k))return;
     if(isOpen)return;
-    if(!ws||ws.readyState!==1)return;
+    _proactiveAttempts++;
+    if(!ws||ws.readyState!==1){
+      if(_proactiveAttempts<3)setTimeout(_sendProactive,5000+_proactiveAttempts*2000);
+      return;
+    }
     var livePage={
       url: location.pathname,
       title: document.title || location.pathname,
@@ -492,7 +560,8 @@ setTimeout(function(){
     ws.send(JSON.stringify({type:'proactive_trigger',behavior_matrix:behavior,page_visits:combined,dwell_seconds:behavior.timeOnSite,page_url:location.href}));
     sessionStorage.setItem(k,String(Date.now()));
   }catch(_){}
-},10000);
+}
+setTimeout(_sendProactive,10000);
 
 function connect(){
   ws=new WebSocket(B.replace(/^https/,'wss').replace(/^http/,'ws')+'/ws/chat/'+C+'/'+sid+'/');
@@ -756,11 +825,25 @@ setTimeout(function(){
 // Video play
 document.addEventListener('play',function(){behavior.videoPlays++},true);
 
-// Exit intent (C7 — was timeOnSite<5, raised to 10 to avoid early-mouse-jump false fires)
-document.addEventListener('mouseleave',function(e){
-  if(e.clientY>20||behavior.exitIntentFired||behavior.timeOnSite<10)return;
+// Exit intent — three pathways so it works on every device:
+//   • Desktop: cursor crosses top of viewport (mouseleave + clientY<20)
+//   • Mobile A: visitor backgrounds the tab / locks the screen
+//                (visibilitychange to hidden)
+//   • Mobile B: visitor actually navigates away (pagehide)
+// Touch devices never fire mouseleave, which is why exit_intent was
+// previously dead on phones. Shared gate: timeOnSite>=10, once per session.
+function _fireExitIntent(source){
+  if(behavior.exitIntentFired||behavior.timeOnSite<10)return;
   behavior.exitIntentFired=true;flush(true);fireTrigger('exit_intent');
+}
+document.addEventListener('mouseleave',function(e){
+  if(e.clientY>20)return;
+  _fireExitIntent('mouse');
 });
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden)_fireExitIntent('visibility');
+});
+window.addEventListener('pagehide',function(){_fireExitIntent('pagehide')});
 
 // Time on site + deep engagement trigger
 // C7 — lowered from scrollDepth>=75 + timeOnSite>=90 to scrollDepth>=50 + timeOnSite>=30
@@ -799,7 +882,16 @@ function flush(force){
   else fetch(B+'/api/analytics/beacon/',{method:'POST',body:payload,keepalive:true}).catch(function(){});
 }
 setInterval(function(){flush(false)},15000);
+// Final-flush listeners. beforeunload is unreliable on iOS Safari; pagehide
+// and visibilitychange-to-hidden are the only events that fire consistently
+// when the visitor backgrounds the tab. All three call the same flush() via
+// navigator.sendBeacon — the one request type the browser guarantees to
+// complete during page tear-down.
 window.addEventListener('beforeunload',function(){flush(true)});
+window.addEventListener('pagehide',function(){flush(true)});
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden)flush(true);
+});
 
 // ── Event listeners ──────────────────────────────────────────────────
 $('cf-pill').onclick=toggleOpen;
