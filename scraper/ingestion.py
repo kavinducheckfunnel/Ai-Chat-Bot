@@ -702,6 +702,160 @@ def fetch_shopify_data(site_url):
     return documents
 
 
+# ── Strategy 4b: WooCommerce Store API ───────────────────────────────────────
+#
+# WordPress + WooCommerce sites expose a PUBLIC, no-auth product feed at
+# /wp-json/wc/store/v1/products that includes real prices, currency, sale
+# state, and stock — exactly the data the WP REST API (`/wp-json/wp/v2/product`)
+# omits. The WP REST product CPT only carries the lorem-ipsum description,
+# which is why the bot couldn't answer "how much is the cap?" — the price
+# was never in the embedded chunk. This fetcher fills that gap.
+#
+# Price arithmetic: WooCommerce returns integer minor units + a
+# `currency_minor_unit` (e.g. price="1600", minor_unit=2 → 16.00) plus the
+# currency symbol and prefix/suffix placement. `_format_wc_price` renders a
+# human string the AI can read out verbatim ("රු16.00").
+
+def _format_wc_price(prices: dict) -> str:
+    """
+    Render a WooCommerce Store-API `prices` object into a readable line.
+    Returns '' when there's no usable price (e.g. external/grouped products
+    with a null price_range and empty price).
+    """
+    if not isinstance(prices, dict):
+        return ''
+
+    minor = prices.get('currency_minor_unit')
+    try:
+        minor = int(minor)
+    except (TypeError, ValueError):
+        minor = 2
+    symbol = (prices.get('currency_symbol') or '').strip()
+    prefix = prices.get('currency_prefix') or ''
+    suffix = prices.get('currency_suffix') or ''
+
+    def _money(raw):
+        """Convert integer-minor-unit string → display string with symbol."""
+        if raw in (None, '', 'null'):
+            return ''
+        try:
+            value = int(raw) / (10 ** minor)
+        except (TypeError, ValueError):
+            return ''
+        amount = f'{value:,.{minor}f}'
+        # Prefer explicit prefix/suffix; fall back to a leading symbol.
+        if prefix or suffix:
+            return f'{prefix}{amount}{suffix}'.strip()
+        if symbol:
+            return f'{symbol}{amount}'
+        return amount
+
+    price = _money(prices.get('price'))
+    regular = _money(prices.get('regular_price'))
+    sale = _money(prices.get('sale_price'))
+
+    # Price range (variable products) — Woo returns {min_amount, max_amount}.
+    price_range = prices.get('price_range')
+    if isinstance(price_range, dict) and price_range.get('min_amount'):
+        lo = _money(price_range.get('min_amount'))
+        hi = _money(price_range.get('max_amount'))
+        if lo and hi and lo != hi:
+            return f'{lo} – {hi}'
+        if lo:
+            return lo
+
+    if not price:
+        return ''
+
+    # On sale → show current + struck regular for context.
+    on_sale = bool(sale and regular and sale != regular)
+    if on_sale:
+        return f'{price} (on sale, was {regular})'
+    return price
+
+
+def fetch_woocommerce_data(site_url, timeout=15):
+    """
+    Fetch all products from the public WooCommerce Store API
+    (/wp-json/wc/store/v1/products), with prices. Returns a flat list of
+    document dicts in the standard shape used by ingest_documents.
+
+    Returns [] (not None) when the endpoint is absent / disabled, so the
+    caller can cleanly fall back to the WP REST + crawl path.
+    """
+    base = site_url.rstrip('/')
+    api = f'{base}/wp-json/wc/store/v1/products'
+    documents = []
+    page = 1
+    while page <= 40:  # 40 * 100 = 4000 products hard cap
+        try:
+            resp = requests.get(
+                api,
+                params={'per_page': 100, 'page': page},
+                headers=_HEADERS,
+                timeout=timeout,
+            )
+            if resp.status_code != 200:
+                break
+            products = resp.json()
+            if not isinstance(products, list) or not products:
+                break
+        except Exception as e:
+            logger.warning(f'[fetch_woocommerce_data] {api} page={page}: {e}')
+            break
+
+        for p in products:
+            title = (p.get('name') or '').strip()
+            if not title:
+                continue
+            url = p.get('permalink') or f'{base}/?p={p.get("id", "")}'
+            short = BeautifulSoup(p.get('short_description', '') or '', 'html.parser').get_text(' ', True)
+            full = BeautifulSoup(p.get('description', '') or '', 'html.parser').get_text(' ', True)
+            sku = (p.get('sku') or '').strip()
+            prices = p.get('prices') or {}
+            price_line = _format_wc_price(prices)
+            categories = ', '.join(
+                c.get('name', '') for c in (p.get('categories') or []) if c.get('name')
+            )
+            in_stock = (p.get('is_in_stock') is not False)
+
+            parts = [f'Product: {title}', f'URL: {url}']
+            if price_line:
+                parts.append(f'Price: {price_line}')
+            if sku:
+                parts.append(f'SKU: {sku}')
+            if categories:
+                parts.append(f'Categories: {categories}')
+            if not in_stock:
+                parts.append('Stock: OUT OF STOCK')
+            if short:
+                parts.append(short)
+            elif full:
+                parts.append(full)
+
+            documents.append({
+                'title': title,
+                'content': '\n'.join(parts),
+                'url': url,
+                'product_id': str(p.get('id', '')),
+                'metadata': {
+                    'title': title,
+                    'type': 'product',
+                    'woo_resource': f"product_{p.get('id', '')}",
+                    'price_display': price_line,
+                    'currency': (prices.get('currency_code') or '') if isinstance(prices, dict) else '',
+                    'is_active': bool(in_stock),
+                },
+            })
+
+        if len(products) < 100:
+            break
+        page += 1
+
+    logger.info(f'[fetch_woocommerce_data] Fetched {len(documents)} products from {site_url}')
+    return documents
+
+
 # ── Platform auto-detection (Phase D) ────────────────────────────────────────
 
 def detect_platform(site_url: str, timeout: int = 6) -> str:
@@ -800,12 +954,32 @@ def auto_scrape(client):
         docs = fetch_wordpress_data(url)
         if docs:
             logger.info(f'[auto_scrape] WP REST API: {len(docs)} docs for {url}')
+
+            # ── WooCommerce price enrichment ─────────────────────────────
+            # The WP REST product CPT omits prices (price is WC meta, not
+            # post content), so the embedded chunk for a product has the
+            # description but no price — the bot can't answer "how much is
+            # X?". The public WooCommerce Store API DOES carry prices, so
+            # we fetch it and let the price-rich version REPLACE the bare
+            # WP-REST version for the same product URL.
+            woo_docs = fetch_woocommerce_data(url)
+            if woo_docs:
+                woo_urls = {d['url'] for d in woo_docs}
+                # Drop WP-REST docs that WooCommerce now covers with price.
+                docs = [d for d in docs if d['url'] not in woo_urls]
+                docs.extend(woo_docs)
+                logger.info(
+                    f'[auto_scrape] WooCommerce Store API enriched '
+                    f'{len(woo_docs)} products with prices for {url}'
+                )
+
             # Also try sitemap to catch any product pages not in the REST API
             sitemap_urls = fetch_sitemap_urls(url)
+            covered = {d['url'] for d in docs}
             product_sitemap_urls = [
                 u for u in sitemap_urls
                 if any(pat in u for pat in _PRODUCT_URL_PATTERNS)
-                and u not in {d['url'] for d in docs}
+                and u not in covered
             ]
             if product_sitemap_urls:
                 logger.info(f'[auto_scrape] Augmenting with {len(product_sitemap_urls)} product URLs from sitemap')
