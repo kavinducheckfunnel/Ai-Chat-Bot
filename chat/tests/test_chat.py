@@ -194,16 +194,41 @@ class TestCaptureLead:
     @patch('chat.utils.fire_slack_notification', return_value=None)
     @patch('chat.utils.fire_outbound_webhook', return_value=None)
     def test_capture_lead_valid(self, mock_wh, mock_slack, anon_client, chat_session):
+        # LK phone in local form normalises to E.164 +94...
         resp = anon_client.post(LEAD_URL, {
             'session_id': str(chat_session.session_id),
             'email': 'lead@example.com',
-            'phone': '+1234567890',
+            'phone': '0771234567',
         }, format='json')
         assert resp.status_code == 200
         assert resp.json()['status'] == 'saved'
         chat_session.refresh_from_db()
         assert chat_session.lead_email == 'lead@example.com'
-        assert chat_session.lead_phone == '+1234567890'
+        assert chat_session.lead_phone == '+94771234567'
+
+    @patch('chat.utils.fire_slack_notification', return_value=None)
+    @patch('chat.utils.fire_outbound_webhook', return_value=None)
+    def test_capture_lead_invalid_phone_rejected(self, mock_wh, mock_slack, anon_client, chat_session):
+        resp = anon_client.post(LEAD_URL, {
+            'session_id': str(chat_session.session_id),
+            'email': 'lead@example.com',
+            'phone': '12345',  # not a valid LK mobile
+        }, format='json')
+        assert resp.status_code == 400
+        assert resp.json()['error'] == 'invalid_phone'
+        chat_session.refresh_from_db()
+        assert not (chat_session.lead_phone or '')
+
+    @patch('chat.utils.fire_slack_notification', return_value=None)
+    @patch('chat.utils.fire_outbound_webhook', return_value=None)
+    def test_capture_lead_email_only_ok(self, mock_wh, mock_slack, anon_client, chat_session):
+        resp = anon_client.post(LEAD_URL, {
+            'session_id': str(chat_session.session_id),
+            'email': 'lead@example.com',
+        }, format='json')
+        assert resp.status_code == 200
+        chat_session.refresh_from_db()
+        assert chat_session.lead_email == 'lead@example.com'
 
     def test_capture_lead_missing_email(self, anon_client, chat_session):
         resp = anon_client.post(LEAD_URL, {

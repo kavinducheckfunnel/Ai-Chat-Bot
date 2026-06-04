@@ -350,6 +350,22 @@ def capture_lead(request):
     except ChatSession.DoesNotExist:
         return Response({'error': 'session not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # ── Phone validation + normalisation (Sri Lankan +94 standard) ─────────
+    # Reject malformed numbers up front so the CRM never fills with junk like
+    # "12345" or "call me later". Valid inputs (0771234567, 771234567,
+    # +94771234567, with spaces/dashes) all normalise to +94771234567.
+    if phone:
+        from chat.phone_utils import normalize_phone
+        country = getattr(session.client, 'lead_country', None) or 'LK'
+        normalized, ok = normalize_phone(phone, country=country)
+        if not ok:
+            return Response(
+                {'error': 'invalid_phone',
+                 'detail': 'Please enter a valid Sri Lankan mobile number (e.g. +94 77 123 4567).'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        phone = normalized
+
     session.lead_email = email
     if phone:
         session.lead_phone = phone

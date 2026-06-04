@@ -891,6 +891,23 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     session.chat_history.append({'role': 'user', 'message': user_entry_text})
     session.chat_history.append({'role': 'ai', 'message': result.get('reply_text')})
 
+    # 8b. Inline phone capture — if the visitor typed a phone number in this
+    # message, normalise it to the LK +94 standard and store it on the
+    # session (only when we don't already have one). This means a number
+    # given mid-chat ("call me on 077 123 4567") lands in the CRM in clean
+    # E.164 form, not raw text, matching what the lead modal produces.
+    if user_message and not (session.lead_phone or '').strip():
+        try:
+            from .phone_utils import extract_lk_phone
+            country = getattr(session.client, 'lead_country', None) or 'LK'
+            if country == 'LK':
+                inline = extract_lk_phone(user_message)
+                if inline:
+                    session.lead_phone = inline
+                    session.save(update_fields=['lead_phone'])
+        except Exception as e:
+            logger.warning(f'[ai] inline phone capture failed: {e}')
+
     from .utils import truncate_chat_history
     update_fields = truncate_chat_history(session)
     session.save(update_fields=update_fields)

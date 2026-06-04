@@ -234,6 +234,16 @@ export function generateEmbedCode(id, url, color, botName, format) {
   display: inline-flex; align-items: center; justify-content: center; }
 .cf-lead-btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
 .cf-lead-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* +94 country-code affix on the phone row */
+.cf-lead-cc { display: inline-flex; align-items: center; justify-content: center;
+  height: 38px; padding: 0 11px; flex-shrink: 0;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 19px; font-size: 13px; font-weight: 600; color: var(--cf-text-muted);
+  box-sizing: border-box; }
+.cf-lead-ph { letter-spacing: .5px; }
+.cf-lead-err { font-size: 11px; color: #f87171; min-height: 0; margin: 4px 2px 0;
+  line-height: 1.4; }
+#cf-w[data-cf-theme="light"] .cf-lead-cc { background: #f1f5f9; border-color: #e2e8f0; color: #64748b; }
 
 /* Inline lead capture — LIGHT theme */
 #cf-w[data-cf-theme="light"] .cf-lead-inp {
@@ -360,8 +370,13 @@ export function generateEmbedCode(id, url, color, botName, format) {
   </div>
   <div class="cf-lead-row">
     <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="your@email.com"/>
+  </div>
+  <div class="cf-lead-row" style="margin-top:7px">
+    <span class="cf-lead-cc">+94</span>
+    <input class="cf-lead-inp cf-lead-ph" id="cf-lead-ph" type="tel" inputmode="numeric" maxlength="9" placeholder="77 123 4567"/>
     <button class="cf-lead-btn" id="cf-lead-sb">Send</button>
   </div>
+  <div class="cf-lead-err" id="cf-lead-err"></div>
 </div>
 <div id="cf-foot">
 <input id="cf-fi" type="file" accept="image/*" style="display:none">
@@ -471,13 +486,43 @@ function renderMd(text){
 // ── Lead capture (inline slide-up inside chat panel) ─────────────────
 function showLead(){if(leadDone)return;$('cf-lead').classList.add('show')}
 function dismissLead(){$('cf-lead').classList.remove('show');leadDone=true;localStorage.setItem(LEAD_KEY,'1')}
+// Sri Lankan mobile: 9 subscriber digits starting with 7 (after the +94).
+// Mirrors chat.phone_utils.normalize_lk_phone on the client so the user
+// gets instant feedback before we hit the server.
+function normalizeLkPhone(raw){
+  var d=(raw||'').replace(/\\D/g,'');
+  if(d.indexOf('0094')===0)d=d.slice(4);
+  if(d.indexOf('94')===0)d=d.slice(2);
+  if(d.length===10&&d.charAt(0)==='0')d=d.slice(1);
+  if(d.length===9&&d.charAt(0)==='7')return '+94'+d;
+  return null;
+}
+function setLeadErr(msg){var e=$('cf-lead-err');if(e)e.textContent=msg||''}
 function submitLead(){
-  var em=($('cf-lead-em').value||'').trim();if(!em)return;
+  var em=($('cf-lead-em').value||'').trim();
+  if(!em){setLeadErr('Please enter your email.');return}
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(em)){setLeadErr('Please enter a valid email.');return}
+  // Phone is optional, but if provided it MUST be a valid LK mobile.
+  var phRaw=($('cf-lead-ph')?$('cf-lead-ph').value:'')||'';
+  var phone=null;
+  if(phRaw.trim()){
+    phone=normalizeLkPhone(phRaw);
+    if(!phone){setLeadErr('Enter a valid Sri Lankan mobile, e.g. 77 123 4567.');return}
+  }
+  setLeadErr('');
   $('cf-lead-sb').disabled=true;$('cf-lead-sb').textContent='…';
   fetch(B+'/api/chat/lead/',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({session_id:sid,email:em,phone:null})
-  }).catch(function(){}).finally(function(){
-    dismissLead();bubble('<p>✅ Thanks! We\\'ll be in touch soon.</p>','ai')})}
+    body:JSON.stringify({session_id:sid,email:em,phone:phone})
+  }).then(function(r){
+    if(r&&!r.ok&&r.status===400){
+      // Backend rejected the phone — surface it and let them fix.
+      $('cf-lead-sb').disabled=false;$('cf-lead-sb').textContent='Send';
+      setLeadErr('Please enter a valid Sri Lankan mobile number.');
+      throw new Error('invalid');
+    }
+    dismissLead();bubble('<p>✅ Thanks! We\\'ll be in touch soon.</p>','ai');
+  }).catch(function(){});
+}
 
 // ── Chime ────────────────────────────────────────────────────────────
 function chime(){if(!isOpen)return;try{var a=new(window.AudioContext||window.webkitAudioContext)();[[880,0],[1100,.14],[1320,.26]].forEach(function(t){var o=a.createOscillator(),g=a.createGain();o.connect(g);g.connect(a.destination);o.type='sine';o.frequency.value=t[0];var st=a.currentTime+t[1];g.gain.setValueAtTime(0,st);g.gain.linearRampToValueAtTime(.09,st+.04);g.gain.exponentialRampToValueAtTime(.001,st+.38);o.start(st);o.stop(st+.38)});setTimeout(function(){a.close()},1400)}catch(e){}}
@@ -930,6 +975,15 @@ $('cf-vb').onclick=toggleVoice;
 $('cf-lead-cls').onclick=dismissLead;
 $('cf-lead-sb').onclick=submitLead;
 $('cf-lead-em').addEventListener('keydown',function(e){if(e.key==='Enter')submitLead()});
+if($('cf-lead-ph')){
+  // Digits-only, max 9 (the LK subscriber number after +94).
+  $('cf-lead-ph').addEventListener('input',function(){
+    var v=this.value.replace(/\\D/g,'').slice(0,9);
+    if(v!==this.value)this.value=v;
+    setLeadErr('');
+  });
+  $('cf-lead-ph').addEventListener('keydown',function(e){if(e.key==='Enter')submitLead()});
+}
 })();
 </` + `script>`
 

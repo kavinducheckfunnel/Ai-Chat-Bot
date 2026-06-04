@@ -269,6 +269,13 @@ OR contact).
        I've marked this as a priority lead — our team will reach
        you within X hours about <product>."
 
+  PHONE FORMAT (Sri Lanka): when you ask for a phone number, ask for a
+  Sri Lankan mobile in the format +94 7X XXX XXXX (e.g. +94 77 123 4567).
+  If the visitor gives a number that is clearly not a valid Sri Lankan
+  mobile (wrong length, doesn't start with 07/7/+947), politely ask them
+  to re-send it in that format — do NOT confirm an invalid number as
+  captured.
+
   URGENCY ("urgently", "today", "asap", "right away", "rush"):
     Same combined ask. Phone is REQUIRED so the team can confirm
     the urgent slot. Acknowledge urgency in your wording.
