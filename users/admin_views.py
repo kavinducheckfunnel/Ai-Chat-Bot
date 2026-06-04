@@ -672,6 +672,116 @@ def client_sessions(request, client_id):
     return Response(data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def client_link_clicks(request, client_id):
+    """
+    Marketing attribution: how many visitors the chatbot referred to each
+    product/content link, for one client. Grouped by URL with total clicks
+    and unique sessions, newest-active first.
+
+    Query params: ?period=7d|30d|90d|all (default 30d)
+    """
+    from chat.models import ProductLinkClick
+    from django.db.models import Count
+
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    period = request.query_params.get('period', '30d')
+    qs = ProductLinkClick.objects.filter(client=client)
+    since = _period_since(period)
+    if since:
+        qs = qs.filter(created_at__gte=since)
+
+    rows = (
+        qs.values('url')
+          .annotate(
+              clicks=Count('id'),
+              unique_sessions=Count('session_id', distinct=True),
+          )
+          .order_by('-clicks')[:200]
+    )
+    # Attach a representative link_text (most recent) per URL.
+    label_map = {}
+    for plc in qs.order_by('-created_at').values('url', 'link_text')[:1000]:
+        if plc['url'] not in label_map and plc['link_text']:
+            label_map[plc['url']] = plc['link_text']
+
+    data = [{
+        'url': r['url'],
+        'link_text': label_map.get(r['url'], ''),
+        'clicks': r['clicks'],
+        'unique_sessions': r['unique_sessions'],
+    } for r in rows]
+
+    return Response({
+        'period': period,
+        'total_clicks': qs.count(),
+        'total_links': len(data),
+        'links': data,
+    })
+
+
+def _period_since(period):
+    """Map a period string to a UTC cutoff datetime, or None for 'all'."""
+    from datetime import timedelta
+    now = timezone.now()
+    return {
+        'today': now.replace(hour=0, minute=0, second=0, microsecond=0),
+        '7d': now - timedelta(days=7),
+        '30d': now - timedelta(days=30),
+        '90d': now - timedelta(days=90),
+    }.get(period)  # 'all' / unknown → None (no filter)
+
+
+@api_view(['GET'])
+@permission_classes([IsSuperAdmin])
+def platform_link_clicks(request):
+    """
+    Super-admin global view of chatbot product-link referrals across ALL
+    tenants. Returns the top links overall plus a per-client breakdown.
+
+    Query params: ?period=7d|30d|90d|all (default 30d)
+    """
+    from chat.models import ProductLinkClick
+    from django.db.models import Count
+
+    period = request.query_params.get('period', '30d')
+    qs = ProductLinkClick.objects.all()
+    since = _period_since(period)
+    if since:
+        qs = qs.filter(created_at__gte=since)
+
+    top_links = list(
+        qs.values('url')
+          .annotate(clicks=Count('id'), unique_sessions=Count('session_id', distinct=True))
+          .order_by('-clicks')[:100]
+    )
+
+    by_client = list(
+        qs.values('client__id', 'client__name')
+          .annotate(clicks=Count('id'), unique_sessions=Count('session_id', distinct=True))
+          .order_by('-clicks')[:100]
+    )
+    by_client = [{
+        'client_id': str(r['client__id']) if r['client__id'] else None,
+        'client_name': r['client__name'] or '(unassigned)',
+        'clicks': r['clicks'],
+        'unique_sessions': r['unique_sessions'],
+    } for r in by_client]
+
+    return Response({
+        'period': period,
+        'total_clicks': qs.count(),
+        'top_links': top_links,
+        'by_client': by_client,
+    })
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def suggest_cta(request, client_id):

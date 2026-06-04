@@ -34,6 +34,7 @@ urlpatterns = [
     path('clients/<uuid:client_id>/assign-tenant/', admin_views.assign_client_to_tenant, name='admin-client-assign-tenant'),
     path('clients/<uuid:client_id>/analytics/export/', admin_views.analytics_export, name='admin-client-analytics-export'),
     path('clients/<uuid:client_id>/suggest-cta/', admin_views.suggest_cta, name='admin-client-suggest-cta'),
+    path('clients/<uuid:client_id>/link-clicks/', admin_views.client_link_clicks, name='admin-client-link-clicks'),
     path('clients/<uuid:client_id>/activity/pages/', admin_views.activity_pages, name='admin-client-activity-pages'),
     path('clients/<uuid:client_id>/heatmap/', admin_views.page_heatmap, name='admin-client-heatmap'),
     path('clients/<uuid:client_id>/visitors/', admin_views.client_visitors, name='admin-client-visitors'),
@@ -50,6 +51,7 @@ urlpatterns = [
 
     # Platform
     path('stats/', admin_views.platform_stats, name='admin-platform-stats'),
+    path('link-clicks/', admin_views.platform_link_clicks, name='admin-platform-link-clicks'),
     path('kanban/', admin_views.kanban_view, name='admin-kanban'),
     path('leads/', admin_views.leads_list, name='admin-leads'),
     path('leads/export/', admin_views.leads_export, name='admin-leads-export'),

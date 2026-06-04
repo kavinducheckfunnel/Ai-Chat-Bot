@@ -181,6 +181,59 @@
         </div>
       </div>
 
+      <!-- ═══════════ REFERRALS TAB (Issue 4) ═══════════ -->
+      <div v-else-if="activeTab==='referrals'" class="tab-content">
+        <div class="ai-header">
+          <div>
+            <h2 class="ai-section-title">Chatbot referrals</h2>
+            <p class="ai-section-sub">How many visitors the AI sent to product/content links, across all tenants.</p>
+          </div>
+          <select v-model="referralsPeriod" class="ref-period">
+            <option value="7d">Last 7 days</option>
+            <option value="30d">Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+            <option value="all">All time</option>
+          </select>
+        </div>
+
+        <div class="ref-total-card">
+          <span class="ref-total-num">{{ referrals.total_clicks || 0 }}</span>
+          <span class="ref-total-lbl">total link clicks</span>
+        </div>
+
+        <div class="ref-grid">
+          <div class="card">
+            <h3 class="card-title">Top links (all tenants)</h3>
+            <table class="ref-table" v-if="(referrals.top_links||[]).length">
+              <thead><tr><th>URL</th><th>Clicks</th><th>Unique</th></tr></thead>
+              <tbody>
+                <tr v-for="(l,i) in referrals.top_links" :key="i">
+                  <td><a :href="l.url" target="_blank" rel="noopener" class="ref-link">{{ l.url }}</a></td>
+                  <td><strong>{{ l.clicks }}</strong></td>
+                  <td>{{ l.unique_sessions }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty-panel"><p>No link clicks in this period.</p></div>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title">By client</h3>
+            <table class="ref-table" v-if="(referrals.by_client||[]).length">
+              <thead><tr><th>Client</th><th>Clicks</th><th>Unique</th></tr></thead>
+              <tbody>
+                <tr v-for="(c,i) in referrals.by_client" :key="i">
+                  <td>{{ c.client_name }}</td>
+                  <td><strong>{{ c.clicks }}</strong></td>
+                  <td>{{ c.unique_sessions }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty-panel"><p>No data yet.</p></div>
+          </div>
+        </div>
+      </div>
+
       <!-- ═══════════ ALERTS TAB ═══════════ -->
       <div v-else-if="activeTab==='alerts'" class="tab-content">
         <div v-if="alerts.length === 0" class="empty-panel">
@@ -462,11 +515,29 @@ const activeTab = ref('overview')
 const tabs = [
   { key: 'overview', label: 'Overview' },
   { key: 'health',   label: 'Health Board' },
+  { key: 'referrals', label: 'Referrals' },
   { key: 'alerts',   label: 'Alerts' },
   { key: 'audit',    label: 'Audit Log' },
   { key: 'announce', label: 'Announcements' },
   { key: 'ai',       label: 'AI Settings' },
 ]
+
+// Issue 4 — chatbot product-link referrals (global)
+const referrals = ref({ total_clicks: 0, top_links: [], by_client: [] })
+const referralsPeriod = ref('30d')
+const referralsLoading = ref(false)
+async function loadReferrals() {
+  referralsLoading.value = true
+  try {
+    const r = await api.getPlatformLinkClicks(referralsPeriod.value)
+    referrals.value = r || { total_clicks: 0, top_links: [], by_client: [] }
+  } catch { /* non-fatal */ } finally {
+    referralsLoading.value = false
+  }
+}
+watch([activeTab, referralsPeriod], ([tab]) => {
+  if (tab === 'referrals') loadReferrals()
+})
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 const revenue  = ref({ mrr:0, arr:0, new_mrr:0, churned_mrr:0, net_mrr_growth:0, arpu:0, active_tenants:0, total_tenants:0, past_due:0, trialing:0, plan_distribution:[], mrr_trend:[] })
@@ -1066,4 +1137,21 @@ select.inp option { background-color: #1e2130; color: var(--cf-text-primary); }
 .ai-price { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
 .ai-price-free { background: rgba(34,197,94,0.1); color: #86efac; }
 .ai-price-paid { background: rgba(251,191,36,0.1); color: #fcd34d; }
+
+/* Referrals tab (Issue 4) */
+.ref-period { padding: 8px 12px; border-radius: 9px; background: var(--cf-bg-surface);
+  border: 1px solid var(--cf-border-subtle); color: var(--cf-text-primary); font-size: 13px; cursor: pointer; }
+.ref-total-card { display: flex; align-items: baseline; gap: 10px; margin: 18px 0;
+  padding: 18px 22px; background: var(--cf-bg-surface); border: 1px solid var(--cf-border-subtle); border-radius: 14px; }
+.ref-total-num { font-size: 30px; font-weight: 700; color: var(--cf-text-primary); }
+.ref-total-lbl { font-size: 13px; color: var(--cf-text-muted); }
+.ref-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ref-table { width: 100%; border-collapse: collapse; }
+.ref-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cf-text-muted); padding: 8px 10px; border-bottom: 1px solid var(--cf-border-subtle); }
+.ref-table td { padding: 9px 10px; font-size: 13px; color: var(--cf-text-secondary);
+  border-bottom: 1px solid var(--cf-border-subtle); vertical-align: top; }
+.ref-link { color: #a5b4fc; text-decoration: none; word-break: break-all; }
+.ref-link:hover { text-decoration: underline; }
+@media (max-width: 720px) { .ref-grid { grid-template-columns: 1fr; } }
 </style>

@@ -215,6 +215,38 @@ class ChatSession(models.Model):
         return str(self.session_id)
 
 
+class ProductLinkClick(models.Model):
+    """
+    One row per click on a product/content link the AI sent in a chat reply.
+
+    Powers marketing attribution: "the chatbot referred N visitors to this
+    product." Recorded by the widget's delegated click handler hitting
+    POST /api/chat/link-click/ (sendBeacon, survives the new-tab navigation).
+
+    Deliberately separate from analytics.AnalyticEvent so the dashboard
+    aggregation is a cheap GROUP BY url on a small, single-purpose table.
+    """
+    id = models.BigAutoField(primary_key=True)
+    client = models.ForeignKey(
+        'users.Client', on_delete=models.CASCADE,
+        related_name='product_link_clicks', null=True, blank=True, db_index=True,
+    )
+    session_id = models.CharField(max_length=255, db_index=True)
+    url = models.URLField(max_length=2000)
+    link_text = models.CharField(max_length=300, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['client', '-created_at']),
+            models.Index(fields=['client', 'url']),
+        ]
+
+    def __str__(self):
+        return f'click {self.url[:50]} (session={self.session_id[:8]})'
+
+
 class LLMCallLog(models.Model):
     """
     One row per LLM API call. Foundation for MLOps observability:

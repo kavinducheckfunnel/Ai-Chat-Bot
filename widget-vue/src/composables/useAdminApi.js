@@ -378,6 +378,10 @@ export function useAdminApi() {
 
     getPortalAnalytics: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/analytics/?period=${period}`),
 
+    // Issue 4 — product-link click attribution
+    getClientLinkClicks: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/link-clicks/?period=${period}`),
+    getPlatformLinkClicks: (period = '30d') => apiFetch(`/api/admin/link-clicks/?period=${period}`),
+
     suggestCta: (clientId) => apiFetch(`/api/admin/clients/${clientId}/suggest-cta/`, {
       method: 'POST', body: JSON.stringify({}),
     }),

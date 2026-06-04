@@ -469,7 +469,11 @@ function renderMd(text){
   s=s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   s=s.replace(/__CFL_(\\d+)__/g,function(m,i){
     var l=links[+i],st=l.t.replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    return'<a href="'+l.u+'" target="_blank" rel="noopener noreferrer">'+st+'</a>'
+    // data-cf-plink tags AI-sent links so the delegated click handler can
+    // attribute referrals (marketing dashboards). data-cf-pltext carries the
+    // visible label for the report.
+    var safeTxt=l.t.replace(/"/g,'&quot;');
+    return'<a href="'+l.u+'" target="_blank" rel="noopener noreferrer" data-cf-plink="'+l.u+'" data-cf-pltext="'+safeTxt+'">'+st+'</a>'
   });
   s=s.replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>');
   var lines=s.split('\\n'),out=[],inList=false;
@@ -984,6 +988,31 @@ if($('cf-lead-ph')){
   });
   $('cf-lead-ph').addEventListener('keydown',function(e){if(e.key==='Enter')submitLead()});
 }
+
+// ── Product-link click attribution ───────────────────────────────────────
+// Delegated handler on the messages container: when the visitor clicks a
+// link the AI sent ([data-cf-plink]), beacon it to the backend BEFORE the
+// new tab opens. sendBeacon is fire-and-forget and survives navigation.
+(function(){
+  var box=$('cf-msgs');
+  if(!box)return;
+  box.addEventListener('click',function(e){
+    var a=e.target.closest&&e.target.closest('a[data-cf-plink]');
+    if(!a)return;
+    try{
+      var payload=JSON.stringify({
+        session_id:sid,client_id:C,
+        url:a.getAttribute('data-cf-plink')||a.href||'',
+        link_text:a.getAttribute('data-cf-pltext')||a.textContent||''
+      });
+      if(navigator.sendBeacon){
+        navigator.sendBeacon(B+'/api/chat/link-click/',new Blob([payload],{type:'application/json'}));
+      }else{
+        fetch(B+'/api/chat/link-click/',{method:'POST',headers:{'Content-Type':'application/json'},body:payload,keepalive:true}).catch(function(){});
+      }
+    }catch(_){}
+  },true);
+})();
 })();
 </` + `script>`
 

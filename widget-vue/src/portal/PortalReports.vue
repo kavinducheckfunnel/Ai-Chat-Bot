@@ -280,6 +280,35 @@
         </table>
         <div v-else class="empty-msg">No sessions yet.</div>
       </div>
+
+      <!-- Products the AI referred (Issue 4 — marketing attribution) -->
+      <div class="card recent-card" v-if="!loading">
+        <h3 class="card-title">Products the chatbot referred</h3>
+        <p class="card-sub">How many visitors the AI sent to each product/content link.</p>
+        <table class="activity-table" v-if="linkClicks.length">
+          <thead>
+            <tr>
+              <th>Product / Link</th>
+              <th>Clicks</th>
+              <th>Unique visitors</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(l, i) in linkClicks" :key="i">
+              <td>
+                <a :href="l.url" target="_blank" rel="noopener" class="link-cell">
+                  {{ l.link_text || l.url }}
+                </a>
+                <div class="link-url">{{ l.url }}</div>
+              </td>
+              <td><strong>{{ l.clicks }}</strong></td>
+              <td>{{ l.unique_sessions }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-else class="empty-msg">No link clicks yet. Once the AI recommends products and visitors click, they'll show here.</div>
+      </div>
+
       <div class="card recent-card" v-else>
         <div class="table-skeleton"><div class="sk-row" v-for="n in 5" :key="n"></div></div>
       </div>
@@ -390,6 +419,7 @@ const period = ref('30d')
 const activeTab = ref('overview')
 const analytics = ref({})
 const recentSessions = ref([])
+const linkClicks = ref([])
 const upgradeMsg = ref('')
 const metricLimit = ref(-1) // -1 = unlimited until subscription loaded
 
@@ -635,13 +665,15 @@ async function load() {
   if (!props.client) return
   loading.value = true
   try {
-    const [a, sessions, sub] = await Promise.all([
+    const [a, sessions, sub, clicks] = await Promise.all([
       api.getPortalAnalytics(props.client.id, period.value),
       api.getPortalSessions(props.client.id, { limit: 20 }),
       api.getSubscription().catch(() => null),
+      api.getClientLinkClicks(props.client.id, period.value).catch(() => null),
     ])
     analytics.value = a || {}
     recentSessions.value = Array.isArray(sessions) ? sessions : (sessions?.results || [])
+    linkClicks.value = (clicks && Array.isArray(clicks.links)) ? clicks.links : []
     if (sub?.plan?.max_dashboard_metrics != null) {
       metricLimit.value = sub.plan.max_dashboard_metrics
     }
@@ -924,6 +956,10 @@ watch(() => props.client, load)
 .mini-heat span { font-size: 11px; color: var(--cf-text-muted); font-family: monospace; }
 
 .empty-msg { text-align: center; color: var(--cf-text-muted); padding: 24px; font-size: 13px; }
+.card-sub { font-size: 12px; color: var(--cf-text-muted); margin: -10px 0 14px; line-height: 1.5; }
+.link-cell { color: #a5b4fc; text-decoration: none; font-weight: 500; word-break: break-word; }
+.link-cell:hover { text-decoration: underline; }
+.link-url { font-size: 11px; color: var(--cf-text-muted); margin-top: 2px; word-break: break-all; max-width: 360px; }
 .table-skeleton { display: flex; flex-direction: column; gap: 8px; padding: 8px 0; }
 .sk-row { height: 16px; background: #1e293b; border-radius: 4px; }
 

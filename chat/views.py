@@ -319,6 +319,55 @@ def trigger_event(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+def track_link_click(request):
+    """
+    Record a click on a product/content link the AI sent in chat.
+
+    Called by the widget's delegated click handler via navigator.sendBeacon
+    (so the request survives the new-tab navigation). Powers the marketing
+    attribution dashboards: "the chatbot referred N visitors to this product."
+
+    Body: { session_id, client_id, url, link_text? }
+    Always returns 202 quickly — this is fire-and-forget telemetry; we never
+    want it to block the visitor opening the product page.
+    """
+    from chat.models import ProductLinkClick
+    from users.models import Client
+
+    session_id = (request.data.get('session_id') or '').strip()
+    url = (request.data.get('url') or '').strip()
+    client_id = (request.data.get('client_id') or '').strip()
+    link_text = (request.data.get('link_text') or '').strip()[:300]
+
+    if not session_id or not url:
+        return Response({'status': 'ignored'}, status=status.HTTP_202_ACCEPTED)
+
+    # Only accept http(s) URLs; ignore javascript:/mailto:/etc.
+    if not (url.startswith('http://') or url.startswith('https://')):
+        return Response({'status': 'ignored'}, status=status.HTTP_202_ACCEPTED)
+
+    client = None
+    if client_id:
+        try:
+            client = Client.objects.filter(pk=client_id).first()
+        except Exception:
+            client = None
+
+    try:
+        ProductLinkClick.objects.create(
+            client=client,
+            session_id=session_id[:255],
+            url=url[:2000],
+            link_text=link_text,
+        )
+    except Exception as e:
+        logger.warning(f'[track_link_click] {e}')
+
+    return Response({'status': 'recorded'}, status=status.HTTP_202_ACCEPTED)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
 def capture_lead(request):
     """
     Called by the widget lead-capture modal to save visitor email/phone to

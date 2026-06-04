@@ -7,6 +7,7 @@ urlpatterns = [
     path('widget-config/<uuid:client_id>/', views.widget_config, name='widget_config'),
     path('trigger/', views.trigger_event, name='trigger_event'),
     path('lead/', views.capture_lead, name='capture_lead'),
+    path('link-click/', views.track_link_click, name='track_link_click'),
     path('product/<str:product_id>/', views.product_detail, name='product_detail'),
 
     # Omnichannel webhooks (called by Meta's servers / Telegram)
