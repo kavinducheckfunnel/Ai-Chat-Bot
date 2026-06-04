@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import time
 import logging
@@ -146,6 +147,76 @@ def build_browsing_context(session):
         'is_returning': bool(getattr(session, 'visitor_is_returning', False)),
         'is_first_msg': is_first_msg,
     }
+
+def detect_current_focus(session, top_chunks, user_message):
+    """
+    Determine the product/category the visitor is CURRENTLY interested in,
+    derived from their most-recent chat messages — the opposite of the
+    dwell-weighted browsing `top_interest`, which is sticky to whatever
+    they looked at longest and never updates when they pivot in chat.
+
+    Why this exists: a visitor who browsed caps (long dwell) then asks the
+    bot about hoodies kept getting asked about caps, because `top_interest`
+    stayed "Cap" and dominated the prompt every turn. This function reads
+    the latest user message(s), matches them against the client's known
+    product/category titles (from the retrieved KB chunks), and returns the
+    freshest match. The caller treats this as authoritative over browsing
+    `top_interest` once the visitor has typed about a product.
+
+    Returns the matched title string, or '' when nothing matches.
+
+    Cheap by design — pure string matching against chunk titles, no extra
+    embedding or LLM call.
+    """
+    try:
+        # Weight the current message heaviest, then the previous user turn.
+        history = getattr(session, 'chat_history', None) or []
+        prior_user = [m.get('message', '') for m in history if m.get('role') == 'user']
+        # Most-recent-first: current message, then last typed message.
+        candidates_text = []
+        if user_message:
+            candidates_text.append(user_message.lower())
+        if prior_user:
+            candidates_text.append((prior_user[-1] or '').lower())
+        if not candidates_text:
+            return ''
+
+        # Build the title vocabulary from retrieved chunks (these are the
+        # products/categories most relevant to THIS query already).
+        titles = []
+        for ch in top_chunks:
+            meta = ch.metadata if isinstance(getattr(ch, 'metadata', None), dict) else {}
+            t = (meta.get('title') or '').strip()
+            if t and t.lower() not in {x.lower() for x in titles}:
+                titles.append(t)
+
+        # Match: a title whose significant words appear in the recent text.
+        # Check the current message first so a fresh pivot wins immediately.
+        for text in candidates_text:
+            best = ''
+            best_len = 0
+            for title in titles:
+                tl = title.lower()
+                # Full-title substring match is the strongest signal.
+                if tl in text and len(tl) > best_len:
+                    best, best_len = title, len(tl)
+                    continue
+                # Otherwise match on the title's longest word (e.g. "hoodie"
+                # in "Hoodie with Zipper") so generic category words still hit.
+                # `s?` tolerates plurals ("hoodie" ↔ "hoodies") — the most
+                # common reason a focus pivot was missed. The trailing word
+                # boundary still blocks false hits like "cap" → "capable".
+                words = [w for w in re.findall(r'[a-z]{4,}', tl)]
+                for w in words:
+                    if re.search(r'\b' + re.escape(w) + r's?\b', text) and len(w) > best_len:
+                        best, best_len = title, len(w)
+            if best:
+                return best
+        return ''
+    except Exception as e:
+        logger.warning(f'[detect_current_focus] {e}')
+        return ''
+
 
 # Fallback chain used when the primary model is rate-limited.
 # Index 0 is overridden by PlatformConfig.primary_model at runtime.
@@ -617,6 +688,12 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         'scarcity': (getattr(session.client, 'scarcity_blurb', '') or '').strip() if session.client else '',
     }
 
+    # 3c. Current conversation focus — the product/category the visitor is
+    # asking about RIGHT NOW (recency-weighted from chat), which overrides
+    # the dwell-sticky browsing top_interest so a pivot ("now show hoodies")
+    # is honoured instead of the bot looping on the first-browsed product.
+    current_focus = detect_current_focus(session, top_chunks, user_message)
+
     system_prompt, user_prompt, static_system, dynamic_system = build_prompt(
         session.conversation_state,
         top_chunks,
@@ -627,6 +704,7 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         qualification_block=qualification_block,
         faq_blurbs=faq_blurbs,
         conversation_summary=session.conversation_summary or '',
+        current_focus=current_focus,
     )
     # JSON-mode tail-prompt — used for text-only turns. Vision turns get a
     # plain-text instruction instead: image-capable models reliably break

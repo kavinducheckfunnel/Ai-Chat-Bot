@@ -539,6 +539,7 @@ def build_prompt(
     qualification_block="",
     faq_blurbs=None,
     conversation_summary="",
+    current_focus="",
 ):
     """
     Build the full system + user prompt pair.
@@ -551,6 +552,11 @@ def build_prompt(
     conversation_summary: rolling LLM-generated recap of messages that
     have scrolled out of the verbatim window. Empty for short sessions.
     Maintained by chat.tasks.summarize_chat_session (Phase 2).
+
+    current_focus: the product/category the visitor is asking about RIGHT
+    NOW (recency-weighted from chat by ai_service.detect_current_focus).
+    Authoritative over the dwell-sticky browsing top_interest — when the
+    visitor pivots ("now show hoodies") this is what the bot must follow.
     """
     # Persona is editable via the super-admin prompt editor (resolves
     # through prompt_service with file-constant fallback). State
@@ -654,7 +660,29 @@ PRE-PURCHASE FAQ — answer these inline (RULE M)
     else:
         summary_block_str = ""
 
-    dynamic_system = f"""════════════════════
+    # CURRENT FOCUS — the product/category the visitor is asking about right
+    # now, derived from their latest chat messages (recency-weighted). This
+    # OVERRIDES the dwell-sticky browsing top_interest: if the visitor moved
+    # on, the bot must move on too. Only rendered when we have a confident
+    # chat-derived focus.
+    focus_text = (current_focus or '').strip()
+    if focus_text:
+        focus_block_str = (
+            "════════════════════\n"
+            "CURRENT FOCUS (what the visitor is asking about RIGHT NOW)\n"
+            "════════════════════\n"
+            f">>> The visitor's attention is on: {focus_text}\n"
+            ">>> This is derived from their LATEST messages and OVERRIDES any "
+            "earlier browsing interest. If this differs from what you were "
+            "discussing before, SWITCH to it immediately — recommend and ask "
+            f"about {focus_text}, and do NOT keep asking about the previous "
+            "product. Never drag the conversation back to something the "
+            "visitor has moved on from.\n\n"
+        )
+    else:
+        focus_block_str = ""
+
+    dynamic_system = f"""{focus_block_str}════════════════════
 QUALIFICATION CHECKLIST
 (What you already know about this visitor vs. what's still missing.
 Use this to decide what to ask next — never re-ask a slot already filled.)
