@@ -442,25 +442,34 @@ def capture_lead(request):
     except Exception:
         pass
 
+    # Confirmation phrasing keeps the conversation OPEN — capturing contact
+    # is not the end of the chat. Each variant confirms the save, names the
+    # follow-up window, then invites the visitor to keep going so the bot
+    # can continue helping (and surface more products / answer more
+    # questions) instead of signalling goodbye.
     urgent = (session.current_urgency_ema or 0) >= 0.7
     if urgent and top_interest:
         confirm_text = (
-            f"Got it — I've marked you as a priority lead for the {top_interest}. "
-            f"Our team will reach out shortly to confirm delivery details."
+            f"Perfect — you're marked as a priority lead for the {top_interest}, "
+            f"and our team will reach out shortly to confirm the details. "
+            f"While you're here, is there anything else I can help you with?"
         )
     elif urgent:
         confirm_text = (
-            "Got it — I've marked this as a priority lead. "
-            "Our team will reach out shortly to confirm delivery details."
+            "Perfect — you're marked as a priority lead and our team will reach "
+            "out shortly to confirm the details. "
+            "In the meantime, anything else I can help you find?"
         )
     elif top_interest:
         confirm_text = (
-            f"Thanks! Your details are saved. Our team will reach out within "
-            f"24 hours about the {top_interest}."
+            f"Got it, your details are saved ✅ — our team will follow up within "
+            f"24 hours about the {top_interest}. "
+            f"Anything else you'd like to know while you're here?"
         )
     else:
         confirm_text = (
-            "Thanks! Your details are saved. Our team will be in touch within 24 hours."
+            "Got it, your details are saved ✅ — our team will be in touch within "
+            "24 hours. Is there anything else I can help you with?"
         )
 
     history = session.chat_history or []

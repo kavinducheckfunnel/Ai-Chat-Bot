@@ -218,6 +218,9 @@
   display: inline-flex; align-items: center; justify-content: center; }
 .cf-lead-btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
 .cf-lead-btn:disabled { opacity: .5; cursor: not-allowed; }
+/* Full-width Send on its own row — keeps email + phone fields aligned to
+   the same width instead of the phone field being shortened by the button. */
+.cf-lead-btn-full { width: 100%; margin-top: 9px; }
 /* +94 country-code affix on the phone row */
 .cf-lead-cc { display: inline-flex; align-items: center; justify-content: center;
   height: 38px; padding: 0 11px; flex-shrink: 0;
@@ -351,13 +354,13 @@
     <button id="cf-lead-cls" aria-label="Dismiss">&#10005;</button>
   </div>
   <div class="cf-lead-row">
-    <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="your@email.com"/>
+    <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="Email address"/>
   </div>
   <div class="cf-lead-row" style="margin-top:7px">
     <span class="cf-lead-cc">+94</span>
     <input class="cf-lead-inp cf-lead-ph" id="cf-lead-ph" type="tel" inputmode="numeric" maxlength="9" placeholder="77 123 4567"/>
-    <button class="cf-lead-btn" id="cf-lead-sb">Send</button>
   </div>
+  <button class="cf-lead-btn cf-lead-btn-full" id="cf-lead-sb">Send my details</button>
   <div class="cf-lead-err" id="cf-lead-err"></div>
 </div>
 <div id="cf-foot">
@@ -497,11 +500,16 @@ function submitLead(){
   }).then(function(r){
     if(r&&!r.ok&&r.status===400){
       // Backend rejected the phone — surface it and let them fix.
-      $('cf-lead-sb').disabled=false;$('cf-lead-sb').textContent='Send';
+      $('cf-lead-sb').disabled=false;$('cf-lead-sb').textContent='Send my details';
       setLeadErr('Please enter a valid Sri Lankan mobile number.');
       throw new Error('invalid');
     }
-    dismissLead();bubble('<p>✅ Thanks! We\\'ll be in touch soon.</p>','ai');
+    // Just hide the form. We do NOT post a local "we'll be in touch" bubble
+    // — the backend pushes an engaging confirmation over the WebSocket that
+    // keeps the conversation open ("anything else I can help with?"), so a
+    // second local goodbye bubble would both duplicate it and make the chat
+    // feel closed.
+    dismissLead();
   }).catch(function(){});
 }
 
