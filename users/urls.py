@@ -8,6 +8,7 @@ urlpatterns = [
     path('auth/login/', admin_views.login_view, name='admin-login'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='admin-token-refresh'),
     path('auth/me/', admin_views.me_view, name='admin-me'),
+    path('portal/client/', admin_views.portal_client, name='admin-portal-client'),
     path('auth/forgot-password/', admin_views.forgot_password, name='admin-forgot-password'),
     path('auth/reset-password/', admin_views.reset_password, name='admin-reset-password'),
     path('auth/change-password/', admin_views.change_password, name='admin-change-password'),

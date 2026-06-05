@@ -315,6 +315,33 @@ def me_view(request):
     })
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def portal_client(request):
+    """
+    Resolve the active client for the TENANT PORTAL — the user's OWN tenant
+    clients only, ordered stably by creation.
+
+    Why this exists: the portal used to call /api/admin/clients/ and take
+    clients[0]. For a super-admin, get_accessible_clients returns EVERY
+    client on the platform ordered by -created_at, so the "active client"
+    was whatever was newest platform-wide — and it flipped to a different
+    tenant the moment any new client/tenant appeared. This endpoint is
+    strictly scoped to request.user.tenant_profile, so the portal stays
+    pinned to the user's own client across refreshes.
+
+    Returns the serialized client (or null if the tenant has none).
+    """
+    tenant = getattr(request.user, 'tenant_profile', None)
+    if not tenant:
+        return Response(None)
+    # Stable order: oldest first → the tenant's primary client never changes.
+    client = tenant.clients.order_by('created_at').first()
+    if not client:
+        return Response(None)
+    return Response(ClientSerializer(client).data)
+
+
 # ─── Client CRUD ─────────────────────────────────────────────────────────────
 
 @api_view(['GET', 'POST'])
@@ -1562,10 +1589,27 @@ def client_analytics(request, client_id):
         # inflated the rate.
         active = qs.filter(message_count__gte=1)
         active_total = active.count()
-        unique_visitors = qs.values('visitor_id').distinct().count()
+        # Unique visitors — count DISTINCT real identities, not the legacy
+        # `visitor_id` CharField which the WebSocket path never populates
+        # (it links identity via the `visitor_obj` FK instead). Counting the
+        # empty legacy field collapsed every session to "1 unique visitor".
+        # We count distinct visitor_obj for linked sessions PLUS distinct
+        # session_id for any session with no Visitor link, so neither double-
+        # counts nor collapses.
+        linked_visitors = (
+            qs.exclude(visitor_obj__isnull=True)
+              .values('visitor_obj_id').distinct().count()
+        )
+        unlinked_sessions = qs.filter(visitor_obj__isnull=True).count()
+        unique_visitors = linked_visitors + unlinked_sessions
         ai_handled = active.filter(taken_over_by__isnull=True).count()
         manual_handled = active.filter(taken_over_by__isnull=False).count()
-        missed = qs.filter(message_count=0).count()
+        # "Opened, no message" — sessions where the widget opened but the
+        # visitor never typed. These are NOT failures of the AI, so we keep
+        # them as a separate informational stat rather than calling them
+        # "missed chats" (which implied the bot dropped the ball).
+        opened_no_msg = qs.filter(message_count=0).count()
+        missed = opened_no_msg
 
         # Duration is only meaningful on sessions where a visitor actually spoke
         dur_qs = active.exclude(last_visitor_message_at__isnull=True).annotate(dur=dur_expr)
@@ -1589,8 +1633,10 @@ def client_analytics(request, client_id):
 
         return {
             'total': total, 'unique_visitors': unique_visitors,
+            'active_total': active_total,
             'ai_handled': ai_handled, 'manual_handled': manual_handled,
-            'missed': missed, 'avg_dur_s': avg_dur_s, 'total_dur_s': total_dur_s,
+            'missed': missed, 'opened_no_msg': opened_no_msg,
+            'avg_dur_s': avg_dur_s, 'total_dur_s': total_dur_s,
             'leads': leads, 'hot': hot, 'warm': warm, 'cold': cold,
             'avg_heat': round(avg_heat, 1), 'ai_resolution_rate': ai_res_rate,
         }
@@ -1658,6 +1704,12 @@ def client_analytics(request, client_id):
         'ai_handled':            metric_obj(curr['ai_handled'], prev['ai_handled']),
         'manual_handled':        metric_obj(curr['manual_handled'], prev['manual_handled']),
         'missed_chats':          metric_obj(curr['missed'], prev['missed']),
+        'opened_no_message':     metric_obj(curr['opened_no_msg'], prev['opened_no_msg']),
+        # Honest denominator for the engagement metrics below — sessions where
+        # a visitor actually sent at least one message. The frontend uses this
+        # to label "avg over N answered chats" so avg/total no longer look
+        # mismatched against the all-sessions total.
+        'answered_chats':        metric_obj(curr['active_total'], prev['active_total']),
         'ai_resolution_rate':    metric_obj(curr['ai_resolution_rate'], prev['ai_resolution_rate']),
         'avg_duration_seconds':  metric_obj(curr['avg_dur_s'], prev['avg_dur_s']),
         'total_duration_seconds': metric_obj(curr['total_dur_s'], prev['total_dur_s']),

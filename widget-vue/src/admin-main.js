@@ -4,6 +4,7 @@ import { createRouter, createWebHistory, RouterView } from 'vue-router'
 
 import LoginView from './admin/LoginView.vue'
 import SignupView from './admin/SignupView.vue'
+import PricingView from './admin/PricingView.vue'
 import ForgotPasswordView from './admin/ForgotPasswordView.vue'
 import ResetPasswordView from './admin/ResetPasswordView.vue'
 import AdminLayout from './admin/AdminLayout.vue'
@@ -50,6 +51,7 @@ const routes = [
   { path: '/admin/login', component: LoginView, meta: { public: true } },
   { path: '/portal/login', redirect: '/admin/login' },
   { path: '/signup', component: SignupView, meta: { public: true } },
+  { path: '/pricing', component: PricingView, meta: { public: true } },
   { path: '/forgot-password', component: ForgotPasswordView, meta: { public: true } },
   { path: '/reset-password', component: ResetPasswordView, meta: { public: true } },
 

@@ -229,11 +229,26 @@ export function useAdminApi() {
     getClientAnalytics: (id, period = '30d') => apiFetch(`/api/admin/clients/${id}/analytics/?period=${period}`),
 
     async exportAnalyticsCSV(clientId, period = '30d') {
-      const token = localStorage.getItem('cf_access_token')
-      const res = await fetch(`${API_BASE}/api/admin/clients/${clientId}/analytics/export/?period=${period}`, {
-        headers: { Authorization: `Bearer ${token}` },
+      const path = `/api/admin/clients/${clientId}/analytics/export/?period=${period}`
+      const doFetch = (tok) => fetch(`${API_BASE}${path}`, {
+        headers: tok ? { Authorization: `Bearer ${tok}` } : {},
       })
-      if (!res.ok) throw new Error('Export failed')
+      // First attempt with the current access token.
+      let res = await doFetch(localStorage.getItem('cf_access_token'))
+      // On 401 the token has expired — silently refresh once and retry,
+      // mirroring apiFetch. The raw-fetch path used to skip this, so a
+      // perfectly valid export looked "broken" whenever the 8h token aged out.
+      if (res.status === 401) {
+        const newToken = await tryRefreshToken()
+        if (newToken) res = await doFetch(newToken)
+      }
+      if (res.status === 403) {
+        // Plan-gated feature → clear, actionable message instead of "Export failed".
+        const err = new Error('CSV export is available on the Growth plan and above. Upgrade to export your reports.')
+        err.code = 'upgrade_required'
+        throw err
+      }
+      if (!res.ok) throw new Error('Export failed. Please try again.')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -356,6 +371,13 @@ export function useAdminApi() {
 
     // ── Portal helpers ────────────────────────────────────────────────
     async getPortalClient() {
+      // Tenant-scoped + stable: resolves the user's OWN primary client,
+      // never the global-newest one. Falls back to the old list endpoint
+      // only if the new route is unavailable (older backend).
+      try {
+        const c = await apiFetch('/api/admin/portal/client/')
+        if (c !== undefined) return c || null
+      } catch { /* fall through */ }
       const clients = await apiFetch('/api/admin/clients/')
       return clients?.[0] || null
     },

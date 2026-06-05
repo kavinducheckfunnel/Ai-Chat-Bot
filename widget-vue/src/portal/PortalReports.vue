@@ -91,22 +91,22 @@
         <div class="secondary-card">
           <div class="sc-label">Avg chat duration</div>
           <div class="sc-value">{{ fmtDuration(val('avg_duration_seconds')) }}</div>
-          <div class="sc-delta" :class="deltaCls(delta('avg_duration_seconds'))">{{ formatDelta(delta('avg_duration_seconds')) }} vs prev</div>
+          <div class="sc-sub">over {{ val('answered_chats') }} answered chats</div>
         </div>
         <div class="secondary-card">
           <div class="sc-label">Total chat time</div>
           <div class="sc-value">{{ fmtDuration(val('total_duration_seconds')) }}</div>
-          <div class="sc-delta" :class="deltaCls(delta('total_duration_seconds'))">{{ formatDelta(delta('total_duration_seconds')) }} vs prev</div>
+          <div class="sc-sub">across {{ val('answered_chats') }} answered chats</div>
         </div>
         <div class="secondary-card">
-          <div class="sc-label">Missed chats</div>
-          <div class="sc-value">{{ val('missed_chats') }}</div>
-          <div class="sc-delta" :class="deltaCls(delta('missed_chats'), true)">{{ formatDelta(delta('missed_chats')) }} vs prev</div>
+          <div class="sc-label">Opened, no message</div>
+          <div class="sc-value">{{ val('opened_no_message') }}</div>
+          <div class="sc-sub">widget opened, visitor didn't type</div>
         </div>
         <div class="secondary-card">
           <div class="sc-label">AI resolution rate</div>
           <div class="sc-value">{{ val('ai_resolution_rate') }}%</div>
-          <div class="sc-delta" :class="deltaCls(delta('ai_resolution_rate'))">{{ formatDeltaFloat(delta('ai_resolution_rate')) }}% vs prev</div>
+          <div class="sc-sub">of {{ val('answered_chats') }} answered chats</div>
         </div>
       </div>
       <div class="secondary-row" v-else-if="canSeeCharts">
@@ -850,6 +850,7 @@ watch(() => props.client, load)
 .sc-label { font-size: 11px; color: var(--cf-text-muted); font-weight: 500; margin-bottom: 6px; }
 .sc-value { font-size: 22px; font-weight: 700; color: var(--cf-text-primary); letter-spacing: -0.5px; }
 .sc-delta  { font-size: 11px; margin-top: 5px; }
+.sc-sub    { font-size: 11px; margin-top: 5px; color: var(--cf-text-muted); line-height: 1.4; }
 
 /* Chart */
 .card {

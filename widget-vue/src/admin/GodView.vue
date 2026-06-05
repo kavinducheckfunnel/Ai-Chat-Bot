@@ -203,13 +203,26 @@ async function sendAdminMessage() {
   const msg = adminMessage.value.trim()
   if (!msg || sending.value) return
   sending.value = true
+  // Optimistic bubble with a marker so the next authoritative load can
+  // replace it rather than ADD a second copy. The previous code blindly
+  // pushed, so when the 5s poll landed between the DB commit and this
+  // push, the message rendered twice ("Hi Hi").
+  const optimistic = { role: 'ai', message: msg, source: 'admin', _optimistic: true }
+  chatHistory.value.push(optimistic)
+  adminMessage.value = ''
+  await nextTick()
+  scrollToBottom()
   try {
     await api.sendMessage(sessionId, msg)
-    chatHistory.value.push({ role: 'ai', message: msg, source: 'admin' })
-    adminMessage.value = ''
+    // Authoritative refresh — loadSession REPLACES chatHistory with the DB
+    // copy (single source of truth), dropping the optimistic marker and
+    // eliminating any poll-race duplicate.
+    await loadSession()
     await nextTick()
     scrollToBottom()
   } catch (e) {
+    // Roll back the optimistic bubble on failure.
+    chatHistory.value = chatHistory.value.filter(m => m !== optimistic)
     toast.error(e.message)
   } finally {
     sending.value = false

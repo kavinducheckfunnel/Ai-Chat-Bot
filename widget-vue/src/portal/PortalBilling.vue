@@ -65,35 +65,21 @@
         </div>
       </div>
 
-      <!-- ── F7: Top up credits (one-time add-on purchases) ─────────── -->
-      <div class="addon-section" v-if="addonOptions && sub.plan">
-        <h3 class="section-heading">Need more this month? Top up credits</h3>
-        <p class="section-sub">
-          Run out of monthly quota before your next renewal? Buy one-time credits at the rates below.
-          Credits stack on top of your plan and never expire.
-        </p>
-        <div class="addon-grid">
-          <div class="addon-card" v-for="kind in addonKinds" :key="kind.key">
-            <div class="addon-card-header">
-              <span class="addon-icon">{{ kind.icon }}</span>
-              <span class="addon-label">{{ kind.label }}</span>
-            </div>
-            <div class="addon-price-line">${{ addonOptions.prices[kind.key] }}<span>/{{ kind.unit }}</span></div>
-            <div class="addon-bundles">
-              <button
-                v-for="bundle in addonOptions.bundles[kind.key]"
-                :key="bundle"
-                class="addon-bundle-btn"
-                :disabled="addonLoading === `${kind.key}_${bundle}`"
-                @click="buyAddOn(kind.key, bundle)"
-              >
-                <span v-if="addonLoading === `${kind.key}_${bundle}`" class="spinner"></span>
-                <span v-else>+{{ bundle.toLocaleString() }} · ${{ addonTotal(kind.key, bundle) }}</span>
-              </button>
+      <!-- ── Add-ons / custom requirements → contact team ───────────── -->
+      <div class="addon-section" v-if="sub.plan">
+        <div class="contact-card">
+          <div class="contact-card-icon">💬</div>
+          <div class="contact-card-body">
+            <div class="contact-card-title">Need add-ons or custom features?</div>
+            <div class="contact-card-sub">
+              For extra message / image / voice credits, white-label branding, or any
+              custom requirement, our team will set you up.
             </div>
           </div>
+          <a href="mailto:sales@checkfunnel.com?subject=Add-on%20/%20custom%20request" class="contact-card-btn">
+            Please contact our team
+          </a>
         </div>
-        <p v-if="addonError" class="addon-error">{{ addonError }}</p>
       </div>
 
       <!-- ── Invoices section ────────────────────────────────────────── -->
@@ -232,342 +218,6 @@
 
       <!-- Error -->
       <div v-if="error" class="error-msg">{{ error }}</div>
-
-      <!-- ══════════════════════════════════════════════════════════════════
-           DOCUMENTATION SECTIONS — sourced from the official Subscription
-           & Pricing Documentation. Each block is a standalone card so
-           the page scans top-to-bottom and every grid collapses cleanly
-           to one column at ≤480px.
-           ══════════════════════════════════════════════════════════════════ -->
-
-      <!-- 1) Pricing philosophy / Why message-based? ────────────────────── -->
-      <section class="doc-section">
-        <h3 class="section-heading">Our pricing philosophy</h3>
-        <div class="doc-card philosophy-card">
-          <div class="philosophy-row">
-            <div class="philosophy-item">
-              <div class="philosophy-icon">💸</div>
-              <div class="philosophy-title">Pay for what you use</div>
-              <div class="philosophy-body">Billing scales with messages — never arbitrary seat counts. Add unlimited team members at no extra cost.</div>
-            </div>
-            <div class="philosophy-item">
-              <div class="philosophy-icon">📈</div>
-              <div class="philosophy-title">Grow at your own pace</div>
-              <div class="philosophy-body">Upgrade or downgrade plans month-to-month. Switch to annual any time for 15% off.</div>
-            </div>
-            <div class="philosophy-item">
-              <div class="philosophy-icon">🔑</div>
-              <div class="philosophy-title">Bring your own AI key</div>
-              <div class="philosophy-body">Connect your OpenAI or Anthropic key on any plan to control AI costs directly — no markup.</div>
-            </div>
-          </div>
-          <div class="philosophy-divider"></div>
-          <div class="philosophy-foot">
-            <strong>What counts as a "message"?</strong>
-            One AI-generated response sent to a visitor. Human agent replies during Live Chat Takeover are <em>free</em> — they don't count toward your monthly limit.
-          </div>
-        </div>
-      </section>
-
-      <!-- 2) Detailed plan comparison ───────────────────────────────────── -->
-      <section class="doc-section">
-        <div class="doc-section-head" @click="docExpanded.comparison = !docExpanded.comparison">
-          <h3 class="section-heading" style="margin:0">Detailed plan comparison</h3>
-          <button class="doc-toggle" type="button">
-            {{ docExpanded.comparison ? 'Hide' : 'Show' }}
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" :style="{ transform: docExpanded.comparison ? 'rotate(180deg)' : '', transition: '.2s' }"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
-        </div>
-        <div v-if="docExpanded.comparison" class="doc-card doc-card-table">
-          <div class="doc-table-wrap">
-            <table class="doc-table">
-              <thead>
-                <tr>
-                  <th>Feature</th>
-                  <th class="th-starter">Starter</th>
-                  <th class="th-growth">Growth</th>
-                  <th class="th-pro">Pro</th>
-                  <th class="th-enterprise">Enterprise</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>Monthly messages</td><td>2,000</td><td>5,000</td><td>15,000</td><td>Unlimited</td></tr>
-                <tr><td>Web channels</td><td>Website only</td><td>Web + 1 social (WA/FB)</td><td>Web + omnichannel</td><td>All channels</td></tr>
-                <tr><td>CRM integrations</td><td>—</td><td>Webhook (HubSpot, Zapier…)</td><td>Webhook + Direct HubSpot Sync</td><td>Custom</td></tr>
-                <tr><td>BYOK support</td><td>✓ Optional</td><td>✓ Optional</td><td>✓</td><td>✓</td></tr>
-                <tr><td>Voice command widget</td><td>—</td><td>✓</td><td>✓</td><td>✓ (Custom)</td></tr>
-                <tr><td>Image upload for questions</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
-                <tr><td>Live chat takeover</td><td>—</td><td>✓</td><td>✓</td><td>✓</td></tr>
-                <tr><td>Real-time inventory sync</td><td>—</td><td>—</td><td>✓</td><td>✓</td></tr>
-                <tr><td>Custom website integration</td><td>—</td><td>—</td><td>—</td><td>✓ (Any platform)</td></tr>
-                <tr><td>Custom internal DB</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
-                <tr><td>White-label branding</td><td>—</td><td>—</td><td>—</td><td>✓</td></tr>
-                <tr><td>Support</td><td>Email</td><td>Email + Chat</td><td>Priority</td><td>Dedicated CSM</td></tr>
-                <tr><td>Reports / exports</td><td>Basic</td><td>Standard</td><td>Advanced</td><td>Custom</td></tr>
-                <tr><td>Data retention</td><td>30 days</td><td>90 days</td><td>1 year</td><td>Custom</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="doc-note">
-            Omnichannel (WhatsApp + Facebook Messenger) requires a Meta Developer App and webhook configuration. Growth subscribers can connect 1 social channel; setup assistance is included on Growth, Pro, and Enterprise.
-          </p>
-        </div>
-      </section>
-
-      <!-- 3) BYOK card ──────────────────────────────────────────────────── -->
-      <section class="doc-section">
-        <h3 class="section-heading">BYOK — Bring Your Own AI Key</h3>
-        <div class="doc-card byok-card">
-          <div class="byok-head">
-            <span class="byok-chip">All plans · optional</span>
-            <p class="byok-lead">Connect your own OpenAI or Anthropic API key. Pay your AI provider directly for inference — no markup from Checkfunnel.</p>
-          </div>
-          <div class="byok-benefits">
-            <div class="byok-benefit"><span class="byok-tick">✓</span>Full control over model selection (GPT-4o, Claude 3.5 Sonnet, etc.)</div>
-            <div class="byok-benefit"><span class="byok-tick">✓</span>Inference costs billed straight to your provider</div>
-            <div class="byok-benefit"><span class="byok-tick">✓</span>Use fine-tuned or custom models</div>
-            <div class="byok-benefit"><span class="byok-tick">✓</span>Compliant with your AI procurement policies</div>
-          </div>
-          <div class="byok-default">
-            <strong>Managed AI (default):</strong>
-            Clients without BYOK use our managed AI pool — costs bundled into the plan price.
-          </div>
-        </div>
-      </section>
-
-      <!-- 4) Add-ons table ──────────────────────────────────────────────── -->
-      <section class="doc-section">
-        <h3 class="section-heading">Available add-ons</h3>
-        <p class="doc-sub">Attach to any plan. Billed monthly alongside your base subscription.</p>
-        <div class="doc-card doc-card-table">
-          <div class="doc-table-wrap">
-            <table class="doc-table">
-              <thead>
-                <tr><th>Add-on</th><th>Price</th><th>What it does</th></tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>Extra Message / Image / Voice Pack</strong></td>
-                  <td>Pay-as-you-go</td>
-                  <td>Top-up credits without changing your plan. Buy above on this page.</td>
-                </tr>
-                <tr>
-                  <td><strong>White-label branding</strong></td>
-                  <td>Custom / mo</td>
-                  <td>Remove all Checkfunnel branding from the widget and emails. <em>Enterprise only.</em></td>
-                </tr>
-                <tr>
-                  <td><strong>Dedicated onboarding</strong></td>
-                  <td>Custom</td>
-                  <td>Hands-on setup sessions with a Checkfunnel specialist.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- 5) Integrations matrix ─────────────────────────────────────────── -->
-      <section class="doc-section">
-        <div class="doc-section-head" @click="docExpanded.integrations = !docExpanded.integrations">
-          <h3 class="section-heading" style="margin:0">Integrations &amp; required setup</h3>
-          <button class="doc-toggle" type="button">
-            {{ docExpanded.integrations ? 'Hide' : 'Show' }}
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" :style="{ transform: docExpanded.integrations ? 'rotate(180deg)' : '', transition: '.2s' }"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
-        </div>
-        <div v-if="docExpanded.integrations" class="doc-card doc-card-table">
-          <div class="doc-table-wrap">
-            <table class="doc-table">
-              <thead>
-                <tr><th>Integration</th><th class="th-starter">Starter</th><th class="th-growth">Growth</th><th class="th-pro">Pro / Ent</th><th>Notes</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>Stripe (billing)</td><td class="req">Required</td><td class="req">Required</td><td class="req">Required</td><td>All plans</td></tr>
-                <tr><td>WhatsApp Business</td><td>—</td><td>Optional</td><td class="req">Required</td><td>Meta Developer setup</td></tr>
-                <tr><td>Facebook Messenger</td><td>—</td><td>Optional</td><td class="req">Required</td><td>Meta Developer setup</td></tr>
-                <tr><td>Telegram Bot</td><td>Optional</td><td>Optional</td><td>Optional</td><td>All plans</td></tr>
-                <tr><td>HubSpot CRM</td><td>—</td><td>Optional (webhook)</td><td class="req">Required</td><td>Growth+</td></tr>
-                <tr><td>Slack alerts</td><td>Optional</td><td>Optional</td><td>Optional</td><td>All plans</td></tr>
-                <tr><td>OpenAI / Anthropic (BYOK)</td><td>Optional</td><td>Optional</td><td class="req">Required (BYOK)</td><td>Per AI plan</td></tr>
-                <tr><td>Outbound webhooks</td><td>Optional</td><td>Optional</td><td>Optional</td><td>All plans</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- 6) Industry use cases ─────────────────────────────────────────── -->
-      <section class="doc-section">
-        <h3 class="section-heading">Industry use cases</h3>
-        <p class="doc-sub">Tap a vertical to see what a tailored setup looks like.</p>
-        <div class="industry-grid">
-          <article
-            v-for="ind in industries"
-            :key="ind.key"
-            class="industry-card"
-            :class="{ open: ind.open, ['ind-' + ind.key]: true }"
-            @click="ind.open = !ind.open"
-          >
-            <header class="industry-head">
-              <div class="industry-title-row">
-                <span class="industry-emoji">{{ ind.emoji }}</span>
-                <div>
-                  <div class="industry-title">{{ ind.title }}</div>
-                  <div class="industry-tagline">{{ ind.tagline }}</div>
-                </div>
-              </div>
-              <svg class="industry-chevron" width="14" height="14" fill="none" viewBox="0 0 24 24" :style="{ transform: ind.open ? 'rotate(180deg)' : '', transition: '.2s' }"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            </header>
-            <div v-if="ind.open" class="industry-body">
-              <div class="industry-col">
-                <div class="industry-col-title">Key requirements</div>
-                <ul>
-                  <li v-for="(r, i) in ind.requirements" :key="i">{{ r }}</li>
-                </ul>
-              </div>
-              <div class="industry-col">
-                <div class="industry-col-title">Recommended setup</div>
-                <dl class="industry-meta">
-                  <template v-for="(v, k) in ind.setup" :key="k">
-                    <dt>{{ k }}</dt><dd>{{ v }}</dd>
-                  </template>
-                </dl>
-              </div>
-            </div>
-          </article>
-        </div>
-        <p class="doc-note">
-          Need a custom configuration for a different industry? Email
-          <a href="mailto:sales@checkfunnel.com">sales@checkfunnel.com</a> — every Enterprise deployment is scoped to your operational requirements.
-        </p>
-      </section>
-
-      <!-- 7) Build your own custom package ──────────────────────────────── -->
-      <section class="doc-section">
-        <h3 class="section-heading">Build your own custom package</h3>
-        <div class="doc-card custom-hero">
-          <div class="custom-hero-title">Not every business fits a fixed tier.</div>
-          <div class="custom-hero-sub">
-            Whether you're a startup with one specific need or a growing company that wants only what's relevant — we scope a package around your requirements, not the other way around.
-          </div>
-        </div>
-        <div class="custom-steps">
-          <div class="custom-step">
-            <div class="custom-step-num">①</div>
-            <div class="custom-step-title">Tell us your needs</div>
-            <div class="custom-step-body">Channels, integrations, monthly message volume — no technical knowledge required.</div>
-          </div>
-          <div class="custom-step">
-            <div class="custom-step-num">②</div>
-            <div class="custom-step-title">We scope &amp; price it</div>
-            <div class="custom-step-body">Our team scopes the exact feature set + channel mix and quotes a monthly price tailored to your usage.</div>
-          </div>
-          <div class="custom-step">
-            <div class="custom-step-num">③</div>
-            <div class="custom-step-title">We build &amp; launch</div>
-            <div class="custom-step-body">We configure, connect your systems, and go live. You pay only for what's in your package — nothing more.</div>
-          </div>
-        </div>
-
-        <h4 class="doc-subheading">Example minimal packages</h4>
-        <div class="packages-grid">
-          <div class="package-card pkg-wa">
-            <div class="package-name">WhatsApp Starter</div>
-            <div class="package-tagline">Just WhatsApp + AI replies</div>
-            <ul class="package-features">
-              <li>WhatsApp Business channel</li>
-              <li>AI chatbot responses</li>
-              <li>Basic lead capture</li>
-              <li>Email support</li>
-              <li>Custom message volume</li>
-            </ul>
-            <div class="package-price">Custom / mo</div>
-          </div>
-          <div class="package-card pkg-crm">
-            <div class="package-name">Web + CRM Bundle</div>
-            <div class="package-tagline">Web chat with lead sync</div>
-            <ul class="package-features">
-              <li>Web chat widget</li>
-              <li>AI lead scoring</li>
-              <li>HubSpot CRM sync</li>
-              <li>In-chat checkout</li>
-              <li>Standard reports</li>
-            </ul>
-            <div class="package-price">Contact sales</div>
-          </div>
-          <div class="package-card pkg-omni">
-            <div class="package-name">Omnichannel Lean</div>
-            <div class="package-tagline">Web + WhatsApp + FB</div>
-            <ul class="package-features">
-              <li>Web chat widget</li>
-              <li>WhatsApp Business</li>
-              <li>Facebook Messenger</li>
-              <li>AI lead scoring</li>
-              <li>Live chat takeover</li>
-            </ul>
-            <div class="package-price">Contact sales</div>
-          </div>
-          <div class="package-card pkg-full">
-            <div class="package-name">Full Custom Build</div>
-            <div class="package-tagline">Everything you need, nothing you don't</div>
-            <ul class="package-features">
-              <li>Any channel combination</li>
-              <li>Any DB / platform integration</li>
-              <li>BYOK + custom AI model</li>
-              <li>White-label option</li>
-              <li>Dedicated CSM &amp; onboarding</li>
-            </ul>
-            <div class="package-price">Quoted per scope</div>
-          </div>
-        </div>
-        <div class="custom-cta">
-          <div class="custom-cta-title">Ready to build your custom package?</div>
-          <div class="custom-cta-sub">Tell us your requirements — channels, integrations, message volume, and any custom features.</div>
-          <a href="mailto:sales@checkfunnel.com" class="custom-cta-btn">sales@checkfunnel.com</a>
-        </div>
-      </section>
-
-      <!-- 8) Competitor comparison ──────────────────────────────────────── -->
-      <section class="doc-section">
-        <div class="doc-section-head" @click="docExpanded.competitors = !docExpanded.competitors">
-          <h3 class="section-heading" style="margin:0">How we compare</h3>
-          <button class="doc-toggle" type="button">
-            {{ docExpanded.competitors ? 'Hide' : 'Show' }}
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" :style="{ transform: docExpanded.competitors ? 'rotate(180deg)' : '', transition: '.2s' }"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </button>
-        </div>
-        <div v-if="docExpanded.competitors" class="doc-card doc-card-table">
-          <div class="doc-table-wrap">
-            <table class="doc-table competitor-table">
-              <thead>
-                <tr>
-                  <th>Feature</th>
-                  <th class="th-us">Checkfunnel</th>
-                  <th>Intercom</th>
-                  <th>Drift</th>
-                  <th>ManyChat</th>
-                  <th>Tidio</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr><td>AI lead scoring</td><td class="cell-us">✓ (3-EMA)</td><td>Partial</td><td>✓</td><td>✗</td><td>Partial</td></tr>
-                <tr><td>Omnichannel (WA + FB)</td><td class="cell-us">✓</td><td>✗</td><td>✗</td><td>✓</td><td>Partial</td></tr>
-                <tr><td>In-chat checkout</td><td class="cell-us">✓</td><td>✗</td><td>✗</td><td>✓</td><td>✗</td></tr>
-                <tr><td>BYOK (own API key)</td><td class="cell-us">✓</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td></tr>
-                <tr><td>CRM sync (HubSpot)</td><td class="cell-us">✓</td><td>✓</td><td>✓</td><td>Partial</td><td>✓</td></tr>
-                <tr><td>Live chat takeover</td><td class="cell-us">✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-                <tr><td>Voice AI</td><td class="cell-us">✓</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td></tr>
-                <tr><td>Message-based billing</td><td class="cell-us">✓</td><td>✗</td><td>✗</td><td>✓</td><td>✗</td></tr>
-                <tr><td>White-label option</td><td class="cell-us">✓</td><td>✗</td><td>✗</td><td>✗</td><td>✗</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <p class="doc-note">
-            Checkfunnel is the only platform in this set to offer AI lead scoring with behavioural tracking (3-EMA), BYOK support, in-chat checkout, and Voice AI in a single message-based subscription.
-          </p>
-        </div>
-      </section>
 
       <!-- ── FAQ ─────────────────────────────────────────────────────────── -->
       <div class="faq-section">
@@ -1270,6 +920,22 @@ async function openPortal() {
   padding: 20px 22px;
   margin: 16px 0 20px;
 }
+/* Add-ons / custom → contact team card */
+.contact-card { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.contact-card-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
+.contact-card-body { flex: 1 1 240px; min-width: 0; }
+.contact-card-title { font-size: 15px; font-weight: 600; color: var(--cf-text-primary); margin-bottom: 4px; }
+.contact-card-sub { font-size: 13px; color: var(--cf-text-muted); line-height: 1.5; }
+.contact-card-btn {
+  flex-shrink: 0;
+  display: inline-block;
+  background: #6366f1; color: #fff; text-decoration: none;
+  font-size: 13px; font-weight: 600;
+  padding: 10px 18px; border-radius: 9px;
+  transition: opacity 0.15s;
+}
+.contact-card-btn:hover { opacity: 0.9; }
+@media (max-width: 480px) { .contact-card-btn { width: 100%; text-align: center; } }
 .section-heading + .section-sub { margin-top: -8px; }
 .addon-section .section-sub {
   font-size: 13px;

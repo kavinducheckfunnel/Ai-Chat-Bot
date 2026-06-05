@@ -478,15 +478,26 @@ async function sendAdminMsg() {
   const msg = adminMsg.value.trim()
   if (!msg || !selected.value || sendingMsg.value) return
   sendingMsg.value = true
+  const sid = selected.value.session_id
+  const idx = sessions.value.findIndex(s => s.session_id === sid)
+  // Optimistic bubble for instant feedback.
+  if (idx !== -1) {
+    const history = [...(sessions.value[idx].chat_history || []), { role: 'ai', message: msg, source: 'admin', _optimistic: true }]
+    sessions.value[idx] = { ...sessions.value[idx], chat_history: history }
+  }
+  adminMsg.value = ''
+  nextTick(() => { if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight })
   try {
-    await api.sendMessage(selected.value.session_id, msg)
-    const idx = sessions.value.findIndex(s => s.session_id === selected.value.session_id)
-    if (idx !== -1) {
-      const history = [...(sessions.value[idx].chat_history || []), { role: 'ai', message: msg, source: 'admin' }]
-      sessions.value[idx] = { ...sessions.value[idx], chat_history: history }
+    await api.sendMessage(sid, msg)
+    // Authoritative refresh of THIS session's transcript replaces the
+    // optimistic copy with the DB version, so a concurrent poll can't
+    // leave a duplicate ("Hi Hi").
+    const data = await api.getSessionHistory(sid)
+    const i2 = sessions.value.findIndex(s => s.session_id === sid)
+    if (i2 !== -1 && data && data.chat_history) {
+      sessions.value[i2] = { ...sessions.value[i2], chat_history: data.chat_history }
+      nextTick(() => { if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight })
     }
-    adminMsg.value = ''
-    nextTick(() => { if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight })
   } catch {} finally { sendingMsg.value = false }
 }
 
