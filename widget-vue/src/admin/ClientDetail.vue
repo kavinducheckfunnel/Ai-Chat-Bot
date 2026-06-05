@@ -297,6 +297,28 @@
             </div>
           </div>
 
+          <!-- Chatbot referrals — products the AI linked to, for this client -->
+          <div class="an-card an-card-full">
+            <div class="an-ref-head">
+              <h3 class="an-card-title" style="margin:0">Products the chatbot referred</h3>
+              <span class="an-ref-total" v-if="referrals.total_clicks">{{ referrals.total_clicks }} total clicks</span>
+            </div>
+            <table class="an-ref-table" v-if="(referrals.links || []).length">
+              <thead><tr><th>Product / Link</th><th>Clicks</th><th>Unique visitors</th></tr></thead>
+              <tbody>
+                <tr v-for="(l, i) in referrals.links" :key="i">
+                  <td>
+                    <a :href="l.url" target="_blank" rel="noopener" class="an-ref-link">{{ l.link_text || l.url }}</a>
+                    <div class="an-ref-url">{{ l.url }}</div>
+                  </td>
+                  <td><strong>{{ l.clicks }}</strong></td>
+                  <td>{{ l.unique_sessions }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-else class="an-ref-empty">No link clicks yet. Once the AI recommends products and visitors click, they'll show here.</p>
+          </div>
+
         </template>
       </div>
 
@@ -429,6 +451,7 @@ const toast = useToast()
 
 const client = ref(null)
 const analytics = ref(null)
+const referrals = ref({ total_clicks: 0, links: [] })
 const sessions = ref([])
 const loading = ref(true)
 const loadingSessions = ref(false)
@@ -527,9 +550,10 @@ function funnelWidth(key) {
 async function loadClient() {
   loading.value = true
   try {
-    const [clientData, analyticsData] = await Promise.all([
+    const [clientData, analyticsData, refData] = await Promise.all([
       api.getClient(route.params.id),
       api.getClientAnalytics(route.params.id),
+      api.getClientLinkClicks(route.params.id, '30d').catch(() => null),
     ])
     client.value = clientData
     // Flatten period-delta envelope {value, previous, delta} → plain numbers
@@ -539,6 +563,9 @@ async function loadClient() {
       flat[k] = (v && typeof v === 'object' && 'value' in v) ? v.value : v
     }
     analytics.value = flat
+    referrals.value = (refData && Array.isArray(refData.links))
+      ? { total_clicks: refData.total_clicks || 0, links: refData.links }
+      : { total_clicks: 0, links: [] }
   } catch (e) {
     console.error(e)
   } finally {
@@ -1018,8 +1045,22 @@ watch(sessionFilters, onFilterChange)
   padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .an-card.an-full { margin-bottom: 16px; }
+.an-card.an-card-full { grid-column: 1 / -1; margin-top: 16px; }
 
 .an-card-title { font-size: 12px; font-weight: 600; color: var(--cf-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+
+/* Chatbot referrals table on the client detail analytics tab */
+.an-ref-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.an-ref-total { font-size: 12px; color: var(--cf-text-muted); font-weight: 600; }
+.an-ref-table { width: 100%; border-collapse: collapse; }
+.an-ref-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cf-text-muted); padding: 8px 10px; border-bottom: 1px solid var(--cf-border-subtle); white-space: nowrap; }
+.an-ref-table td { padding: 10px; font-size: 13px; color: var(--cf-text-secondary);
+  border-bottom: 1px solid var(--cf-border-subtle); vertical-align: top; }
+.an-ref-link { color: #6366F1; text-decoration: none; font-weight: 500; word-break: break-word; }
+.an-ref-link:hover { text-decoration: underline; }
+.an-ref-url { font-size: 11px; color: var(--cf-text-muted); margin-top: 2px; word-break: break-all; max-width: 420px; }
+.an-ref-empty { font-size: 13px; color: var(--cf-text-muted); text-align: center; padding: 20px; }
 
 /* Heat distribution */
 .an-heat-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; margin-bottom: 14px; }

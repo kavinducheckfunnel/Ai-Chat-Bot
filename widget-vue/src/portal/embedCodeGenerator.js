@@ -411,15 +411,31 @@ export function generateEmbedCode(id, url, color, botName, format) {
 var C='${id}',B='${backend}';
 
 // ── Identity persistence ─────────────────────────────────────────────
-// session_id (sid) lives in sessionStorage  → one per tab visit
-// visitor_uid (vid) lives in localStorage   → one per browser across days
+// session_id (sid)  → localStorage so the SAME conversation continues when
+//                     the visitor opens a product link in a NEW TAB or
+//                     navigates with a full reload. sessionStorage is
+//                     per-tab, so it used to drop the chat the moment a
+//                     link opened in another tab. A 60-min inactivity TTL
+//                     starts a fresh session after a genuine gap.
+// visitor_uid (vid) → localStorage, one per browser across days.
 // Both are client-scoped so the same browser visiting different tenants
 // never gets merged into one visitor record.
 function newUuid(){return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c=='x'?r:(r&3|8)).toString(16)})}
 var SK='__cf_sid_'+C;
+var STK='__cf_sid_ts_'+C;   // last-active timestamp for the TTL
 var VK='__cf_vid_'+C;
-var sid=sessionStorage.getItem(SK);
-if(!sid){sid=newUuid();sessionStorage.setItem(SK,sid)}
+var SID_TTL=60*60*1000;     // 60 minutes of inactivity → new session
+var sid=localStorage.getItem(SK);
+var sidTs=parseInt(localStorage.getItem(STK)||'0',10);
+if(!sid||!sidTs||(Date.now()-sidTs)>SID_TTL){
+  // Fresh session: stale or none. Clear the previous transcript so the new
+  // conversation doesn't inherit an old one.
+  if(sid){try{localStorage.removeItem('cf_msgs_'+sid)}catch(e){}}
+  sid=newUuid();
+  localStorage.setItem(SK,sid);
+}
+localStorage.setItem(STK,String(Date.now()));
+function touchSession(){try{localStorage.setItem(STK,String(Date.now()))}catch(e){}}
 var vid=localStorage.getItem(VK);
 if(!vid){vid=newUuid();localStorage.setItem(VK,vid)}
 
@@ -430,17 +446,23 @@ var leadDone=!!localStorage.getItem(LEAD_KEY);
 var $=function(id){return document.getElementById(id)};
 
 // ── Chat history persistence ─────────────────────────────────────────
-// Survives page navigation within the same tab (sessionStorage). The key
-// is scoped to the current sid so each tab/session gets its own thread.
+// Stored in localStorage keyed by the current sid so the transcript is
+// shared across tabs + survives reloads — opening a product link in a new
+// tab continues the SAME conversation instead of starting blank. Bounded
+// to the most recent 100 messages so the key never grows unbounded.
 var MSGS_KEY='cf_msgs_'+sid;
 var savedMsgs=[];
-try{var _r=sessionStorage.getItem(MSGS_KEY);if(_r){savedMsgs=JSON.parse(_r)||[]}}catch(e){savedMsgs=[]}
+try{var _r=localStorage.getItem(MSGS_KEY);if(_r){savedMsgs=JSON.parse(_r)||[]}}catch(e){savedMsgs=[]}
 if(!Array.isArray(savedMsgs))savedMsgs=[];
 
 // In-memory mirror so we don't need to scrape the DOM each save
 var msgLog=savedMsgs.slice();
 function persistMsgs(){
-  try{sessionStorage.setItem(MSGS_KEY,JSON.stringify(msgLog))}catch(e){}
+  try{
+    var keep=msgLog.length>100?msgLog.slice(msgLog.length-100):msgLog;
+    localStorage.setItem(MSGS_KEY,JSON.stringify(keep));
+    touchSession();
+  }catch(e){}
 }
 
 // ── Live config — applied on load + every 60 seconds ─────────────────
@@ -920,9 +942,20 @@ document.addEventListener('mouseleave',function(e){
   if(e.clientY>20)return;
   _fireExitIntent('mouse');
 });
+// Tab-switch debounce: opening a product link in a new tab fires
+// visibilitychange→hidden, but that's NOT a leave — the visitor is coming
+// right back. Only treat it as exit-intent if the tab STAYS hidden for 6s.
+// If they return before then, cancel. This stops a spurious "leaving so
+// soon?" nudge popping every time someone taps a product link.
+var _hideTimer=null;
 document.addEventListener('visibilitychange',function(){
-  if(document.hidden)_fireExitIntent('visibility');
+  if(document.hidden){
+    _hideTimer=setTimeout(function(){_fireExitIntent('visibility')},6000);
+  }else if(_hideTimer){
+    clearTimeout(_hideTimer);_hideTimer=null;
+  }
 });
+// pagehide = a genuine navigation away → fire immediately.
 window.addEventListener('pagehide',function(){_fireExitIntent('pagehide')});
 
 // Time on site + deep engagement trigger
