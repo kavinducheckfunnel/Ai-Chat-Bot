@@ -1,30 +1,6 @@
-/**
- * Generates a fully self-contained chat widget embed snippet.
- *
- * HYBRID APPROACH — best of both worlds:
- *   - All HTML/CSS/JS inline → no external script dependency, works behind
- *     CSP / caching plugins / security plugins / ad-blockers / Hostinger / etc.
- *   - CSS variables for color → can update at runtime without re-rendering
- *   - Config fetched from API on load + polled every 60s → branding (color,
- *     chatbot name, CTA, voice/image flags) updates LIVE without re-paste.
- *   - Lightweight behavioral tracker built in → feeds EMA scoring backend.
- *   - WebSocket chat, lead capture, reactions, voice/image, chime — all here.
- *
- * Lives in a plain .js file so the Vue SFC tokeniser never sees <style>,
- * </style>, <script>, </script> etc. as real HTML tags.
- */
-
-export function generateEmbedCode(id, url, color, botName, format) {
-  if (!id || !url) return ''
-
-  // Backend origin = WIDGET_URL with the /widget/widget.js suffix stripped.
-  const backend = url.replace(/\/widget\/widget\.js.*$/, '').replace(/\/$/, '')
-  const name = (botName || 'AI Assistant').replace(/'/g, "\\'")
-  const defaultColor = color || '#6366f1'
-
-  const css = `<style>
+(function(){"use strict";function f(i,r,o,s,d){if(!i||!r)return"";const n=r.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),l=`<style>
 #cf-w {
-  --cf-accent: ${defaultColor};
+  --cf-accent: ${o||"#6366f1"};
   --cf-bg: #111111;
   --cf-bg-elev: #161616;
   --cf-bubble-ai: #1e2433;
@@ -355,13 +331,11 @@ export function generateEmbedCode(id, url, color, botName, format) {
 @supports (padding: env(safe-area-inset-bottom)) {
   #cf-w { padding-bottom: env(safe-area-inset-bottom, 0px); }
 }
-</style>`
-
-  const html = `<div id="cf-w" data-cf-theme="dark">
-<div id="cf-win" role="dialog" aria-label="Chat with ${name}">
+</style>`,t=`<div id="cf-w" data-cf-theme="dark">
+<div id="cf-win" role="dialog" aria-label="Chat with ${e}">
 <div id="cf-head">
 <div class="cf-av" id="cf-av">&#9889;</div>
-<div class="cf-hi"><div class="cf-hn" id="cf-hn">${name}</div><div class="cf-hs"><span class="cf-dot"></span>Online</div></div>
+<div class="cf-hi"><div class="cf-hn" id="cf-hn">${e}</div><div class="cf-hs"><span class="cf-dot"></span>Online</div></div>
 <button id="cf-xb" aria-label="Close">&#10005;</button>
 </div>
 <div id="cf-msgs"><div class="cf-ai">&#128075; Hi! How can I help you today?</div></div>
@@ -401,14 +375,9 @@ export function generateEmbedCode(id, url, color, botName, format) {
 <span class="cf-pi-txt">Write a message...</span>
 <div class="cf-pi-send"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
 </div>
-</div>`
-
-  // ───────────── JS (inline, no external dependency) ─────────────────
-  // Note: backslashes in regex are double-escaped (\\) because this string
-  // lives inside a JS template literal — \\[ produces \[ in the output.
-  const js = `<script>
+</div>`,a=`<script>
 (function(){
-var C='${id}',B='${backend}';
+var C='${i}',B='${n}';
 
 // ── Identity persistence ─────────────────────────────────────────────
 // session_id (sid)  → a FIRST-PARTY COOKIE (primary) + localStorage (mirror)
@@ -1115,72 +1084,8 @@ if($('cf-lead-ph')){
   },true);
 })();
 })();
-</` + `script>`
-
-  // ───────────── Format wrappers ─────────────────
-  const fullSnippet = '<!-- Start of Checkfunnel code -->\n' + css + '\n' + html + '\n' + js + '\n<!-- End of Checkfunnel code -->'
-
-  if (format === 'loader') {
-    // Auto-updating one-liner. The widget is served from our origin, so
-    // future fixes deploy WITHOUT the merchant re-pasting. This is the
-    // recommended embed.
-    return [
-      '<!-- Checkfunnel — paste once; updates automatically -->',
-      '<script async src="' + backend + '/widget/embed.js?client_id=' + id + '"></script>',
-    ].join('\n')
-  }
-
-  if (format === 'shopify') {
-    // Liquid is HTML-compatible — raw <script>/<style>/<div> pass through
-    // untouched because Liquid only processes `{% %}` and `{{ }}`. Wrap
-    // the snippet with merchant-facing headers so it's obvious in
-    // theme.liquid what was pasted and why.
-    return [
-      '{% comment %}',
-      '  Checkfunnel AI chat widget — paste this block right before',
-      '  </body> in Layout/theme.liquid (Online Store → Themes → Edit code).',
-      '  Branding, color, name, and CTA stay live-editable from the',
-      '  Checkfunnel portal — no re-paste needed.',
-      '{% endcomment %}',
-      fullSnippet,
-    ].join('\n')
-  }
-
-  if (format === 'wordpress') {
-    return [
-      '<?php',
-      '/**',
-      ' * Checkfunnel AI chat widget — self-contained.',
-      ' * Branding, color, name, CTA all update live from the portal',
-      ' * (config is fetched on every page load + every 60 seconds).',
-      ' * Paste into your active theme\'s functions.php.',
-      ' */',
-      'function checkfunnel_widget() {',
-      '    ?>',
-      fullSnippet,
-      '    <?php',
-      '}',
-      "add_action( 'wp_footer', 'checkfunnel_widget' );",
-    ].join('\n')
-  }
-
-  if (format === 'react') {
-    return [
-      "import { useEffect } from 'react'",
-      '',
-      'const SNIPPET = ' + JSON.stringify(fullSnippet) + ';',
-      '',
-      'export function CheckfunnelWidget() {',
-      '  useEffect(() => {',
-      "    if (document.getElementById('cf-w')) return",
-      "    const wrap = document.createElement('div')",
-      '    wrap.innerHTML = SNIPPET',
-      '    Array.from(wrap.childNodes).forEach(n => document.body.appendChild(n))',
-      '  }, [])',
-      '  return null',
-      '}',
-    ].join('\n')
-  }
-
-  return fullSnippet
-}
+<\/script>`;return`<!-- Start of Checkfunnel code -->
+`+l+`
+`+t+`
+`+a+`
+<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=n;var l=Array.prototype.slice.call(c.childNodes);l.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var r=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=r+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",d=window.__CF_NAME__||"AI Assistant",n=f(i,o,s,d,"html");if(!n)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();

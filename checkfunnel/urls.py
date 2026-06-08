@@ -12,6 +12,8 @@ urlpatterns = [
     path('api/admin/', include('users.urls')),
     # Widget JS bundle — embeddable on any site
     path('widget/widget.js', widget_views.serve_widget_js, name='widget-js'),
+    # Auto-updating loader — recommended one-line embed
+    path('widget/embed.js', widget_views.serve_embed_js, name='widget-embed-js'),
     # CI/CD + uptime monitor pings this. Returns 200 only when DB + cache OK.
     # Exposed under /api/ so nginx's existing `location /api/` proxy_pass
     # forwards it to daphne without needing a separate location block.

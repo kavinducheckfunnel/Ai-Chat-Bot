@@ -42,10 +42,11 @@
             </button>
           </div>
 
-          <p class="embed-instruction" v-if="embedFormat === 'wordpress'">Paste into your theme's <code>functions.php</code>, or use the "Insert Headers and Footers" plugin → Footer section.</p>
+          <p class="embed-instruction" v-if="embedFormat === 'loader'">⚡ <strong>Recommended.</strong> Paste this one line before <code>&lt;/body&gt;</code>. The widget loads from our servers, so <strong>every future update applies automatically</strong> — you never have to re-paste again.</p>
+          <p class="embed-instruction" v-else-if="embedFormat === 'wordpress'">Paste into your theme's <code>functions.php</code>, or use the "Insert Headers and Footers" plugin → Footer section.</p>
           <p class="embed-instruction" v-else-if="embedFormat === 'react'">Drop this component anywhere in your React app tree.</p>
           <p class="embed-instruction" v-else-if="embedFormat === 'shopify'">Open <strong>Shopify Admin → Online Store → Themes → Edit code → Layout/theme.liquid</strong>, find <code>&lt;/body&gt;</code> near the bottom, paste the snippet right before it, and Save.</p>
-          <p class="embed-instruction" v-else>Paste before the <code>&lt;/body&gt;</code> tag on every page.</p>
+          <p class="embed-instruction" v-else>Paste before the <code>&lt;/body&gt;</code> tag on every page. <em>Note: inline snippets don't auto-update — use "Auto-update" so future fixes apply without re-pasting.</em></p>
 
           <!-- Detailed Shopify install card — shown only on the Shopify tab.
                Three-step walkthrough plus a fallback for non-technical
@@ -888,7 +889,7 @@ const api = useAdminApi()
 const toast = useToast()
 
 const activeTab = ref('channels')
-const embedFormat = ref('html')
+const embedFormat = ref('loader')
 const copied = ref(false)
 const saving = ref(false)
 const saved = ref(false)
@@ -1004,6 +1005,7 @@ const logoFileInput = ref(null)
 const presetColors = ['#ffffff', '#3B82F6', '#22c55e', '#ef4444', '#6366f1', '#f59e0b']
 
 const formats = [
+  { id: 'loader',    label: 'Auto-update', icon: '<span style="font-size:13px;line-height:1">⚡</span>' },
   { id: 'html',      label: 'HTML',      icon: '<span style="font-weight:700;font-size:11px;letter-spacing:-0.5px;font-family:monospace">&lt;/&gt;</span>' },
   { id: 'shopify',   label: 'Shopify',   icon: '<span style="color:#96bf48;font-weight:700;font-size:13px;line-height:1">S</span>' },
   { id: 'wordpress', label: 'WordPress', icon: '<span style="color:#21759b;font-weight:700;font-size:11px">WP</span>' },

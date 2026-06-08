@@ -46,6 +46,40 @@ def serve_widget_js(request):
     return _js_response(content)
 
 
+def serve_embed_js(request):
+    """
+    Serve the auto-updating loader bundle (dist/assets/embed.js).
+
+    Merchants paste ONE stable line:
+      <script async src="https://ai.checkfunnels.com/widget/embed.js?client_id=X"></script>
+    and every future widget fix ships from here without a re-paste — the
+    fix for "the update didn't apply on the host site" (inline snippets are
+    frozen at paste time; this loader is fetched fresh on every page load).
+
+    Same CORS/CORB headers + client-id-baking as serve_widget_js.
+    """
+    embed_path = Path(settings.BASE_DIR) / 'widget-vue' / 'dist' / 'assets' / 'embed.js'
+
+    if not embed_path.exists():
+        return _js_response(
+            '// Checkfunnel embed not built. Run: cd widget-vue && npm run build\n',
+            status=503,
+        )
+
+    content = embed_path.read_text(encoding='utf-8')
+
+    client_id = request.GET.get('client_id', '').strip()
+    if client_id and re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', client_id, re.IGNORECASE):
+        backend_url = request.build_absolute_uri('/').rstrip('/')
+        prefix = (
+            f'window.__CF_CLIENT_ID__="{client_id}";'
+            f'window.__CF_BACKEND_URL__="{backend_url}";\n'
+        )
+        content = prefix + content
+
+    return _js_response(content)
+
+
 def _js_response(content, status=200):
     response = HttpResponse(content, content_type='application/javascript; charset=utf-8', status=status)
     # ── CORS ───────────────────────────────────────────────────────────────────

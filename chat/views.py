@@ -1,6 +1,7 @@
 import logging
 import uuid
 import requests as http_requests
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
@@ -72,6 +73,50 @@ def chat_message(request):
         session, message or '', behavior_matrix, image_data=image_data,
     )
     return Response(ai_response)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def session_messages(request, session_id):
+    """
+    Public, read-only transcript for the widget to RESTORE a conversation
+    on load — so opening a product link in a new tab (or reloading) continues
+    the same chat instead of starting blank. The session_id is an unguessable
+    UUID and acts as the access key (the same model Intercom/Drift use for
+    visitor-side restore).
+
+    Returns the last `limit` messages (default 50) as
+    {messages: [{role, message, source}], message_count}.
+
+    Never 500s on a bad/unknown id — returns an empty transcript so the
+    widget just starts fresh.
+    """
+    try:
+        session = ChatSession.objects.only('chat_history', 'message_count').get(session_id=session_id)
+    except (ChatSession.DoesNotExist, ValidationError, ValueError):
+        return Response({'messages': [], 'message_count': 0})
+
+    try:
+        limit = int(request.query_params.get('limit', 50))
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(limit, 100))
+
+    history = session.chat_history or []
+    # Only the visitor-facing fields; never leak internal scoring/meta.
+    cleaned = [
+        {
+            'role': m.get('role', 'ai'),
+            'message': m.get('message', ''),
+            'source': m.get('source', ''),
+        }
+        for m in history
+        if isinstance(m, dict) and m.get('message')
+    ]
+    return Response({
+        'messages': cleaned[-limit:],
+        'message_count': session.message_count or 0,
+    })
 
 
 @api_view(['GET'])

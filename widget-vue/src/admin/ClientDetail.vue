@@ -297,29 +297,68 @@
             </div>
           </div>
 
-          <!-- Chatbot referrals — products the AI linked to, for this client -->
-          <div class="an-card an-card-full">
-            <div class="an-ref-head">
-              <h3 class="an-card-title" style="margin:0">Products the chatbot referred</h3>
-              <span class="an-ref-total" v-if="referrals.total_clicks">{{ referrals.total_clicks }} total clicks</span>
-            </div>
-            <table class="an-ref-table" v-if="(referrals.links || []).length">
-              <thead><tr><th>Product / Link</th><th>Clicks</th><th>Unique visitors</th></tr></thead>
-              <tbody>
-                <tr v-for="(l, i) in referrals.links" :key="i">
-                  <td>
-                    <a :href="l.url" target="_blank" rel="noopener" class="an-ref-link">{{ l.link_text || l.url }}</a>
-                    <div class="an-ref-url">{{ l.url }}</div>
-                  </td>
-                  <td><strong>{{ l.clicks }}</strong></td>
-                  <td>{{ l.unique_sessions }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <p v-else class="an-ref-empty">No link clicks yet. Once the AI recommends products and visitors click, they'll show here.</p>
-          </div>
-
         </template>
+      </div>
+
+      <!-- Referrals Tab — products the chatbot referred, for THIS client -->
+      <div v-if="activeTab === 'referrals'" class="tab-content">
+        <div class="ref-toolbar">
+          <div>
+            <h2 class="ref-h2">Products the chatbot referred</h2>
+            <p class="ref-sub">How many visitors the AI sent to each product / content link via in-chat recommendations.</p>
+          </div>
+          <div class="ref-actions">
+            <div class="ref-period">
+              <button
+                v-for="p in refPeriods" :key="p.val"
+                class="ref-period-btn" :class="{ active: refPeriod === p.val }"
+                @click="setRefPeriod(p.val)"
+              >{{ p.label }}</button>
+            </div>
+            <button class="ref-export" :disabled="!(referrals.links || []).length" @click="exportReferralsCSV">
+              ⬇ Export CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="ref-summary">
+          <div class="ref-sum-card">
+            <div class="ref-sum-num">{{ referrals.total_clicks || 0 }}</div>
+            <div class="ref-sum-lbl">total link clicks</div>
+          </div>
+          <div class="ref-sum-card">
+            <div class="ref-sum-num">{{ (referrals.links || []).length }}</div>
+            <div class="ref-sum-lbl">distinct products referred</div>
+          </div>
+          <div class="ref-sum-card">
+            <div class="ref-sum-num">{{ refUniqueTotal }}</div>
+            <div class="ref-sum-lbl">unique visitors referred</div>
+          </div>
+        </div>
+
+        <div class="ref-card">
+          <div v-if="refLoading" class="ref-empty">Loading…</div>
+          <table v-else-if="(referrals.links || []).length" class="ref-table">
+            <thead>
+              <tr><th>Product / Link</th><th class="num">Clicks</th><th class="num">Unique visitors</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="(l, i) in referrals.links" :key="i">
+                <td>
+                  <a :href="l.url" target="_blank" rel="noopener" class="ref-link">{{ l.link_text || l.url }}</a>
+                  <div class="ref-url">{{ l.url }}</div>
+                </td>
+                <td class="num"><strong>{{ l.clicks }}</strong></td>
+                <td class="num">{{ l.unique_sessions }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="ref-empty">
+            <div class="ref-empty-icon">🔗</div>
+            <p>No link clicks in this period yet.</p>
+            <p class="ref-empty-sub">When the AI recommends products and visitors click those links, they'll appear here with click and unique-visitor counts.</p>
+          </div>
+        </div>
       </div>
 
       <!-- Settings Tab — full parity with tenant portal -->
@@ -478,6 +517,7 @@ const sessionFilters = reactive({
 const tabs = [
   { id: 'overview', label: 'Overview' },
   { id: 'analytics', label: 'Analytics' },
+  { id: 'referrals', label: 'Referrals' },
   { id: 'sessions', label: 'Sessions' },
   { id: 'settings', label: 'Settings' },
 ]
@@ -550,10 +590,9 @@ function funnelWidth(key) {
 async function loadClient() {
   loading.value = true
   try {
-    const [clientData, analyticsData, refData] = await Promise.all([
+    const [clientData, analyticsData] = await Promise.all([
       api.getClient(route.params.id),
       api.getClientAnalytics(route.params.id),
-      api.getClientLinkClicks(route.params.id, '30d').catch(() => null),
     ])
     client.value = clientData
     // Flatten period-delta envelope {value, previous, delta} → plain numbers
@@ -563,14 +602,59 @@ async function loadClient() {
       flat[k] = (v && typeof v === 'object' && 'value' in v) ? v.value : v
     }
     analytics.value = flat
-    referrals.value = (refData && Array.isArray(refData.links))
-      ? { total_clicks: refData.total_clicks || 0, links: refData.links }
-      : { total_clicks: 0, links: [] }
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
   }
+}
+
+// ── Referrals (dedicated tab) ──────────────────────────────────────────────
+const refPeriod = ref('30d')
+const refLoading = ref(false)
+const refPeriods = [
+  { val: '7d', label: '7 days' },
+  { val: '30d', label: '30 days' },
+  { val: '90d', label: '90 days' },
+  { val: 'all', label: 'All time' },
+]
+const refUniqueTotal = computed(() =>
+  (referrals.value.links || []).reduce((sum, l) => sum + (l.unique_sessions || 0), 0)
+)
+async function loadReferrals() {
+  if (!route.params.id) return
+  refLoading.value = true
+  try {
+    const data = await api.getClientLinkClicks(route.params.id, refPeriod.value)
+    referrals.value = (data && Array.isArray(data.links))
+      ? { total_clicks: data.total_clicks || 0, links: data.links }
+      : { total_clicks: 0, links: [] }
+  } catch {
+    referrals.value = { total_clicks: 0, links: [] }
+  } finally {
+    refLoading.value = false
+  }
+}
+function setRefPeriod(p) {
+  if (refPeriod.value === p) return
+  refPeriod.value = p
+  loadReferrals()
+}
+function exportReferralsCSV() {
+  const rows = referrals.value.links || []
+  if (!rows.length) return
+  const head = ['Product / Link', 'URL', 'Clicks', 'Unique visitors']
+  const esc = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`
+  const csv = [head.map(esc).join(',')]
+    .concat(rows.map(l => [l.link_text || '', l.url || '', l.clicks ?? 0, l.unique_sessions ?? 0].map(esc).join(',')))
+    .join('\n')
+  const blob = new Blob([csv], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `referrals_${(client.value?.name || 'client')}_${refPeriod.value}.csv`
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 async function loadSessions() {
@@ -705,7 +789,10 @@ const analyticsSparklineArea = computed(() => {
 })
 
 onMounted(loadClient)
-watch(activeTab, (tab) => { if (tab === 'sessions') loadSessions() })
+watch(activeTab, (tab) => {
+  if (tab === 'sessions') loadSessions()
+  if (tab === 'referrals') loadReferrals()
+})
 watch(sessionFilters, onFilterChange)
 </script>
 
@@ -1045,22 +1132,42 @@ watch(sessionFilters, onFilterChange)
   padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .an-card.an-full { margin-bottom: 16px; }
-.an-card.an-card-full { grid-column: 1 / -1; margin-top: 16px; }
 
 .an-card-title { font-size: 12px; font-weight: 600; color: var(--cf-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
 
-/* Chatbot referrals table on the client detail analytics tab */
-.an-ref-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.an-ref-total { font-size: 12px; color: var(--cf-text-muted); font-weight: 600; }
-.an-ref-table { width: 100%; border-collapse: collapse; }
-.an-ref-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--cf-text-muted); padding: 8px 10px; border-bottom: 1px solid var(--cf-border-subtle); white-space: nowrap; }
-.an-ref-table td { padding: 10px; font-size: 13px; color: var(--cf-text-secondary);
+/* ── Referrals tab ──────────────────────────────────────────────────────── */
+.ref-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.ref-h2 { font-size: 18px; font-weight: 700; color: var(--cf-text-primary); margin: 0 0 4px; letter-spacing: -0.3px; }
+.ref-sub { font-size: 13px; color: var(--cf-text-muted); margin: 0; line-height: 1.5; max-width: 560px; }
+.ref-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ref-period { display: flex; gap: 3px; background: var(--cf-bg-surface-raised); border: 1px solid var(--cf-border-subtle); border-radius: 9px; padding: 3px; }
+.ref-period-btn { padding: 6px 12px; background: none; border: none; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--cf-text-muted); cursor: pointer; white-space: nowrap; }
+.ref-period-btn.active { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+.ref-export { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); border-radius: 9px; font-size: 12px; font-weight: 500; color: #a5b4fc; cursor: pointer; }
+.ref-export:hover:not(:disabled) { background: rgba(99,102,241,0.2); }
+.ref-export:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.ref-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 18px; }
+.ref-sum-card { background: var(--cf-bg-surface); border: 1px solid var(--cf-border-subtle); border-radius: 14px; padding: 18px 20px; }
+.ref-sum-num { font-size: 26px; font-weight: 700; color: var(--cf-text-primary); letter-spacing: -0.5px; }
+.ref-sum-lbl { font-size: 12px; color: var(--cf-text-muted); margin-top: 4px; }
+
+.ref-card { background: var(--cf-bg-surface); border: 1px solid var(--cf-border-subtle); border-radius: 14px; padding: 6px 6px; overflow-x: auto; }
+.ref-table { width: 100%; min-width: 520px; border-collapse: collapse; }
+.ref-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--cf-text-muted); padding: 12px 14px; border-bottom: 1px solid var(--cf-border-subtle); white-space: nowrap; }
+.ref-table th.num, .ref-table td.num { text-align: right; }
+.ref-table td { padding: 12px 14px; font-size: 13px; color: var(--cf-text-secondary);
   border-bottom: 1px solid var(--cf-border-subtle); vertical-align: top; }
-.an-ref-link { color: #6366F1; text-decoration: none; font-weight: 500; word-break: break-word; }
-.an-ref-link:hover { text-decoration: underline; }
-.an-ref-url { font-size: 11px; color: var(--cf-text-muted); margin-top: 2px; word-break: break-all; max-width: 420px; }
-.an-ref-empty { font-size: 13px; color: var(--cf-text-muted); text-align: center; padding: 20px; }
+.ref-table tr:last-child td { border-bottom: none; }
+.ref-link { color: #6366F1; text-decoration: none; font-weight: 500; word-break: break-word; }
+.ref-link:hover { text-decoration: underline; }
+.ref-url { font-size: 11px; color: var(--cf-text-muted); margin-top: 2px; word-break: break-all; max-width: 480px; }
+.ref-empty { text-align: center; padding: 48px 20px; color: var(--cf-text-muted); }
+.ref-empty-icon { font-size: 32px; margin-bottom: 10px; }
+.ref-empty p { margin: 4px 0; font-size: 14px; }
+.ref-empty-sub { font-size: 12.5px !important; color: var(--cf-text-muted); max-width: 420px; margin: 6px auto 0 !important; line-height: 1.5; }
+@media (max-width: 720px) { .ref-summary { grid-template-columns: 1fr; } }
 
 /* Heat distribution */
 .an-heat-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; gap: 2px; margin-bottom: 14px; }
