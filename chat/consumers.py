@@ -66,6 +66,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         behavior_matrix = data.get('behavior_matrix', {})
         page_visits = data.get('page_visits', [])
         image_data = data.get('image_data')  # optional base64 image
+        # Client-generated id for the visitor's message — lets the sending
+        # tab dedupe its own optimistic bubble when the server echoes it back
+        # to the whole session group (cross-tab live sync).
+        client_msg_id = data.get('msg_id') or ''
 
         session = await self.get_session(self.client_id, self.session_id)
 
@@ -97,6 +101,17 @@ class ChatConsumer(AsyncWebsocketConsumer):
             }))
             return
 
+        # ── Cross-tab live sync: echo the visitor's message to the whole
+        # session group so any OTHER open tab/device renders it immediately.
+        # The sending tab tagged it with `client_msg_id` and already painted
+        # it optimistically, so it dedupes on that id and won't double it. ──
+        if message:
+            await self.channel_layer.group_send(self.room_group_name, {
+                'type': 'relay_user',
+                'message': message,
+                'msg_id': client_msg_id,
+            })
+
         # Update last visitor message time for AFK tracking
         await self.update_visitor_timestamp(session)
 
@@ -119,16 +134,39 @@ class ChatConsumer(AsyncWebsocketConsumer):
             session, message, behavior_matrix, image_data=image_data
         )
 
-        # Send reply to visitor
-        await self.send(text_data=json.dumps({
-            'type': 'ai_message',
+        # Send the AI reply to the whole session GROUP (not just the sending
+        # socket) so every open tab/device renders it live. Each AI reply
+        # carries a fresh server msg_id so tabs dedupe — including the sending
+        # tab, which renders it here exactly once instead of via self.send.
+        import uuid as _uuid
+        await self.channel_layer.group_send(self.room_group_name, {
+            'type': 'relay_ai',
             'message': ai_response.get('reply_text'),
+            'msg_id': f'ai_{_uuid.uuid4().hex}',
             'suggested_product_id': ai_response.get('suggested_product_id'),
             'quick_replies': ai_response.get('quick_replies') or [],
-        }))
+        })
 
         # ── Post-response: persist heat score + broadcast to admin ────────
         await self.post_process(session)
+
+    async def relay_user(self, event):
+        """Relay a visitor message to every connected tab in the session."""
+        await self.send(text_data=json.dumps({
+            'type': 'user_message',
+            'message': event.get('message', ''),
+            'msg_id': event.get('msg_id', ''),
+        }))
+
+    async def relay_ai(self, event):
+        """Relay an AI reply to every connected tab in the session."""
+        await self.send(text_data=json.dumps({
+            'type': 'ai_message',
+            'message': event.get('message', ''),
+            'msg_id': event.get('msg_id', ''),
+            'suggested_product_id': event.get('suggested_product_id'),
+            'quick_replies': event.get('quick_replies') or [],
+        }))
 
     async def post_process(self, session):
         """Persist heat score, check CTA trigger, broadcast to admin dashboard,

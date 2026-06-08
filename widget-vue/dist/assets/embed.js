@@ -1,4 +1,4 @@
-(function(){"use strict";function f(i,r,o,s,d){if(!i||!r)return"";const n=r.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),l=`<style>
+(function(){"use strict";function f(i,r,o,s,l){if(!i||!r)return"";const n=r.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),d=`<style>
 #cf-w {
   --cf-accent: ${o||"#6366f1"};
   --cf-bg: #111111;
@@ -455,6 +455,16 @@ function persistMsgs(){
   }catch(e){}
 }
 
+// ── Cross-tab message dedupe ──────────────────────────────────────────
+// Every message carries an id (client id for the visitor's own message,
+// server id for AI replies). The server fans every message out to ALL open
+// tabs in this session; each tab renders an id once, so the sending tab
+// doesn't double its optimistic bubble and other tabs sync live.
+var seenMsgIds={};
+function markSeen(id){if(id)seenMsgIds[id]=1}
+function isSeen(id){return !!(id&&seenMsgIds[id])}
+function newMsgId(){return 'u_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)}
+
 // ── Live config — applied on load + every 60 seconds ─────────────────
 function applyConfig(cfg){
   if(!cfg)return;
@@ -693,7 +703,7 @@ setTimeout(_sendProactive,10000);
 function connect(){
   ws=new WebSocket(B.replace(/^https/,'wss').replace(/^http/,'ws')+'/ws/chat/'+C+'/'+sid+'/');
   ws.onopen=function(){sendVisitorMeta()};
-  ws.onmessage=function(e){rmDots();busy=false;$('cf-sb').disabled=!$('cf-inp').value.trim()&&!pendingImg;
+  ws.onmessage=function(e){
     try{
       var d=JSON.parse(e.data);
       // Server-pushed hot-lead trigger: visitor reached READY_TO_BUY / hot
@@ -705,7 +715,24 @@ function connect(){
         setTimeout(showLead,1200);
         return;
       }
+      // Cross-tab live sync: a visitor message typed in ANOTHER tab. Render
+      // it here (the sending tab dedupes its own via msg_id, keeping its own
+      // typing dots) and show dots so this tab looks like it's awaiting the
+      // reply too. We deliberately do NOT clear dots/busy on this branch.
+      if(d.type==='user_message'){
+        if(isSeen(d.msg_id))return;
+        markSeen(d.msg_id);
+        bubble(escHtml(d.message||''),'me');
+        dots();
+        return;
+      }
+      // Everything below is a terminal/assistant event → safe to clear the
+      // typing indicator + re-enable input.
+      rmDots();busy=false;$('cf-sb').disabled=!$('cf-inp').value.trim()&&!pendingImg;
       if(d.type==='ai_message'&&d.message){
+        // Dedupe by server msg_id so the reply renders exactly once per tab.
+        if(d.msg_id&&isSeen(d.msg_id))return;
+        if(d.msg_id)markSeen(d.msg_id);
         bubble(renderMd(d.message),'ai');chime();
         // Q3: render clickable chip suggestions if the bot included any
         if(Array.isArray(d.quick_replies)&&d.quick_replies.length){
@@ -746,7 +773,10 @@ function send(){
   $('cf-inp').value='';$('cf-sb').disabled=true;busy=true;dots();
   // Track user-message count for inline lead capture trigger (after 3 user msgs)
   msgCount++;if(msgCount>=3&&!leadDone)setTimeout(showLead,1500);
-  var pl=JSON.stringify({message:msg,behavior_matrix:behavior,page_visits:buildPageVisits()});
+  // Tag with a client msg_id so when the server echoes this message to the
+  // session group (for other tabs), THIS tab dedupes and doesn't re-render it.
+  var mid=newMsgId();markSeen(mid);
+  var pl=JSON.stringify({message:msg,msg_id:mid,behavior_matrix:behavior,page_visits:buildPageVisits()});
   if(ws&&ws.readyState===1){ws.send(pl)}
   else{connect();ws.addEventListener('open',function(){ws.send(pl)},{once:true})}}
 
@@ -1085,7 +1115,7 @@ if($('cf-lead-ph')){
 })();
 })();
 <\/script>`;return`<!-- Start of Checkfunnel code -->
-`+l+`
+`+d+`
 `+t+`
 `+a+`
-<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=n;var l=Array.prototype.slice.call(c.childNodes);l.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var r=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=r+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",d=window.__CF_NAME__||"AI Assistant",n=f(i,o,s,d,"html");if(!n)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();
+<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=n;var d=Array.prototype.slice.call(c.childNodes);d.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var r=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=r+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",l=window.__CF_NAME__||"AI Assistant",n=f(i,o,s,l,"html");if(!n)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();
