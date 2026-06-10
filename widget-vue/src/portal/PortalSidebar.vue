@@ -45,6 +45,12 @@
         Overview
       </router-link>
 
+      <!-- REFERRALS -->
+      <router-link to="/portal/referrals" class="nav-item" :class="{ active: $route.path === '/portal/referrals' }" @click="$emit('close')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Referrals
+      </router-link>
+
       <!-- LIVE VIEW -->
       <p class="nav-section">Live</p>
       <router-link to="/portal/live" class="nav-item" :class="{ active: $route.path === '/portal/live' }" @click="$emit('close')">

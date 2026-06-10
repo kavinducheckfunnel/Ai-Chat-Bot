@@ -549,10 +549,36 @@ def _shopify_products(site_url):
         handle = p.get('handle') or ''
         url = f'{base}/products/{handle}'
         variant_rows = p.get('variants', []) or []
-        # Human-readable variant blurb for the AI to read out
+
+        # Shopify REST returns variant `price` as a decimal STRING ("16.00"),
+        # which may be null/empty for unpriced variants. Collect the numeric
+        # prices so we can emit one prominent price line the AI always sees
+        # with the product — the previous code only buried prices inside a
+        # "Variants:" blurb AND dropped any variant whose price was falsy, so
+        # some products were ingested with no price at all.
+        numeric_prices = []
+        for v in variant_rows:
+            raw = v.get('price')
+            if raw in (None, '', 'null'):
+                continue
+            try:
+                numeric_prices.append(float(raw))
+            except (TypeError, ValueError):
+                continue
+
+        price_line = ''
+        if numeric_prices:
+            lo, hi = min(numeric_prices), max(numeric_prices)
+            price_line = f'${lo:.2f}' if lo == hi else f'${lo:.2f}–${hi:.2f}'
+
+        # Human-readable variant blurb for the AI to read out. Keep ALL
+        # variants (so the AI knows the full option set); append the price
+        # only when the variant actually has one.
         variants_blurb = ', '.join(
-            f"{v.get('title', '?')} ${v.get('price')}"
-            for v in variant_rows if v.get('price')
+            (f"{v.get('title', '?')} ${v.get('price')}"
+             if v.get('price') not in (None, '', 'null')
+             else f"{v.get('title', '?')}")
+            for v in variant_rows
         )
         # Structured variant list for inventory bookkeeping. Each entry
         # carries the inventory_item_id that Shopify's
@@ -567,7 +593,10 @@ def _shopify_products(site_url):
             }
             for v in variant_rows
         ]
-        content_parts = [f'Product: {title}', f'URL: {url}', body]
+        content_parts = [f'Product: {title}', f'URL: {url}']
+        if price_line:
+            content_parts.append(f'Price: {price_line}')
+        content_parts.append(body)
         if variants_blurb:
             content_parts.append(f'Variants: {variants_blurb}')
         docs.append({
@@ -580,6 +609,7 @@ def _shopify_products(site_url):
                 'type': 'product',
                 'shopify_resource': f"product_{p.get('id', '')}",
                 'variants': variants_struct,
+                'price_display': price_line,
                 'is_active': True,
             },
         })

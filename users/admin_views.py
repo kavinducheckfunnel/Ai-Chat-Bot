@@ -627,7 +627,15 @@ def client_sessions(request, client_id):
     except Client.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
-    qs = ChatSession.objects.filter(client=client).order_by('-updated_at')
+    # Order by true last-message recency. last_message_at is only stamped when
+    # a message is appended (not on unrelated saves), so the most recently
+    # active conversations sort first. Fall back to updated_at for legacy rows
+    # that predate the field (NULLs sort last under -last_message_at, so we
+    # coalesce to keep them in a sensible position).
+    from django.db.models.functions import Coalesce
+    qs = (ChatSession.objects.filter(client=client)
+          .annotate(last_activity=Coalesce('last_message_at', 'updated_at'))
+          .order_by('-last_activity'))
 
     # ── Filters ────────────────────────────────────────────────────────
     state = request.query_params.get('state', '').strip()
@@ -690,6 +698,9 @@ def client_sessions(request, client_id):
             'page_visits': s.page_visits,
             'channel': s.channel,
             'updated_at': s.updated_at.isoformat(),
+            # True last-message time for the inbox; falls back to updated_at
+            # for legacy sessions created before the field existed.
+            'last_message_at': (s.last_message_at or s.updated_at).isoformat(),
             'created_at': s.created_at.isoformat(),
             'behavioral_context': s.behavioral_context,
             'intent_trend': s.intent_trend,

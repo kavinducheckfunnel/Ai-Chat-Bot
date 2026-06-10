@@ -376,7 +376,7 @@ export function generateEmbedCode(id, url, color, botName, format) {
   </div>
   <div class="cf-lead-row" style="margin-top:7px">
     <span class="cf-lead-cc">+94</span>
-    <input class="cf-lead-inp cf-lead-ph" id="cf-lead-ph" type="tel" inputmode="numeric" maxlength="9" placeholder="77 123 4567"/>
+    <input class="cf-lead-inp cf-lead-ph" id="cf-lead-ph" type="tel" inputmode="tel" maxlength="20" placeholder="77 123 4567 — or +1, +44…"/>
   </div>
   <button class="cf-lead-btn cf-lead-btn-full" id="cf-lead-sb">Send my details</button>
   <div class="cf-lead-err" id="cf-lead-err"></div>
@@ -546,15 +546,23 @@ function renderMd(text){
 // ── Lead capture (inline slide-up inside chat panel) ─────────────────
 function showLead(){if(leadDone)return;$('cf-lead').classList.add('show')}
 function dismissLead(){$('cf-lead').classList.remove('show');leadDone=true;localStorage.setItem(LEAD_KEY,'1')}
-// Sri Lankan mobile: 9 subscriber digits starting with 7 (after the +94).
-// Mirrors chat.phone_utils.normalize_lk_phone on the client so the user
-// gets instant feedback before we hit the server.
-function normalizeLkPhone(raw){
+// Phone normalisation — keeps +94 (Sri Lanka) as the DEFAULT for bare local
+// numbers, but no longer rejects international visitors. Mirrors
+// chat.phone_utils.normalize_phone on the client for instant feedback.
+function normalizePhone(raw){
+  var typedPlus=(raw||'').trim().charAt(0)==='+';
   var d=(raw||'').replace(/\\D/g,'');
-  if(d.indexOf('0094')===0)d=d.slice(4);
-  if(d.indexOf('94')===0)d=d.slice(2);
-  if(d.length===10&&d.charAt(0)==='0')d=d.slice(1);
-  if(d.length===9&&d.charAt(0)==='7')return '+94'+d;
+  if(!d)return null;
+  // 1) Try the LK interpretation first (the default market).
+  var lk=d;
+  if(lk.indexOf('0094')===0)lk=lk.slice(4);
+  if(lk.indexOf('94')===0)lk=lk.slice(2);
+  if(lk.length===10&&lk.charAt(0)==='0')lk=lk.slice(1);
+  if(lk.length===9&&lk.charAt(0)==='7')return '+94'+lk;
+  // 2) International fallback — accept any plausible number so non-LK
+  //    visitors can submit. Add + when they typed one or it carries a
+  //    country code (length > 10).
+  if(d.length>=7&&d.length<=15)return (typedPlus||d.length>10)?('+'+d):d;
   return null;
 }
 function setLeadErr(msg){var e=$('cf-lead-err');if(e)e.textContent=msg||''}
@@ -562,12 +570,13 @@ function submitLead(){
   var em=($('cf-lead-em').value||'').trim();
   if(!em){setLeadErr('Please enter your email.');return}
   if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(em)){setLeadErr('Please enter a valid email.');return}
-  // Phone is optional, but if provided it MUST be a valid LK mobile.
+  // Phone is optional. Accepts a local LK number (defaults to +94) or any
+  // international number.
   var phRaw=($('cf-lead-ph')?$('cf-lead-ph').value:'')||'';
   var phone=null;
   if(phRaw.trim()){
-    phone=normalizeLkPhone(phRaw);
-    if(!phone){setLeadErr('Enter a valid Sri Lankan mobile, e.g. 77 123 4567.');return}
+    phone=normalizePhone(phRaw);
+    if(!phone){setLeadErr('Please enter a valid phone number (e.g. 77 123 4567 or +1 555 123 4567).');return}
   }
   setLeadErr('');
   $('cf-lead-sb').disabled=true;$('cf-lead-sb').textContent='…';
@@ -577,7 +586,7 @@ function submitLead(){
     if(r&&!r.ok&&r.status===400){
       // Backend rejected the phone — surface it and let them fix.
       $('cf-lead-sb').disabled=false;$('cf-lead-sb').textContent='Send my details';
-      setLeadErr('Please enter a valid Sri Lankan mobile number.');
+      setLeadErr('Please enter a valid phone number.');
       throw new Error('invalid');
     }
     // Just hide the form. We do NOT post a local "we'll be in touch" bubble
@@ -638,30 +647,60 @@ if(savedMsgs.length>0){
 // from the server even if that tab's local cache is empty. Best-effort —
 // on any failure we keep whatever the local cache painted.
 var serverRestored=false;
+// Connect is gated behind restore so that, if we recover a different session
+// by visitor id (Shopify cross-domain hop), the WebSocket opens on the
+// RECOVERED sid — not the empty new one.
+var connected=false;
+function ensureConnect(){if(connected)return;connected=true;connect();}
+// Adopt a server-recovered session id: re-point sid + its derived keys and
+// persist it so subsequent loads resolve the same conversation.
+function adoptSession(newSid){
+  if(!newSid||newSid===sid)return;
+  try{localStorage.removeItem(MSGS_KEY)}catch(e){}
+  sid=newSid;
+  MSGS_KEY='cf_msgs_'+sid;
+  try{localStorage.setItem(SK,sid)}catch(e){}
+  setSidCookie(sid);
+}
+function renderServerMsgs(messages){
+  serverRestored=true;
+  $('cf-msgs').innerHTML='';
+  msgLog.length=0;
+  messages.forEach(function(m){
+    var who=(m.role==='user')?'me':'ai';
+    var html=(who==='ai')?renderMd(m.message):'<p>'+escHtml(m.message)+'</p>';
+    renderBubble(html,who);
+    msgLog.push({who:who,html:html});
+  });
+  persistMsgs();
+  if(typeof msgCount!=='undefined'){
+    // Count visitor turns so the inline lead-capture trigger stays accurate.
+    msgCount=messages.filter(function(m){return m.role==='user'}).length;
+  }
+  $('cf-msgs').scrollTop=9999;
+}
 function restoreFromServer(){
-  if(serverRestored)return;
+  if(serverRestored){ensureConnect();return;}
   fetch(B+'/api/chat/session/'+encodeURIComponent(sid)+'/messages/?limit=50')
     .then(function(r){return r.ok?r.json():null})
     .then(function(d){
-      if(!d||!Array.isArray(d.messages)||!d.messages.length)return;
-      serverRestored=true;
-      // Rebuild the transcript from the server copy.
-      $('cf-msgs').innerHTML='';
-      msgLog.length=0;
-      d.messages.forEach(function(m){
-        var who=(m.role==='user')?'me':'ai';
-        var html=(who==='ai')?renderMd(m.message):'<p>'+escHtml(m.message)+'</p>';
-        renderBubble(html,who);
-        msgLog.push({who:who,html:html});
-      });
-      persistMsgs();
-      if(typeof msgCount!=='undefined'){
-        // Count visitor turns so the inline lead-capture trigger stays accurate.
-        msgCount=d.messages.filter(function(m){return m.role==='user'}).length;
+      if(d&&Array.isArray(d.messages)&&d.messages.length){
+        renderServerMsgs(d.messages);ensureConnect();return null;
       }
-      $('cf-msgs').scrollTop=9999;
+      // This sid has no history. Try the stable visitor id — survives the
+      // Shopify case where the sid cookie/localStorage was lost crossing
+      // between the custom domain and *.myshopify.com / checkout.
+      return fetch(B+'/api/chat/visitor/'+C+'/'+encodeURIComponent(vid)+'/latest/')
+        .then(function(r){return r.ok?r.json():null})
+        .then(function(v){
+          if(v&&v.session_id&&Array.isArray(v.messages)&&v.messages.length){
+            adoptSession(v.session_id);
+            renderServerMsgs(v.messages);
+          }
+          ensureConnect();
+        });
     })
-    .catch(function(){});
+    .catch(function(){ensureConnect();});
 }
 function dots(){var d=document.createElement('div');d.className='cf-typ';d.id='cf-tdots';d.innerHTML='<span></span><span></span><span></span>';$('cf-msgs').appendChild(d);$('cf-msgs').scrollTop=9999}
 function rmDots(){var t=$('cf-tdots');if(t)t.remove()}
@@ -788,11 +827,12 @@ function connect(){
 // Open WebSocket ON LOAD so visitor_meta + page_visits get saved
 // even before the visitor opens the chat — backend can then use this
 // browsing context when AI generates the first reply.
-setTimeout(connect,500);
-
 // Restore the conversation from the server so a new tab / reload shows the
-// SAME chat. Runs immediately (independent of the WS) for fast continuity.
+// SAME chat, THEN open the socket — restoreFromServer() calls ensureConnect()
+// once it resolves so the WS opens on the recovered sid if we adopted one.
 restoreFromServer();
+// Safety net: never let a hung/slow restore fetch block the socket.
+setTimeout(ensureConnect,1500);
 
 // ── Send message ─────────────────────────────────────────────────────
 function send(){

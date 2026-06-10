@@ -210,6 +210,12 @@ class ChatSession(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # Timestamp of the most recent CHAT MESSAGE (visitor, AI, or agent) — set
+    # only when a message is appended to chat_history, NOT on every save.
+    # The inbox orders + displays by this so the list reflects true last-
+    # message recency. `updated_at` is unusable for that because auto_now
+    # bumps it on unrelated saves (heat score, state machine, nudge flags).
+    last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     def __str__(self):
         return str(self.session_id)

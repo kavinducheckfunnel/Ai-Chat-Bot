@@ -81,7 +81,7 @@
           <div class="session-meta">
             <div class="session-top-row">
               <span class="session-name">{{ s.lead_email || 'Visitor #' + s.session_id.slice(0,6) }}</span>
-              <span class="session-time">{{ timeAgo(s.updated_at) }}</span>
+              <span class="session-time">{{ timeAgo(s.last_message_at || s.updated_at) }}</span>
             </div>
             <div class="session-preview">{{ lastMessage(s) }}</div>
             <div class="session-tags">

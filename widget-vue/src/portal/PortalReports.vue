@@ -281,32 +281,15 @@
         <div v-else class="empty-msg">No sessions yet.</div>
       </div>
 
-      <!-- Products the AI referred (Issue 4 — marketing attribution) -->
-      <div class="card recent-card" v-if="!loading">
-        <h3 class="card-title">Products the chatbot referred</h3>
-        <p class="card-sub">How many visitors the AI sent to each product/content link.</p>
-        <table class="activity-table" v-if="linkClicks.length">
-          <thead>
-            <tr>
-              <th>Product / Link</th>
-              <th>Clicks</th>
-              <th>Unique visitors</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(l, i) in linkClicks" :key="i">
-              <td>
-                <a :href="l.url" target="_blank" rel="noopener" class="link-cell">
-                  {{ l.link_text || l.url }}
-                </a>
-                <div class="link-url">{{ l.url }}</div>
-              </td>
-              <td><strong>{{ l.clicks }}</strong></td>
-              <td>{{ l.unique_sessions }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div v-else class="empty-msg">No link clicks yet. Once the AI recommends products and visitors click, they'll show here.</div>
+      <!-- Referrals moved to its own page: /portal/referrals (sidebar → Referrals) -->
+      <div class="card recent-card" v-if="!loading && linkClicks.length">
+        <div class="ref-link-row">
+          <div>
+            <h3 class="card-title" style="margin-bottom:2px">Chatbot referrals</h3>
+            <p class="card-sub" style="margin:0">{{ linkClicks.length }} products referred this period.</p>
+          </div>
+          <router-link to="/portal/referrals" class="ref-view-all">View all →</router-link>
+        </div>
       </div>
 
       <div class="card recent-card" v-else>

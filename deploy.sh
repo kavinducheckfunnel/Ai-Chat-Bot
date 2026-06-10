@@ -146,6 +146,9 @@ info "Running Django migrations..."
 cd $APP_DIR
 sudo -u $APP_USER $APP_DIR/venv/bin/python manage.py migrate --noinput
 
+info "Seeding / syncing subscription plans (idempotent; preserves Stripe price IDs)..."
+sudo -u $APP_USER $APP_DIR/venv/bin/python manage.py seed_plans
+
 info "Collecting static files..."
 sudo -u $APP_USER $APP_DIR/venv/bin/python manage.py collectstatic --noinput
 

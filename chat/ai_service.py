@@ -443,7 +443,17 @@ def _invoke_with_fallback(messages, client, vision_required: bool = False):
                 status='error', error_message=str(e),
                 system_prompt_hash=prompt_hash,
             )
-            raise
+            # For image messages, a BYOK model that is text-only (or otherwise
+            # rejects multimodal content blocks) would dead-end the visitor
+            # with a generic error. Instead of raising, fall through to the
+            # platform vision chain below so the image still gets answered.
+            if vision_required:
+                logger.warning(
+                    f'[ai] BYOK model {model!r} failed on a vision request '
+                    f'({e}); falling back to platform vision models.'
+                )
+            else:
+                raise
 
     # Platform — try primary model then static fallbacks
     api_key, primary_model = _get_platform_config()

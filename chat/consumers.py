@@ -78,11 +78,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # when the feature flag is off, but a hand-crafted WS frame could
         # still slip a payload through. Strip it server-side so untrusted
         # clients can't bypass the flag and force LLM image calls. ─────
-        if image_data and session.client and not session.client.image_input_enabled:
+        if image_data and not await self._client_allows_image(session.client):
             import logging as _log
             _log.getLogger(__name__).info(
                 f'[ws] image_data stripped — client {session.client_id} '
-                f'has image_input_enabled=False'
+                f'does not allow image input (plan + toggle both off)'
             )
             image_data = None
 
@@ -334,6 +334,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             chat_history=history,
             behavioral_context=ctx,
             last_nudge_at=timezone.now(),
+            last_message_at=timezone.now(),
         )
 
     async def _broadcast_session_update(self, session):
@@ -572,6 +573,18 @@ class ChatConsumer(AsyncWebsocketConsumer):
             ctx['time_on_site']          = behavior_matrix.get('timeOnSite', 0)
             session.behavioral_context = ctx
             session.save(update_fields=['behavioral_context'])
+
+    @database_sync_to_async
+    def _client_allows_image(self, client):
+        """Is image upload allowed for this client's visitor?
+
+        Auto-enabled per plan: any tenant whose plan includes image input
+        (Growth and up) gets it without flipping the per-client toggle. The
+        explicit client toggle still works as an override for plans that
+        don't include it (e.g. a one-off grant on Starter).
+        """
+        from .utils import client_allows_image
+        return client_allows_image(client)
 
     @database_sync_to_async
     def get_session(self, client_id, session_id):

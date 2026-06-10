@@ -72,9 +72,18 @@ def normalize_phone(raw, country=DEFAULT_COUNTRY):
     """
     country = (country or DEFAULT_COUNTRY).upper()
     if country == 'LK':
-        return normalize_lk_phone(raw)
+        norm, ok = normalize_lk_phone(raw)
+        if ok:
+            return norm, ok
+        # Keep +94 as the DEFAULT (bare local numbers normalise above), but
+        # don't reject an international visitor who typed a non-LK number into
+        # the lead form — fall through to the permissive path below so the
+        # lead is still captured. (Free-text extraction stays strict via
+        # extract_lk_phone, so this leniency only applies to explicit form
+        # input.)
 
-    # Generic fallback for other markets — light touch, don't over-reject.
+    # Generic fallback for other markets / international numbers — light
+    # touch, don't over-reject.
     digits = re.sub(r'\D', '', raw or '')
     if 7 <= len(digits) <= 15:
         plus = '+' if (raw or '').strip().startswith('+') else ''

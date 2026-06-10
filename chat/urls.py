@@ -9,6 +9,7 @@ urlpatterns = [
     path('lead/', views.capture_lead, name='capture_lead'),
     path('link-click/', views.track_link_click, name='track_link_click'),
     path('session/<str:session_id>/messages/', views.session_messages, name='session_messages'),
+    path('visitor/<uuid:client_id>/<str:visitor_uid>/latest/', views.visitor_latest_session, name='visitor_latest_session'),
     path('product/<str:product_id>/', views.product_detail, name='product_detail'),
 
     # Omnichannel webhooks (called by Meta's servers / Telegram)

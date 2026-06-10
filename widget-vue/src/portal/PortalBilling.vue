@@ -164,37 +164,9 @@
             <span v-if="billingInterval === 'annual' && plan.price_monthly > 0" class="plan-annual-note">billed ${{ annualTotal(plan) }}/yr</span>
           </div>
           <ul class="plan-features">
-            <li>
+            <li v-for="feat in planFeatures(plan)" :key="feat">
               <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              {{ formatLimit(plan.max_messages_per_month) }} AI messages/mo
-            </li>
-            <li>
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Up to {{ plan.max_clients }} chatbot{{ plan.max_clients !== 1 ? 's' : '' }}
-            </li>
-            <li>
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              {{ formatLimit(plan.max_sessions_per_month) }} sessions/mo
-            </li>
-            <li v-if="plan.allow_whatsapp || plan.allow_messenger || plan.allow_telegram">
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Social channels (WhatsApp / Messenger / Telegram)
-            </li>
-            <li v-if="plan.allow_hubspot">
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              HubSpot CRM sync
-            </li>
-            <li v-if="plan.allow_byok">
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Bring your own AI key (BYOK)
-            </li>
-            <li v-if="plan.allow_advanced_reports">
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Advanced analytics
-            </li>
-            <li v-if="plan.remove_branding">
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              Remove branding
+              {{ feat }}
             </li>
           </ul>
           <button
@@ -251,43 +223,6 @@ const error = ref('')
 const sub = ref({})
 const plans = ref([])
 const billingInterval = ref('monthly')
-
-// F7 — Add-on top-ups
-const addonOptions = ref(null)   // { prices: {message,image,voice,video}, bundles: {...} }
-const addonLoading = ref('')     // `${kind}_${qty}` while a purchase is in flight
-const addonError = ref('')
-const addonKinds = [
-  { key: 'message', label: 'AI messages',  icon: '💬', unit: 'msg' },
-  { key: 'image',   label: 'Image uploads', icon: '🖼️', unit: 'image' },
-  { key: 'voice',   label: 'Voice commands', icon: '🎤', unit: 'voice' },
-  { key: 'video',   label: 'Video uploads', icon: '🎬', unit: 'video' },
-]
-
-function addonTotal(kind, qty) {
-  const price = parseFloat(addonOptions.value?.prices?.[kind] || 0)
-  const total = price * qty
-  return total >= 10 ? total.toFixed(0) : total.toFixed(2)
-}
-
-async function loadAddOns() {
-  try {
-    addonOptions.value = await api.getAddOnOptions()
-  } catch {
-    addonOptions.value = null
-  }
-}
-
-async function buyAddOn(kind, quantity) {
-  addonError.value = ''
-  addonLoading.value = `${kind}_${quantity}`
-  try {
-    const { url } = await api.purchaseAddOn(kind, quantity)
-    window.location.href = url
-  } catch (e) {
-    addonError.value = e.message || 'Could not start checkout.'
-    addonLoading.value = ''
-  }
-}
 
 // ── Invoices section ────────────────────────────────────────────────────────
 const invoices = ref([])
@@ -369,6 +304,61 @@ function formatLimit(n) {
   if (n < 0) return 'Unlimited'
   return n.toLocaleString()
 }
+
+// ── Plan card feature list — derived from plan data to mirror the published
+//    pricing doc (Section 4 "Feature Breakdown by Plan"). Driven entirely by
+//    the seeded Plan fields so every tenant sees the same, correct list. ──────
+function channelLabel(plan) {
+  const social = plan.max_social_channels
+  if (social === 0 || social == null) return 'Web chat only'
+  if (social === 1) return 'Web chat + 1 social channel (WhatsApp or Facebook)'
+  if (social < 0 && plan.name === 'Enterprise') return 'All channels (Web + omnichannel)'
+  return 'Omnichannel (Web, WhatsApp, Facebook, Telegram…)'
+}
+function crmLabel(plan) {
+  if (!plan.allow_hubspot) return null
+  if (plan.name === 'Enterprise') return 'Custom CRM + Direct HubSpot Sync'
+  if (plan.allow_advanced_reports) return 'CRM via Webhook + Direct HubSpot Sync'
+  return 'CRM via Webhook (HubSpot, Zapier & more)'
+}
+function reportsLabel(plan) {
+  if (plan.name === 'Enterprise') return 'Custom reports & exports'
+  if (plan.allow_advanced_reports) return 'Advanced reports & exports'
+  if (plan.allow_csv_export || plan.allow_voice_input) return 'Standard reports & exports'
+  return 'Basic reports'
+}
+function supportLabel(plan) {
+  if (plan.name === 'Enterprise') return 'Dedicated CSM'
+  if (plan.priority_support) return 'Priority support'
+  if (plan.allow_voice_input) return 'Email + chat support'  // Growth tier
+  return 'Email support'
+}
+function retentionLabel(plan) {
+  const d = plan.data_retention_days
+  if (d == null || d < 0) return 'Custom data retention'
+  if (d >= 365) return `${Math.round(d / 365)}-year data retention`
+  return `${d}-day data retention`
+}
+function planFeatures(plan) {
+  const feats = []
+  feats.push(`${formatLimit(plan.max_messages_per_month)} AI messages / mo`)
+  feats.push(channelLabel(plan))
+  feats.push('AI lead scoring & in-chat checkout')
+  const crm = crmLabel(plan)
+  if (crm) feats.push(crm)
+  if (plan.allow_image_input) feats.push('Image upload for questions')
+  if (plan.allow_voice_input) feats.push('Voice command widget')
+  if (plan.allow_real_time_inventory) feats.push('Real-time inventory sync')
+  if (plan.allow_custom_domain) feats.push('Custom website integration (any platform)')
+  feats.push(plan.allow_byok
+    ? (plan.allow_advanced_reports || plan.name === 'Enterprise' ? 'BYOK — bring your own AI key' : 'BYOK support (optional)')
+    : 'Managed AI included')
+  feats.push(reportsLabel(plan))
+  feats.push(supportLabel(plan))
+  feats.push(retentionLabel(plan))
+  if (plan.remove_branding) feats.push('White-label branding')
+  return feats
+}
 function formatPrice(p) {
   const n = parseFloat(p)
   if (isNaN(n)) return '—'
@@ -429,160 +419,6 @@ const faqs = ref([
   { q: 'Can I cancel anytime?', a: 'Yes — cancel from the Manage billing portal. Your access continues until the end of the current billing period.', open: false },
 ])
 
-// ── Marketing / docs panels ─────────────────────────────────────────────────
-// Each collapsible section tracks its own open/closed state. Start with
-// everything collapsed so the page lands at the user's current plan + usage,
-// not a wall of marketing text.
-const docExpanded = ref({
-  comparison: false,
-  integrations: false,
-  competitors: false,
-})
-
-// Industry use cases. Tapping a card expands it to show requirements + the
-// recommended setup. Stored as a flat ref so v-for binding is reactive.
-const industries = ref([
-  {
-    key: 'hotel',
-    emoji: '🏨',
-    title: 'Hotel & Hospitality',
-    tagline: 'AI concierge, room service automation, guest experience',
-    open: false,
-    requirements: [
-      'Multi-language guest chat (English, Chinese, Arabic, etc.)',
-      'Room booking & availability queries via chat',
-      'In-chat room service & amenity requests',
-      'Guest check-in / check-out assistance',
-      'PMS (Property Management System) integration',
-      'Loyalty points balance & rewards queries',
-      'Local recommendations & concierge suggestions',
-      'Voice command support for in-room devices',
-      'Post-stay review collection & feedback loop',
-    ],
-    setup: {
-      'Recommended plan': 'Enterprise (Custom)',
-      'CRM / PMS sync': 'Opera PMS, Salesforce, or custom DB',
-      'Channels': 'Web chat + WhatsApp + in-room kiosk',
-      'BYOK': 'Yes — own OpenAI / Anthropic key',
-      'Voice command': 'Yes — customised for room controls',
-      'Image upload': 'Yes — guest requests with photos',
-      'Data retention': 'Custom — per hotel policy',
-      'White label': 'Yes — branded as hotel\'s own assistant',
-    },
-  },
-  {
-    key: 'retail',
-    emoji: '🛍️',
-    title: 'Retail & E-Commerce',
-    tagline: 'Product discovery, cart recovery, order tracking, in-store kiosk',
-    open: false,
-    requirements: [
-      'Product search & recommendation engine via chat',
-      'Real-time inventory sync (in-store & online)',
-      'Cart abandonment recovery via WhatsApp / Web chat',
-      'Order status & delivery tracking',
-      'Returns & exchange initiation through chat',
-      'Visual product search — customer sends photo',
-      'Loyalty rewards & points redemption queries',
-      'Flash sale & promo notification broadcasts',
-      'Shopify / WooCommerce / custom DB integration',
-    ],
-    setup: {
-      'Recommended plan': 'Pro or Enterprise',
-      'Platform sync': 'Shopify, WooCommerce, or custom DB',
-      'Channels': 'Web chat + WhatsApp + Facebook Messenger',
-      'BYOK': 'Optional — Pro or Enterprise',
-      'Real-time inventory': 'Yes — live stock sync',
-      'In-chat checkout': 'Yes — complete purchase inside chat',
-      'Image upload': 'Yes — visual product search',
-      'Data retention': '1 year (Pro) / Custom (Enterprise)',
-    },
-  },
-  {
-    key: 'healthcare',
-    emoji: '🏥',
-    title: 'Healthcare & Clinics',
-    tagline: 'Appointment booking, patient triage, prescription reminders',
-    open: false,
-    requirements: [
-      'Appointment booking & rescheduling via chat',
-      'Symptom-based triage & department routing',
-      'Prescription reminder & refill notifications',
-      'Insurance eligibility queries',
-      'Patient uploads referral letters / test results',
-      'EMR / clinic management integration (custom DB)',
-      'Patient privacy compliance (data isolation per tenant)',
-      'Post-appointment feedback & follow-up automation',
-      'Multi-branch / multi-doctor routing',
-    ],
-    setup: {
-      'Recommended plan': 'Enterprise (Custom)',
-      'EMR / DB sync': 'Custom internal clinic database',
-      'Channels': 'Web chat + WhatsApp',
-      'BYOK': 'Yes — full data sovereignty',
-      'Image upload': 'Yes — referral & test result submission',
-      'Data retention': 'Custom — per compliance policy',
-      'White label': 'Yes — clinic-branded assistant',
-      'Live chat takeover': 'Yes — escalate to doctor / nurse',
-    },
-  },
-  {
-    key: 'realestate',
-    emoji: '🏠',
-    title: 'Real Estate & Property',
-    tagline: 'Lead qualification, property discovery, viewing scheduling',
-    open: false,
-    requirements: [
-      'AI lead scoring — qualify buyers vs casual browsers',
-      'Property search by budget, location, bedrooms via chat',
-      'Viewing appointment booking & calendar sync',
-      'Buyer sends photo of preferred style / property',
-      'Property listing DB or CRM integration (HubSpot / custom)',
-      'Automated follow-up sequences for warm leads',
-      'Mortgage calculator & financing FAQ',
-      'WhatsApp broadcast for new listings to qualified leads',
-      'Agent live takeover for high-intent prospects',
-    ],
-    setup: {
-      'Recommended plan': 'Pro or Enterprise',
-      'CRM sync': 'HubSpot + custom property DB',
-      'Channels': 'Web chat + WhatsApp + Facebook',
-      'AI lead scoring': 'Yes — 3-EMA behavioural tracking',
-      'Image upload': 'Yes — style preference matching',
-      'Live chat takeover': 'Yes — agents close high-intent leads',
-      'BYOK': 'Optional — Pro or Enterprise',
-      'Data retention': '1 year (Pro) / Custom (Enterprise)',
-    },
-  },
-  {
-    key: 'education',
-    emoji: '🎓',
-    title: 'Education & Training',
-    tagline: 'Student enrolment, course guidance, fee queries, campus support',
-    open: false,
-    requirements: [
-      'Course discovery & eligibility guidance via chat',
-      'Application & enrolment form assistance',
-      'Fee structure, scholarship, and payment plan queries',
-      'Students submit documents (transcripts, IDs) via image upload',
-      'Student management system integration (custom DB)',
-      'Exam schedule, timetable & result notifications',
-      'Live takeover — counsellor handles high-intent enrolments',
-      'Multi-campus routing & department-specific bots',
-      'WhatsApp alerts for deadlines & events',
-    ],
-    setup: {
-      'Recommended plan': 'Growth, Pro, or Enterprise',
-      'Student DB sync': 'Custom internal student management DB',
-      'Channels': 'Web chat + WhatsApp',
-      'Image upload': 'Yes — document & transcript submission',
-      'Live chat takeover': 'Yes — counsellors for enrolment',
-      'BYOK': 'Optional — Pro or Enterprise',
-      'Data retention': 'Custom — per institute policy',
-      'White label': 'Yes — institute-branded assistant',
-    },
-  },
-])
 
 // ── data loading ─────────────────────────────────────────────────────────────
 
@@ -606,8 +442,7 @@ async function load() {
       if (subData.billing_interval) billingInterval.value = subData.billing_interval
     }
     if (Array.isArray(planData)) plans.value = planData
-    // Fetch add-on prices/bundles + invoices in the background (don't block main load)
-    loadAddOns()
+    // Fetch invoices in the background (don't block main load)
     loadInvoices()
   } catch (e) {
     error.value = e.message || 'Failed to load billing info.'

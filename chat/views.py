@@ -10,6 +10,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from .models import ChatSession
 from .ai_service import generate_ai_response
+from .utils import client_allows_image
 from .throttles import ChatRateThrottle, SessionRateThrottle
 from users.models import Client
 from channels.layers import get_channel_layer
@@ -56,10 +57,11 @@ def chat_message(request):
 
     session, _ = ChatSession.objects.get_or_create(session_id=session_id)
 
-    # Mirror the WS guard: drop image_data if the tenant turned off
-    # image_input_enabled. Widget hides the upload control, but the REST
-    # endpoint is reachable from any HTTP client.
-    if image_data and session.client and not session.client.image_input_enabled:
+    # Mirror the WS guard: drop image_data unless image input is allowed for
+    # this client (plan includes it, or the per-client toggle is on). The
+    # widget hides the upload control, but the REST endpoint is reachable
+    # from any HTTP client.
+    if image_data and not client_allows_image(session.client):
         image_data = None
 
     tenant = _get_tenant_for_client(session.client) if session.client else None
@@ -121,6 +123,61 @@ def session_messages(request, session_id):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+def visitor_latest_session(request, client_id, visitor_uid):
+    """Restore the visitor's most recent conversation by their stable
+    visitor_uid (localStorage), independent of the session-id cookie.
+
+    This is the continuity fallback for the case the widget can't solve with
+    the sid alone: a Shopify storefront that hops between its custom domain
+    and *.myshopify.com / checkout, where the first-party sid cookie AND
+    localStorage are origin-scoped and don't carry across the hop. The
+    visitor_uid is the same browser-level id, so we can find the last session
+    and the widget adopts it — making the chat continue instead of restarting.
+
+    Returns {session_id, messages} for the most recent session (within 24h)
+    that has messages, else {session_id: null, messages: []}. Never 500s.
+    """
+    from datetime import timedelta
+    from .models import Visitor
+
+    try:
+        visitor = Visitor.objects.filter(
+            visitor_uid=(visitor_uid or '')[:64], client_id=client_id,
+        ).first()
+    except (ValidationError, ValueError):
+        visitor = None
+    if not visitor:
+        return Response({'session_id': None, 'messages': []})
+
+    since = timezone.now() - timedelta(hours=24)
+    session = (
+        ChatSession.objects
+        .filter(visitor_obj=visitor, message_count__gt=0, last_message_at__gte=since)
+        .order_by('-last_message_at')
+        .only('session_id', 'chat_history')
+        .first()
+    )
+    if not session:
+        return Response({'session_id': None, 'messages': []})
+
+    history = session.chat_history or []
+    cleaned = [
+        {
+            'role': m.get('role', 'ai'),
+            'message': m.get('message', ''),
+            'source': m.get('source', ''),
+        }
+        for m in history
+        if isinstance(m, dict) and m.get('message')
+    ]
+    return Response({
+        'session_id': str(session.session_id),
+        'messages': cleaned[-50:],
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
 def widget_config(request, client_id):
     """
     Public endpoint — returns branding config for a given client.
@@ -151,7 +208,9 @@ def widget_config(request, client_id):
         'fomo_countdown_seconds': client.fomo_countdown_seconds,
         'discount_code': client.discount_code,
         'voice_input_enabled': client.voice_input_enabled,
-        'image_input_enabled': client.image_input_enabled,
+        # Reflect plan entitlement so the widget shows the upload button for
+        # Growth+ tenants even if the per-client toggle was never flipped.
+        'image_input_enabled': client_allows_image(client),
     })
 
 
@@ -342,7 +401,7 @@ def trigger_event(request):
     # Persist to chat history; only mark closing_triggered for exit/pricing/high-intent
     history = session.chat_history or []
     history.append({'role': 'ai', 'message': fomo_msg, 'source': trigger_type})
-    update_fields = {'chat_history': history}
+    update_fields = {'chat_history': history, 'last_message_at': timezone.now()}
     if trigger_type in CLOSING_TRIGGERS:
         update_fields['closing_triggered'] = True
     ChatSession.objects.filter(session_id=session_id).update(**update_fields)
@@ -520,9 +579,11 @@ def capture_lead(request):
     history = session.chat_history or []
     history.append({'role': 'ai', 'message': confirm_text, 'source': 'lead_captured'})
     session.chat_history = history
+    session.last_message_at = timezone.now()
 
     session.save(update_fields=[
         'lead_email', 'lead_phone', 'kanban_state', 'chat_history', 'updated_at',
+        'last_message_at',
     ])
 
     client = session.client

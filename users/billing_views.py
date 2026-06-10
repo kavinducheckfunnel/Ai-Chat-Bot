@@ -52,14 +52,20 @@ def public_plans(request):
             'max_images_per_month': p.max_images_per_month,
             'max_voice_per_month': p.max_voice_per_month,
             'max_dashboard_metrics': p.max_dashboard_metrics,
+            'max_social_channels': p.max_social_channels,
             'data_retention_days': p.data_retention_days,
             'allow_whatsapp': p.allow_whatsapp,
             'allow_telegram': p.allow_telegram,
             'allow_messenger': p.allow_messenger,
             'allow_byok': p.allow_byok,
             'allow_hubspot': p.allow_hubspot,
+            'allow_voice_input': p.allow_voice_input,
+            'allow_image_input': p.allow_image_input,
+            'allow_real_time_inventory': p.allow_real_time_inventory,
+            'allow_custom_domain': p.allow_custom_domain,
             'remove_branding': p.remove_branding,
             'allow_advanced_reports': p.allow_advanced_reports,
+            'priority_support': p.priority_support,
         })
     return Response(data)
 

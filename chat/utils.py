@@ -7,6 +7,29 @@ _MAX_ACTIVE = 200
 _ARCHIVE_BATCH = 50
 
 
+def client_allows_image(client):
+    """Whether image upload is available for this client's chat widget.
+
+    Auto-enabled per plan: any tenant whose plan includes image input
+    (Growth and up — Plan.allow_image_input) gets it without flipping the
+    per-client `image_input_enabled` toggle. The explicit toggle still works
+    as an override so a plan that doesn't include it can be granted ad-hoc.
+
+    Used by the widget config endpoint (to show/hide the upload button), the
+    REST + WebSocket ingest guards (to strip stray image payloads), so all
+    three agree. Safe to call with None.
+    """
+    if not client:
+        return False
+    if getattr(client, 'image_input_enabled', False):
+        return True
+    try:
+        tp = client.tenantprofile_set.select_related('plan').first()
+        return bool(tp and tp.plan and tp.plan.allow_image_input)
+    except Exception:
+        return False
+
+
 def fire_slack_notification(client, text):
     """POST a plain-text message to the client's Slack incoming webhook (if configured)."""
     if not client or not client.slack_webhook_url:
@@ -62,16 +85,24 @@ def truncate_chat_history(session, max_active=_MAX_ACTIVE, archive_batch=_ARCHIV
     new ones because the index pointed past the new end).
 
     Returns the list of update_fields that need to be saved.
+
+    Also stamps `last_message_at` — this helper is only ever called right
+    after appending message(s) to chat_history, so it's the canonical place
+    to record true last-message recency for the inbox (see ChatSession.
+    last_message_at). Callers must persist the returned fields.
     """
+    from django.utils import timezone
+    session.last_message_at = timezone.now()
+
     if len(session.chat_history) > max_active:
         overflow = session.chat_history[:archive_batch]
         session.chat_history_archive = (session.chat_history_archive or []) + overflow
         session.chat_history = session.chat_history[archive_batch:]
-        fields = ['chat_history', 'chat_history_archive']
+        fields = ['chat_history', 'chat_history_archive', 'last_message_at']
         if hasattr(session, 'summary_through_index'):
             session.summary_through_index = max(
                 0, (session.summary_through_index or 0) - archive_batch,
             )
             fields.append('summary_through_index')
         return fields
-    return ['chat_history']
+    return ['chat_history', 'last_message_at']
