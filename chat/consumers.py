@@ -233,7 +233,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 s.current_urgency_ema * 0.25
             ) * 100
             s.heat_score = round(min(score, 100), 1)
-            s.save(update_fields=['heat_score'])
+            kanban_fields = ['heat_score']
+            # ── Auto-progress the Kanban funnel from live engagement/heat ──
+            # NEW → ENGAGED (real back-and-forth) → HOT_LEAD (high heat/intent).
+            # CONVERTED is set only on full lead capture; never downgrade past
+            # HOT_LEAD / CONVERTED / LOST here.
+            cur = (s.kanban_state or 'NEW').upper()
+            if cur not in {'CONVERTED', 'HOT_LEAD', 'LOST'}:
+                if s.heat_score >= 60 or (s.current_intent_ema or 0) >= 0.6:
+                    s.kanban_state = 'HOT_LEAD'
+                    kanban_fields.append('kanban_state')
+                elif cur == 'NEW' and (s.message_count or 0) >= 2:
+                    s.kanban_state = 'ENGAGED'
+                    kanban_fields.append('kanban_state')
+            s.save(update_fields=kanban_fields)
 
             # Update Visitor's latest known EMA + carry lead info up.
             # Lifetime totals are computed at query time via Sum() across the

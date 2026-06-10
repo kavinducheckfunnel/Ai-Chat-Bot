@@ -104,9 +104,9 @@
           <div class="sc-sub">widget opened, visitor didn't type</div>
         </div>
         <div class="secondary-card">
-          <div class="sc-label">AI resolution rate</div>
-          <div class="sc-value">{{ val('ai_resolution_rate') }}%</div>
-          <div class="sc-sub">of {{ val('answered_chats') }} answered chats</div>
+          <div class="sc-label">Answered chats</div>
+          <div class="sc-value">{{ val('answered_chats') }}</div>
+          <div class="sc-sub">visitor sent at least one message</div>
         </div>
       </div>
       <div class="secondary-row" v-else-if="canSeeCharts">
@@ -147,15 +147,16 @@
       <div class="section-row" v-if="canSeeCharts">
         <div class="card funnel-card">
           <h3 class="card-title">Lead funnel</h3>
-          <div class="funnel-stages" v-if="!loading">
-            <div class="funnel-stage" v-for="stage in funnel" :key="stage.key">
-              <div class="stage-info">
-                <span class="stage-label">{{ stage.label }}</span>
-                <span class="stage-count" :style="{ color: stage.color }">{{ stage.count }}</span>
+          <div class="funnel-chart" v-if="!loading">
+            <div class="funnel-seg" v-for="(stage, i) in funnel" :key="stage.key">
+              <div class="funnel-seg-head">
+                <span class="funnel-label">{{ stage.label }}</span>
+                <span class="funnel-nums">
+                  <span class="funnel-count" :style="{ color: stage.color }">{{ stage.count }}</span>
+                  <span class="funnel-pct" v-if="i > 0 && funnel[0].count">{{ funnelPct(stage.count) }}%</span>
+                </span>
               </div>
-              <div class="stage-bar-wrap">
-                <div class="stage-bar" :style="{ width: stageWidth(stage.count) + '%', background: stage.color }"></div>
-              </div>
+              <div class="funnel-bar" :style="{ width: funnelWidth(stage.count) + '%', background: stage.color }"></div>
             </div>
           </div>
           <div v-else class="funnel-skeleton"><div class="sk-stage" v-for="n in 4" :key="n"></div></div>
@@ -236,13 +237,13 @@
         </div>
       </div>
 
-      <!-- Placeholder: CSAT, First response, Queue -->
+      <!-- Additional metrics — real, computed values -->
       <div class="card na-card" v-if="!loading">
         <h3 class="card-title">Additional metrics</h3>
-        <div class="na-grid">
-          <div class="na-item" v-for="m in naMetrics" :key="m.label">
+        <div class="na-grid na-grid-2">
+          <div class="na-item" v-for="m in extraMetrics" :key="m.label">
             <div class="na-label">{{ m.label }}</div>
-            <div class="na-value">N/A</div>
+            <div class="na-value na-value-real">{{ m.value }}</div>
             <div class="na-hint">{{ m.hint }}</div>
           </div>
         </div>
@@ -388,7 +389,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, h } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 import { useToast } from '../composables/useToast'
 
@@ -529,9 +530,18 @@ const funnel = computed(() => {
   ]
 })
 
-function stageWidth(count) {
+// Bar width relative to the widest stage so the funnel visibly tapers; a small
+// floor keeps non-zero stages from disappearing to a sliver.
+function funnelWidth(count) {
   const max = Math.max(...funnel.value.map(s => s.count), 1)
-  return Math.round((count / max) * 100)
+  if (!count) return 0
+  return Math.max(Math.round((count / max) * 100), 9)
+}
+// Conversion % relative to the top of the funnel (the "New" stage).
+function funnelPct(count) {
+  const top = funnel.value[0]?.count || 0
+  if (!top) return 0
+  return Math.round((count / top) * 100)
 }
 
 const conversationStates = computed(() => {
@@ -577,12 +587,19 @@ const aiPct = computed(() => Math.round(val('ai_handled') / total.value * 100))
 const manualPct = computed(() => Math.round(val('manual_handled') / total.value * 100))
 const missedPct = computed(() => Math.round(val('missed_chats') / total.value * 100))
 
-const naMetrics = [
-  { label: 'CSAT score',            hint: 'Requires customer survey integration' },
-  { label: 'First response time',   hint: 'Agent timing not yet tracked' },
-  { label: 'Queued customers',      hint: 'Queue system not configured' },
-  { label: 'Chats per hour (AI)',   hint: 'Hourly rate breakdown coming soon' },
-]
+// Real, computed metrics (replaced the old N/A placeholders).
+const extraMetrics = computed(() => [
+  {
+    label: 'AI response time',
+    value: val('ai_response_seconds') ? val('ai_response_seconds') + 's' : '—',
+    hint: 'avg time for the AI to reply',
+  },
+  {
+    label: 'Chats per hour (AI)',
+    value: val('chats_per_hour') || '—',
+    hint: 'throughput during active hours',
+  },
+])
 
 // ── Engagement tab ────────────────────────────────────────────────────────────
 const signals = computed(() => [
@@ -644,9 +661,11 @@ function formatDate(ts) {
 }
 
 // ── Data loading ──────────────────────────────────────────────────────────────
-async function load() {
+async function load(silent = false) {
   if (!props.client) return
-  loading.value = true
+  // Silent refreshes (auto-poll) update the numbers in place without flashing
+  // the skeletons, so the dashboard feels live.
+  if (!silent) loading.value = true
   try {
     const [a, sessions, sub, clicks] = await Promise.all([
       api.getPortalAnalytics(props.client.id, period.value),
@@ -661,7 +680,7 @@ async function load() {
       metricLimit.value = sub.plan.max_dashboard_metrics
     }
   } catch {} finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -677,8 +696,25 @@ async function exportCSV() {
   }
 }
 
-onMounted(load)
-watch(() => props.client, load)
+// ── Live auto-refresh ─────────────────────────────────────────────────────────
+// Poll every 45s so metrics stay current without a manual reload. Pauses while
+// the tab is hidden to avoid pointless background traffic.
+let refreshTimer = null
+function startAutoRefresh() {
+  stopAutoRefresh()
+  refreshTimer = setInterval(() => {
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      load(true)
+    }
+  }, 45000)
+}
+function stopAutoRefresh() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
+}
+
+onMounted(() => { load(); startAutoRefresh() })
+onUnmounted(stopAutoRefresh)
+watch(() => props.client, () => load())
 </script>
 
 <style scoped>
@@ -855,14 +891,19 @@ watch(() => props.client, load)
 /* Section row */
 .section-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
-/* Funnel */
-.funnel-stages { display: flex; flex-direction: column; gap: 12px; }
-.funnel-stage { display: flex; flex-direction: column; gap: 5px; }
-.stage-info { display: flex; justify-content: space-between; align-items: center; }
-.stage-label { font-size: 12px; color: var(--cf-text-muted); }
-.stage-count { font-size: 14px; font-weight: 700; }
-.stage-bar-wrap { height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden; }
-.stage-bar { height: 100%; border-radius: 3px; transition: width 0.5s; }
+/* Funnel — tapered, centered bars so it reads as an actual funnel */
+.funnel-chart { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
+.funnel-seg { display: flex; flex-direction: column; gap: 6px; }
+.funnel-seg-head { display: flex; justify-content: space-between; align-items: baseline; }
+.funnel-label { font-size: 12px; color: var(--cf-text-muted); font-weight: 500; }
+.funnel-nums { display: flex; align-items: baseline; gap: 8px; }
+.funnel-count { font-size: 15px; font-weight: 800; }
+.funnel-pct { font-size: 11px; color: var(--cf-text-muted); font-variant-numeric: tabular-nums; }
+.funnel-bar {
+  height: 26px; margin: 0 auto; border-radius: 7px; min-width: 6px;
+  transition: width 0.5s cubic-bezier(.34,1.2,.64,1);
+  box-shadow: inset 0 -8px 14px rgba(0,0,0,0.12);
+}
 
 .funnel-skeleton { display: flex; flex-direction: column; gap: 12px; }
 .sk-stage { height: 28px; background: #1e293b; border-radius: 6px; }
@@ -904,13 +945,16 @@ watch(() => props.client, load)
 .dur-value { font-size: 32px; font-weight: 700; color: var(--cf-text-primary); letter-spacing: -1px; }
 .dur-delta { font-size: 12px; margin-top: 8px; }
 
-/* N/A placeholders */
+/* Additional metrics */
 .na-card {}
 .na-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.na-grid-2 { grid-template-columns: repeat(2, 1fr); }
 .na-item { background: var(--cf-bg-page); border: 1px solid var(--cf-border-subtle); border-radius: 10px; padding: 14px; }
 .na-label { font-size: 11px; color: var(--cf-text-muted); font-weight: 500; margin-bottom: 6px; }
 .na-value { font-size: 22px; font-weight: 700; color: var(--cf-text-muted); }
-.na-hint  { font-size: 10px; color: #1e293b; margin-top: 5px; line-height: 1.4; }
+.na-value-real { color: var(--cf-text-primary); }
+.na-hint  { font-size: 10px; color: var(--cf-text-muted); margin-top: 5px; line-height: 1.4; }
+@media (max-width: 560px) { .na-grid, .na-grid-2 { grid-template-columns: 1fr 1fr; } }
 
 /* Recent sessions */
 .recent-card {

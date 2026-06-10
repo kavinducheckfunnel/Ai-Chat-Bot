@@ -523,14 +523,22 @@ def capture_lead(request):
     if phone:
         session.lead_phone = phone
 
-    # ── Auto-promote to HOT_LEAD on lead capture when intent/heat is high ──
-    # Receiving the contact info itself is a strong intent signal — combined
-    # with EMA we promote so the tenant sees the right column on the Kanban
-    # without manual triage.
+    # ── Kanban promotion on lead capture ──────────────────────────────────
+    # A fully-captured lead (BOTH email and phone) is treated as Converted —
+    # the visitor handed over their contact details, which is the conversion
+    # event for this funnel. This is what surfaces them in the Customers
+    # "Converted" tab and the dashboard funnel's Converted bucket.
+    # A partial capture (only one of email/phone) with strong intent/heat is
+    # promoted to HOT_LEAD instead so the tenant still sees it prioritised.
     promoted = False
+    cur_state = (session.kanban_state or '').upper()
+    has_full_contact = bool(session.lead_email and session.lead_phone)
     heat = session.heat_score or 0
     intent = session.current_intent_ema or 0
-    if (heat >= 60 or intent >= 0.6) and (session.kanban_state or '').upper() in {'NEW', 'CONTACTED', 'QUALIFIED'}:
+    if has_full_contact and cur_state not in {'CONVERTED', 'LOST'}:
+        session.kanban_state = 'CONVERTED'
+        promoted = True
+    elif (heat >= 60 or intent >= 0.6) and cur_state in {'NEW', 'ENGAGED', 'CONTACTED', 'QUALIFIED'}:
         session.kanban_state = 'HOT_LEAD'
         promoted = True
 

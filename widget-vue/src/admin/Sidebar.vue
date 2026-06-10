@@ -323,4 +323,18 @@ function returnFromImpersonation() {
 .return-btn:hover {
   background: rgba(234,179,8,0.35);
 }
+
+/* Light mode: pale-yellow vanishes on the white sidebar — use stronger amber. */
+[data-theme="light"] .impersonate-banner {
+  background: rgba(217,119,6,0.12);
+  border-color: rgba(217,119,6,0.4);
+}
+[data-theme="light"] .impersonate-label { color: #b45309; }
+[data-theme="light"] .impersonate-name  { color: #92400e; }
+[data-theme="light"] .return-btn {
+  background: #d97706;
+  border-color: #b45309;
+  color: #ffffff;
+}
+[data-theme="light"] .return-btn:hover { background: #b45309; }
 </style>

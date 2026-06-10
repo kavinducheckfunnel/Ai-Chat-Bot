@@ -1501,6 +1501,16 @@ def session_send_message(request, session_id):
     session.chat_history = history
     from chat.utils import truncate_chat_history
     update_fields = truncate_chat_history(session)
+    # Auto-takeover: the moment an admin replies by hand, flag the session as
+    # human-handled so it is NOT counted toward the AI resolution rate. Without
+    # this, god-view replies were silently scored as "AI handled" (inflating the
+    # rate to 100%). Set only once so we don't thrash the field.
+    if not session.takeover_active or session.taken_over_by_id is None:
+        session.takeover_active = True
+        session.taken_over_by = request.user
+        for f in ('takeover_active', 'taken_over_by'):
+            if f not in update_fields:
+                update_fields.append(f)
     session.save(update_fields=update_fields)
 
     channel = session.channel or 'website'
@@ -1658,6 +1668,35 @@ def client_analytics(request, client_id):
     curr = get_metrics(sessions)
     prev = get_metrics(prev_sessions)
 
+    # ── Real AI response time (avg LLM latency) ───────────────────────────────
+    # Computed from the per-call LLMCallLog latency, not faked. Successful
+    # calls only, in the current period. Returned in seconds (1 decimal).
+    from chat.models import LLMCallLog
+    from django.db.models.functions import TruncHour
+
+    def _ai_response_seconds(start, end=None):
+        qs = LLMCallLog.objects.filter(client=client, status='ok', created_at__gte=start)
+        if end is not None:
+            qs = qs.filter(created_at__lt=end)
+        avg_ms = qs.aggregate(a=Avg('latency_ms'))['a']
+        return round((avg_ms or 0) / 1000.0, 1)
+
+    # ── Chats per active hour (throughput) ────────────────────────────────────
+    # active sessions ÷ number of distinct clock-hours that saw activity. Avoids
+    # diluting by idle overnight hours, so it reflects real busy-hour throughput.
+    def _chats_per_hour(qs):
+        active = qs.filter(message_count__gte=1)
+        active_total = active.count()
+        distinct_hours = (
+            active.annotate(h=TruncHour('created_at')).values('h').distinct().count()
+        )
+        return round(active_total / distinct_hours, 1) if distinct_hours else 0
+
+    ai_response_seconds = _ai_response_seconds(period_start)
+    ai_response_seconds_prev = _ai_response_seconds(prev_start, prev_end)
+    chats_per_hour = _chats_per_hour(sessions)
+    chats_per_hour_prev = _chats_per_hour(prev_sessions)
+
     # ── Funnel + EMA (current period) ─────────────────────────────────────────
     state_counts = sessions.values('conversation_state').annotate(count=Count('session_id'))
     funnel = {item['conversation_state']: item['count'] for item in state_counts}
@@ -1726,6 +1765,9 @@ def client_analytics(request, client_id):
         'total_duration_seconds': metric_obj(curr['total_dur_s'], prev['total_dur_s']),
         'leads_captured':        metric_obj(curr['leads'], prev['leads']),
         'hot_sessions':          metric_obj(curr['hot'], prev['hot']),
+        # Real, computed replacements for the old N/A placeholder cards.
+        'ai_response_seconds':   metric_obj(ai_response_seconds, ai_response_seconds_prev),
+        'chats_per_hour':        metric_obj(chats_per_hour, chats_per_hour_prev),
         'avg_heat_score':        curr['avg_heat'],
         'heat_distribution':     {'hot': curr['hot'], 'warm': curr['warm'], 'cold': curr['cold']},
 
@@ -2288,6 +2330,8 @@ def tenant_detail(request, tenant_id):
         if 'plan_id' in request.data:
             try:
                 tenant.plan = Plan.objects.get(pk=request.data['plan_id'])
+                # Manual override — keep Stripe webhooks from reverting it.
+                tenant.manual_plan_override = True
             except Plan.DoesNotExist:
                 return Response({'detail': 'Plan not found.'}, status=400)
         if 'client_ids' in request.data:
@@ -2414,7 +2458,10 @@ def assign_plan(request, tenant_id):
     )
 
     tenant.plan = new_plan
-    tenant.save(update_fields=['plan'])
+    # Manual assignment is an admin override — protect it from being reverted
+    # by a stale/retried Stripe webhook (see manual_plan_override docstring).
+    tenant.manual_plan_override = True
+    tenant.save(update_fields=['plan', 'manual_plan_override'])
     return Response({
         'detail': f'Plan "{new_plan.name}" assigned.',
         'plan': new_plan.name,

@@ -312,6 +312,22 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
 }
 .return-btn:hover { background: rgba(234,179,8,0.28); }
 
+/* Light mode: the pale-yellow text/borders vanish on the white sidebar.
+   Use a stronger amber on a warmer fill so the banner + Return button stay
+   clearly visible. */
+[data-theme="light"] .impersonate-banner {
+  background: rgba(217,119,6,0.12);
+  border-color: rgba(217,119,6,0.4);
+}
+[data-theme="light"] .impersonate-label { color: #b45309; }
+[data-theme="light"] .impersonate-name  { color: #92400e; }
+[data-theme="light"] .return-btn {
+  background: #d97706;
+  border-color: #b45309;
+  color: #ffffff;
+}
+[data-theme="light"] .return-btn:hover { background: #b45309; }
+
 .sidebar-bottom {
   display: flex;
   align-items: center;

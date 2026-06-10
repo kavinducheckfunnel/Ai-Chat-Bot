@@ -259,6 +259,11 @@ class TenantProfile(models.Model):
     stripe_customer_id = models.CharField(max_length=100, blank=True, null=True)
     stripe_subscription_id = models.CharField(max_length=100, blank=True, null=True)
     stripe_subscription_status = models.CharField(max_length=50, blank=True, null=True)
+    # When a super-admin assigns a plan by hand (comp/trial/override), set this
+    # so automated Stripe webhook handlers won't silently revert the plan to
+    # Free off a stale/retried `customer.subscription.*` event. A genuine new
+    # Stripe checkout clears it again.
+    manual_plan_override = models.BooleanField(default=False)
     trial_ends_at = models.DateTimeField(blank=True, null=True)
     billing_interval = models.CharField(
         max_length=10, default='monthly',

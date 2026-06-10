@@ -318,7 +318,9 @@ def _handle_checkout_completed(session):
     tenant.plan = plan
     tenant.stripe_subscription_id = subscription_id
     tenant.stripe_subscription_status = 'active'
-    tenant.save(update_fields=['plan', 'stripe_subscription_id', 'stripe_subscription_status'])
+    # A real paid checkout supersedes any manual override.
+    tenant.manual_plan_override = False
+    tenant.save(update_fields=['plan', 'stripe_subscription_id', 'stripe_subscription_status', 'manual_plan_override'])
     logger.info(f'[billing] Tenant {tenant_id} subscribed to plan {plan.name}')
 
 
@@ -332,6 +334,13 @@ def _handle_subscription_updated(subscription):
         return
 
     tenant.stripe_subscription_status = status
+    # If a super-admin has manually overridden this tenant's plan, never let a
+    # Stripe event change the plan — only refresh the status for visibility.
+    if tenant.manual_plan_override:
+        tenant.save(update_fields=['stripe_subscription_status'])
+        logger.info(f'[billing] Subscription {sub_id} updated → status={status} (plan kept: manual override)')
+        return
+
     # If subscription was reactivated and plan changed, re-resolve via price
     items = subscription.get('items', {}).get('data', [])
     if items:
@@ -351,6 +360,14 @@ def _handle_subscription_deleted(subscription):
     try:
         tenant = TenantProfile.objects.get(stripe_subscription_id=sub_id)
     except TenantProfile.DoesNotExist:
+        return
+
+    # A super-admin manual override must survive a stale/retried delete event.
+    # This is the bug where a hand-assigned plan reverted to Free minutes later.
+    if tenant.manual_plan_override:
+        tenant.stripe_subscription_status = 'canceled'
+        tenant.save(update_fields=['stripe_subscription_status'])
+        logger.info(f'[billing] Subscription {sub_id} delete ignored for plan revert (manual override) tenant {tenant.pk}')
         return
 
     tenant.stripe_subscription_status = 'canceled'
