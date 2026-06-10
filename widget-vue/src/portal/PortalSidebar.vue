@@ -220,7 +220,24 @@ function returnFromImpersonation() { api.returnFromImpersonation() }
   text-overflow: ellipsis;
 }
 
-.nav { flex: 1; display: flex; flex-direction: column; gap: 1px; }
+/* flex:1 fills the space between brand (top) and the user/theme footer
+   (bottom); min-height:0 + overflow-y let the nav list SCROLL when there are
+   more items than fit the viewport, instead of being clipped (the app shell
+   is height:100vh; overflow:hidden, so without this the bottom items were
+   unreachable on short screens). */
+.nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--cf-sidebar-border) transparent;
+}
+.nav::-webkit-scrollbar { width: 5px; }
+.nav::-webkit-scrollbar-thumb { background: var(--cf-sidebar-border); border-radius: 4px; }
 
 .nav-section {
   font-size: 10px;

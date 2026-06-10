@@ -78,7 +78,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         # when the feature flag is off, but a hand-crafted WS frame could
         # still slip a payload through. Strip it server-side so untrusted
         # clients can't bypass the flag and force LLM image calls. ─────
-        if image_data and not await self._client_allows_image(session.client):
+        if image_data and not await self._client_allows_image(session):
             import logging as _log
             _log.getLogger(__name__).info(
                 f'[ws] image_data stripped — client {session.client_id} '
@@ -575,16 +575,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
             session.save(update_fields=['behavioral_context'])
 
     @database_sync_to_async
-    def _client_allows_image(self, client):
-        """Is image upload allowed for this client's visitor?
+    def _client_allows_image(self, session):
+        """Is image upload allowed for this session's client?
 
         Auto-enabled per plan: any tenant whose plan includes image input
         (Growth and up) gets it without flipping the per-client toggle. The
         explicit client toggle still works as an override for plans that
         don't include it (e.g. a one-off grant on Starter).
+
+        Takes the SESSION (not session.client) so the FK + plan lookups run
+        inside this sync DB context — touching session.client from the async
+        receive() coroutine triggers a lazy query and SynchronousOnlyOperation.
         """
         from .utils import client_allows_image
-        return client_allows_image(client)
+        return client_allows_image(session.client)
 
     @database_sync_to_async
     def get_session(self, client_id, session_id):
