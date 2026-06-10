@@ -813,20 +813,51 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
                         inner = inner.split('\n', 1)[1]
                     text = inner.strip()
             text = text.strip('"').strip("'").strip()
-            if not text:
-                raise ValueError('Empty image reply from LLM')
-            # Synthesise the rest of the schema. Intent/budget/urgency come
-            # from the keyword floors below (max() against these defaults
-            # in step 6) so a purchase phrase in the visitor's message
-            # still moves the EMAs even though the LLM didn't score.
-            result = {
-                'reply_text': text,
-                'intent_score': 0.5,
-                'budget_score': 0.5,
-                'urgency_score': 0.5,
-                'suggested_product_id': None,
-                'quick_replies': [],
-            }
+            # Vision models often IGNORE the "plain text, no JSON" instruction
+            # and return the normal scoring object anyway. If so, pull the
+            # fields out — otherwise the visitor sees a raw JSON blob.
+            parsed_obj = None
+            if text.startswith('{') and 'reply_text' in text:
+                try:
+                    import json as _json
+                    cand = _json.loads(text)
+                    if isinstance(cand, dict) and cand.get('reply_text'):
+                        parsed_obj = cand
+                except Exception:
+                    parsed_obj = None
+
+            def _score(v, d=0.5):
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return d
+
+            if parsed_obj:
+                result = {
+                    'reply_text': str(parsed_obj.get('reply_text') or '').strip(),
+                    'intent_score': _score(parsed_obj.get('intent_score')),
+                    'budget_score': _score(parsed_obj.get('budget_score')),
+                    'urgency_score': _score(parsed_obj.get('urgency_score')),
+                    'suggested_product_id': parsed_obj.get('suggested_product_id'),
+                    'quick_replies': parsed_obj.get('quick_replies') or [],
+                }
+                if not result['reply_text']:
+                    raise ValueError('Empty image reply from LLM')
+            else:
+                if not text:
+                    raise ValueError('Empty image reply from LLM')
+                # Synthesise the rest of the schema. Intent/budget/urgency come
+                # from the keyword floors below (max() against these defaults
+                # in step 6) so a purchase phrase in the visitor's message
+                # still moves the EMAs even though the LLM didn't score.
+                result = {
+                    'reply_text': text,
+                    'intent_score': 0.5,
+                    'budget_score': 0.5,
+                    'urgency_score': 0.5,
+                    'suggested_product_id': None,
+                    'quick_replies': [],
+                }
         else:
             # Strip markdown code fences if model wraps output
             if '```json' in content:
