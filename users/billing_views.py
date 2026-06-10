@@ -63,6 +63,8 @@ def public_plans(request):
             'allow_image_input': p.allow_image_input,
             'allow_real_time_inventory': p.allow_real_time_inventory,
             'allow_custom_domain': p.allow_custom_domain,
+            'allow_god_view': p.allow_god_view,
+            'allow_csv_export': p.allow_csv_export,
             'remove_branding': p.remove_branding,
             'allow_advanced_reports': p.allow_advanced_reports,
             'priority_support': p.priority_support,

@@ -191,6 +191,46 @@
       <!-- Error -->
       <div v-if="error" class="error-msg">{{ error }}</div>
 
+      <!-- ── Full feature comparison (mirrors the pricing doc) ───────────── -->
+      <div class="compare-section" v-if="plans.length">
+        <h3 class="section-heading">Compare all features</h3>
+        <div class="compare-wrap">
+          <table class="compare-table">
+            <thead>
+              <tr>
+                <th class="cmp-feature-h">Feature</th>
+                <th
+                  v-for="p in plans"
+                  :key="p.id"
+                  :class="{ 'cmp-col-current': isCurrentPlan(p), 'cmp-col-popular': p.name === 'Growth' }"
+                >
+                  {{ p.name }}
+                  <span v-if="p.name === 'Growth'" class="cmp-pop-badge">Popular</span>
+                  <span v-if="isCurrentPlan(p)" class="cmp-cur-badge">Your plan</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in compareRows" :key="row.label">
+                <td class="cmp-feature">{{ row.label }}</td>
+                <td
+                  v-for="p in plans"
+                  :key="p.id"
+                  :class="{ 'cmp-col-current': isCurrentPlan(p) }"
+                  v-html="row.cell(p)"
+                ></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="compare-note">
+          A “message” is one AI-generated response — human replies during Live Chat Takeover don’t count.
+          Annual billing saves 15% (2 months free). Omnichannel (WhatsApp + Facebook) needs a Meta
+          Developer App. Need add-ons or a custom feature?
+          <a href="mailto:sales@checkfunnel.com?subject=Add-on%20/%20custom%20request">Contact our team.</a>
+        </p>
+      </div>
+
       <!-- ── FAQ ─────────────────────────────────────────────────────────── -->
       <div class="faq-section">
         <h3 class="section-heading">FAQ</h3>
@@ -359,6 +399,44 @@ function planFeatures(plan) {
   if (plan.remove_branding) feats.push('White-label branding')
   return feats
 }
+
+// ── Full feature comparison matrix (pricing doc Section 4) ──────────────────
+// Data-driven from the plan objects so it always matches what's seeded.
+function cmpTick(on) {
+  return on
+    ? '<span class="cmp-yes">✓</span>'
+    : '<span class="cmp-no">—</span>'
+}
+function crmCell(plan) {
+  if (!plan.allow_hubspot) return cmpTick(false)
+  if (plan.name === 'Enterprise') return 'Custom'
+  if (plan.allow_advanced_reports) return 'Webhook + Direct HubSpot Sync'
+  return 'Webhook (HubSpot, Zapier…)'
+}
+function webChannelsCell(plan) {
+  const s = plan.max_social_channels
+  if (s === 0 || s == null) return 'Website only'
+  if (s === 1) return 'Website + 1 social'
+  if (s < 0 && plan.name === 'Enterprise') return 'All channels'
+  return 'Website + omnichannel'
+}
+const compareRows = [
+  { label: 'Monthly messages',           cell: p => formatLimit(p.max_messages_per_month) },
+  { label: 'Chatbots included',          cell: p => formatLimit(p.max_clients) },
+  { label: 'Web channels',               cell: p => webChannelsCell(p) },
+  { label: 'CRM integrations',           cell: p => crmCell(p) },
+  { label: 'BYOK support',               cell: p => p.allow_byok ? (p.allow_advanced_reports || p.name === 'Enterprise' ? cmpTick(true) : cmpTick(true) + ' <span class="cmp-opt">optional</span>') : cmpTick(false) },
+  { label: 'Voice command widget',       cell: p => cmpTick(p.allow_voice_input) },
+  { label: 'Image upload for questions', cell: p => cmpTick(p.allow_image_input) },
+  { label: 'Live chat takeover',         cell: p => cmpTick(p.allow_god_view) },
+  { label: 'Real-time inventory sync',   cell: p => cmpTick(p.allow_real_time_inventory) },
+  { label: 'Custom website integration', cell: p => cmpTick(p.allow_custom_domain) },
+  { label: 'Custom internal DB',         cell: p => cmpTick(p.name === 'Enterprise') },
+  { label: 'White-label branding',       cell: p => cmpTick(p.remove_branding) },
+  { label: 'Support',                    cell: p => supportLabel(p) },
+  { label: 'Reports / exports',          cell: p => reportsLabel(p) },
+  { label: 'Data retention',             cell: p => retentionLabel(p) },
+]
 function formatPrice(p) {
   const n = parseFloat(p)
   if (isNaN(n)) return '—'
@@ -946,6 +1024,60 @@ async function openPortal() {
 /* Error */
 .error-msg { background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); border-radius: 10px; padding: 12px 16px; color: #fca5a5; font-size: 13px; margin-bottom: 16px; }
 
+/* ── Feature comparison matrix ─────────────────────────────────────────── */
+.compare-section { margin: 28px 0 8px; }
+.compare-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--cf-border-subtle);
+  border-radius: 14px;
+  background: var(--cf-bg-surface-raised);
+}
+.compare-table { width: 100%; min-width: 600px; border-collapse: collapse; }
+.compare-table th,
+.compare-table td {
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 13px;
+  border-bottom: 1px solid var(--cf-border-subtle);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.compare-table tbody tr:last-child td { border-bottom: none; }
+.compare-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--cf-bg-surface);
+  font-size: 12px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--cf-text-secondary);
+}
+/* Sticky first column so the feature name stays visible while scrolling. */
+.cmp-feature, .cmp-feature-h {
+  position: sticky; left: 0; z-index: 1;
+  background: var(--cf-bg-surface-raised);
+  color: var(--cf-text-primary); font-weight: 500;
+}
+.compare-table thead .cmp-feature-h { background: var(--cf-bg-surface); z-index: 2; }
+.cmp-col-current { background: rgba(99,102,241,0.07); }
+.compare-table thead th.cmp-col-current { background: rgba(99,102,241,0.12); }
+.cmp-col-popular { color: #a5b4fc; }
+.cmp-pop-badge, .cmp-cur-badge {
+  display: inline-block; margin-left: 6px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.03em;
+  padding: 2px 6px; border-radius: 5px; vertical-align: middle;
+  text-transform: none;
+}
+.cmp-pop-badge { background: rgba(99,102,241,0.18); color: #a5b4fc; }
+.cmp-cur-badge { background: rgba(34,197,94,0.15); color: #4ade80; }
+:deep(.cmp-yes) { color: #22c55e; font-weight: 700; }
+:deep(.cmp-no) { color: var(--cf-text-muted); }
+:deep(.cmp-opt) { font-size: 11px; color: var(--cf-text-muted); font-weight: 400; }
+.compare-note {
+  font-size: 12px; color: var(--cf-text-muted);
+  margin: 12px 2px 0; line-height: 1.6;
+}
+.compare-note a { color: #a5b4fc; }
+
 /* FAQ */
 .faq-section { margin-top: 8px; }
 .faq-list { display: flex; flex-direction: column; gap: 1px; }
@@ -1284,6 +1416,9 @@ async function openPortal() {
 @media (max-width: 768px) {
   .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
   .current-plan-card { flex-direction: column; }
+  .billing-page { padding: 20px 16px; }
+  .interval-toggle-wrap { flex-direction: column; align-items: stretch; gap: 12px; }
+  .cp-price { font-size: 24px; }
 }
 
 /* Phone-width tightening for the invoice list — labels, totals, and
