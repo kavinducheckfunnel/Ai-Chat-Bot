@@ -173,32 +173,36 @@
 #cf-pby a { color: rgba(255,255,255,0.3); text-decoration: none; }
 
 /* ── Inline lead capture — slides up INSIDE the chat panel ─────── */
-#cf-lead { padding: 13px 14px 14px;
+#cf-lead { padding: 14px 14px 15px;
   border-top: 1px solid var(--cf-border-soft);
   background: var(--cf-bg-elev);
   display: none; animation: cf-leadslide .28s cubic-bezier(.34,1.56,.64,1); }
 #cf-lead.show { display: block; }
 @keyframes cf-leadslide { from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); } }
-.cf-lead-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
-.cf-lead-ttl { font-size: 13px; font-weight: 600; color: var(--cf-text-strong); letter-spacing: -.1px; }
-#cf-lead-cls { background: rgba(255,255,255,0.06); border: none; color: var(--cf-text-muted);
-  cursor: pointer; padding: 0; font-size: 11px; line-height: 1;
+.cf-lead-head { display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 10px; margin-bottom: 12px; }
+.cf-lead-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cf-lead-ttl { font-size: 13.5px; font-weight: 600; color: var(--cf-text-strong);
+  letter-spacing: -.1px; line-height: 1.25; }
+.cf-lead-sub { font-size: 11.5px; color: var(--cf-text-muted); line-height: 1.4; }
+#cf-lead-cls { background: transparent; border: none; color: var(--cf-text-muted);
+  cursor: pointer; padding: 0; font-size: 13px; line-height: 1; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: 50%;
-  transition: background .15s; }
-#cf-lead-cls:hover { background: rgba(255,255,255,0.12); color: var(--cf-text-strong); }
-.cf-lead-row { display: flex; gap: 7px; align-items: stretch; }
-.cf-lead-inp { flex: 1; padding: 10px 14px; height: 38px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 19px; font-size: 13px; color: var(--cf-text);
+  width: 24px; height: 24px; border-radius: 7px; margin: -2px -2px 0 0;
+  transition: background .15s, color .15s; }
+#cf-lead-cls:hover { background: rgba(255,255,255,0.08); color: var(--cf-text-strong); }
+.cf-lead-inp { width: 100%; height: 42px; padding: 0 14px;
+  background: rgba(255,255,255,0.045);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 11px; font-size: 13.5px; color: var(--cf-text);
   outline: none; box-sizing: border-box; font-family: inherit; line-height: 1.3;
   transition: border-color .15s, background .15s;
   /* Prevent browser autofill from painting the input white on dark themes */
   -webkit-text-fill-color: var(--cf-text); }
-.cf-lead-inp:focus { border-color: var(--cf-accent); background: rgba(255,255,255,0.09); }
-.cf-lead-inp::placeholder { color: rgba(255,255,255,0.55); opacity: 1; }
+.cf-lead-inp:focus { border-color: var(--cf-accent); background: rgba(255,255,255,0.07); }
+.cf-lead-inp::placeholder { color: rgba(255,255,255,0.4); opacity: 1; }
+#cf-lead-em { margin-bottom: 9px; }
 /* Kill the yellow/white autofill background so the dark theme stays dark.
    The inset box-shadow trick is how WebKit lets us override autofill bg. */
 .cf-lead-inp:-webkit-autofill,
@@ -210,25 +214,25 @@
   caret-color: var(--cf-text) !important;
   transition: background-color 5000s ease-in-out 0s;
 }
-.cf-lead-btn { background: var(--cf-accent); border: none; border-radius: 19px;
-  padding: 0 20px; height: 38px; min-width: 78px;
-  font-size: 13px; font-weight: 600; color: #fff;
+.cf-lead-btn { width: 100%; height: 42px; background: var(--cf-accent); border: none;
+  border-radius: 11px; font-size: 13.5px; font-weight: 600; color: #fff;
   cursor: pointer; font-family: inherit; transition: opacity .15s, transform .1s;
   white-space: nowrap; box-sizing: border-box;
   display: inline-flex; align-items: center; justify-content: center; }
-.cf-lead-btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
+.cf-lead-btn:hover:not(:disabled) { opacity: .92; transform: translateY(-1px); }
 .cf-lead-btn:disabled { opacity: .5; cursor: not-allowed; }
-/* Full-width Send on its own row — keeps email + phone fields aligned to
-   the same width instead of the phone field being shortened by the button. */
-.cf-lead-btn-full { width: 100%; margin-top: 9px; }
-/* +94 country-code affix on the phone row */
+/* Phone field — the +94 affix is joined seamlessly to the input so it reads
+   as one control instead of two disconnected pills. */
+.cf-lead-phone { display: flex; align-items: stretch; margin-bottom: 12px; }
 .cf-lead-cc { display: inline-flex; align-items: center; justify-content: center;
-  height: 38px; padding: 0 11px; flex-shrink: 0;
-  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 19px; font-size: 13px; font-weight: 600; color: var(--cf-text-muted);
-  box-sizing: border-box; }
-.cf-lead-ph { letter-spacing: .5px; }
-.cf-lead-err { font-size: 11px; color: #f87171; min-height: 0; margin: 4px 2px 0;
+  height: 42px; padding: 0 12px; flex-shrink: 0;
+  background: rgba(255,255,255,0.07);
+  border: 1px solid rgba(255,255,255,0.1); border-right: none;
+  border-radius: 11px 0 0 11px; font-size: 13px; font-weight: 600;
+  color: var(--cf-text-muted); box-sizing: border-box; }
+.cf-lead-phone .cf-lead-ph { border-radius: 0 11px 11px 0; letter-spacing: .3px; }
+.cf-lead-phone:focus-within .cf-lead-cc { border-color: var(--cf-accent); }
+.cf-lead-err { font-size: 11px; color: #f87171; min-height: 0; margin: 7px 2px 0;
   line-height: 1.4; }
 #cf-w[data-cf-theme="light"] .cf-lead-cc { background: #f1f5f9; border-color: #e2e8f0; color: #64748b; }
 
@@ -350,17 +354,18 @@
 <div id="cf-imgprev"><div class="cf-prev-wrap"><img class="cf-prev-thumb" id="cf-pt" src="" alt="" width="52" height="52"/><button class="cf-prev-rm" id="cf-prm">&#10005;</button></div></div>
 <div id="cf-lead">
   <div class="cf-lead-head">
-    <span class="cf-lead-ttl">Want a personalised follow-up?</span>
+    <div class="cf-lead-titles">
+      <span class="cf-lead-ttl">Get a personalised follow-up</span>
+      <span class="cf-lead-sub">Leave your details and our team will reach out.</span>
+    </div>
     <button id="cf-lead-cls" aria-label="Dismiss">&#10005;</button>
   </div>
-  <div class="cf-lead-row">
-    <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="Email address"/>
-  </div>
-  <div class="cf-lead-row" style="margin-top:7px">
+  <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="you@email.com"/>
+  <div class="cf-lead-phone">
     <span class="cf-lead-cc">+94</span>
-    <input class="cf-lead-inp cf-lead-ph" id="cf-lead-ph" type="tel" inputmode="tel" maxlength="20" placeholder="77 123 4567 — or +1, +44…"/>
+    <input class="cf-lead-inp cf-lead-ph" id="cf-lead-ph" type="tel" inputmode="tel" maxlength="20" placeholder="Phone number (optional)"/>
   </div>
-  <button class="cf-lead-btn cf-lead-btn-full" id="cf-lead-sb">Send my details</button>
+  <button class="cf-lead-btn" id="cf-lead-sb">Send my details</button>
   <div class="cf-lead-err" id="cf-lead-err"></div>
 </div>
 <div id="cf-foot">
@@ -815,6 +820,10 @@ setTimeout(ensureConnect,1500);
 function send(){
   var text=$('cf-inp').value.trim();
   if((!text&&!pendingImg)||busy)return;
+  // Capture the attached image BEFORE clearImg() wipes it — it must travel in
+  // the payload below. Without this the image rendered in the chat but was
+  // never sent to the server, so the AI replied "I can't see the image".
+  var img=pendingImg;
   if(pendingImg){bubble(pendingImg,'img');clearImg()}
   var msg=text||'[User sent an image]';
   bubble(escHtml(msg),'me');
@@ -824,7 +833,9 @@ function send(){
   // Tag with a client msg_id so when the server echoes this message to the
   // session group (for other tabs), THIS tab dedupes and doesn't re-render it.
   var mid=newMsgId();markSeen(mid);
-  var pl=JSON.stringify({message:msg,msg_id:mid,behavior_matrix:behavior,page_visits:buildPageVisits()});
+  var payload={message:msg,msg_id:mid,behavior_matrix:behavior,page_visits:buildPageVisits()};
+  if(img)payload.image_data=img;
+  var pl=JSON.stringify(payload);
   if(ws&&ws.readyState===1){ws.send(pl)}
   else{connect();ws.addEventListener('open',function(){ws.send(pl)},{once:true})}}
 
