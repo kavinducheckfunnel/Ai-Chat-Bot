@@ -601,6 +601,81 @@ def _maybe_promote_kanban(session) -> bool:
     return False
 
 
+import re as _re
+
+# "List everything you sell" type queries. Normal RAG retrieval only returns
+# the top-K nearest chunks (5-10), so the bot would list ~5 products and look
+# like the catalogue is tiny. When one of these matches we inject the FULL
+# product list into context so the bot can list them all.
+_CATALOG_PATTERNS = _re.compile(
+    r'\b('
+    r'list (all|your|the|every|out)|show (all|me all|me your|me every|everything)|'
+    r'all (your |the )?(products|items|stock)|'
+    r'(full|entire|complete|whole) (product |item )?(list|catalog|catalogue|range|collection|inventory)|'
+    r'what (products|items|do you (sell|have|offer|stock|carry))|'
+    r'everything you (sell|have|offer|stock|carry)|'
+    r'(product|item|catalog|catalogue) list|'
+    r'what (kinds?|types?|range) of (products|items)|'
+    r'(give|show) me (a |the )?(product |full )?(list|catalog|catalogue)'
+    r')\b',
+    _re.IGNORECASE,
+)
+
+
+def _is_catalog_query(msg):
+    return bool(msg) and bool(_CATALOG_PATTERNS.search(msg))
+
+
+class _CatalogChunk:
+    """Lightweight stand-in for a DocumentChunk so build_prompt can render the
+    injected catalogue with the same [Source Title]/[Source URL]/content shape.
+    """
+    def __init__(self, content, title='Full product catalog', url=''):
+        self.content = content
+        self.source_url = url
+        self.metadata = {'title': title, 'type': 'catalog'}
+
+
+def _build_catalog_chunk(client_id, website_domain=''):
+    """Compose a compact 'all products' block (name — price — url), de-duped by
+    product name so duplicated Shopify handles don't list the same item twice.
+    Returns a _CatalogChunk or None when there are no products.
+    """
+    qs = DocumentChunk.objects.filter(client_id=client_id, metadata__type='product')
+    try:
+        qs = qs.exclude(metadata__is_active=False)
+    except Exception:
+        pass
+    rows, seen = [], set()
+    for ch in qs.only('content', 'source_url', 'metadata'):
+        md = ch.metadata if isinstance(ch.metadata, dict) else {}
+        title = (md.get('title') or '').strip()
+        key = title.lower()
+        if not title or key in seen:
+            continue
+        seen.add(key)
+        price = (md.get('price_display') or '').strip()
+        url = ch.source_url or ''
+        line = f'- {title}'
+        if price:
+            line += f' — {price}'
+        if url:
+            line += f' — {url}'
+        rows.append(line)
+        if len(rows) >= 100:
+            break
+    if not rows:
+        return None
+    header = (
+        f'COMPLETE PRODUCT CATALOGUE — these are ALL {len(rows)} products currently '
+        f'available on the store. When the visitor asks to list or show all products, '
+        f'list EVERY item below (you may number them and group sensibly, but do NOT '
+        f'omit items or imply the catalogue is only a handful). Keep each product\'s '
+        f'name as a markdown link to its URL.\n\n'
+    )
+    return _CatalogChunk(header + '\n'.join(rows), 'Full product catalogue', website_domain)
+
+
 def generate_ai_response(session, user_message, behavior_matrix, image_data=None):
     """
     Generate an AI response for a chat session.
@@ -704,9 +779,21 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     # is honoured instead of the bot looping on the first-browsed product.
     current_focus = detect_current_focus(session, top_chunks, user_message)
 
+    # Catalogue-listing intent ("list all products"): normal top-K retrieval
+    # only surfaces a handful of chunks, so prepend a full product list so the
+    # bot can enumerate the whole catalogue instead of just the nearest few.
+    prompt_chunks = list(top_chunks)
+    if user_message and not image_data and session.client_id and _is_catalog_query(user_message):
+        try:
+            cat = _build_catalog_chunk(session.client_id, client_domain)
+            if cat:
+                prompt_chunks = [cat] + prompt_chunks
+        except Exception as e:
+            logger.warning(f'[ai] catalog injection failed: {e}')
+
     system_prompt, user_prompt, static_system, dynamic_system = build_prompt(
         session.conversation_state,
-        top_chunks,
+        prompt_chunks,
         enriched_behavior,
         session.chat_history,
         user_message,
