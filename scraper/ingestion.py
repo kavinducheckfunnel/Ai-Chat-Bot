@@ -537,10 +537,48 @@ def _shopify_paginate(api_url, key, site_url, max_pages=40, limit=250):
     return out
 
 
+# Common currency symbols so prices read naturally. Anything not listed
+# falls back to the ISO code ("LKR 170.00") rather than a wrong "$".
+_CURRENCY_SYMBOLS = {
+    'USD': '$', 'EUR': '€', 'GBP': '£', 'INR': '₹', 'LKR': 'Rs ',
+    'AUD': 'A$', 'CAD': 'C$', 'SGD': 'S$', 'NZD': 'NZ$', 'JPY': '¥',
+    'AED': 'AED ', 'PHP': '₱', 'MYR': 'RM ', 'THB': '฿', 'ZAR': 'R ',
+    'PKR': 'Rs ', 'BDT': '৳', 'NPR': 'Rs ', 'IDR': 'Rp ', 'VND': '₫',
+    'KRW': '₩', 'CNY': '¥', 'HKD': 'HK$', 'BRL': 'R$', 'MXN': 'MX$',
+}
+
+
+def _shop_currency(base):
+    """Read the store's currency code from /meta.json (e.g. 'LKR').
+
+    Shopify's public products.json returns bare numeric prices with no
+    currency, so the AI used to quote everything in '$'. meta.json exposes
+    the real shop currency. Returns '' on any failure (caller falls back to $).
+    """
+    try:
+        r = requests.get(f'{base}/meta.json', headers=_HEADERS, timeout=10)
+        if r.status_code == 200:
+            return ((r.json() or {}).get('currency') or '').strip().upper()
+    except Exception as e:
+        logger.warning(f'[_shop_currency] {base}: {e}')
+    return ''
+
+
+def _fmt_money(amount, currency):
+    """Format a numeric amount with the shop's currency symbol/code."""
+    sym = _CURRENCY_SYMBOLS.get(currency)
+    if sym:
+        return f'{sym}{amount:.2f}'
+    if currency:
+        return f'{currency} {amount:.2f}'
+    return f'${amount:.2f}'
+
+
 def _shopify_products(site_url):
     """Fetch all products. Captures variants[].inventory_item_id so the
     Phase-C inventory webhook can find affected chunks."""
     base = site_url.rstrip('/')
+    currency = _shop_currency(base)
     products = _shopify_paginate(f'{base}/products.json', 'products', site_url)
     docs = []
     for p in products:
@@ -569,15 +607,34 @@ def _shopify_products(site_url):
         price_line = ''
         if numeric_prices:
             lo, hi = min(numeric_prices), max(numeric_prices)
-            price_line = f'${lo:.2f}' if lo == hi else f'${lo:.2f}–${hi:.2f}'
+            price_line = (_fmt_money(lo, currency) if lo == hi
+                          else f'{_fmt_money(lo, currency)}–{_fmt_money(hi, currency)}')
+
+        # Explicit option lines (Size / Color / …) from Shopify's `options`
+        # array. The variant titles alone ("5 / white") never contain the
+        # words "size" or "colour", so a question like "what sizes do you
+        # have?" neither retrieved nor answered well. This puts the option
+        # NAMES + values in the chunk so it's both findable and answerable.
+        option_lines = []
+        for opt in (p.get('options') or []):
+            name = (opt.get('name') or '').strip()
+            values = [str(x).strip() for x in (opt.get('values') or []) if str(x).strip()]
+            # Shopify uses a "Title"/"Default Title" placeholder for products
+            # that have no real options — skip those.
+            if name and values and name.lower() != 'title' and values != ['Default Title']:
+                option_lines.append(f"{name}: {', '.join(values)}")
+
+        def _vmoney(raw):
+            try:
+                return ' ' + _fmt_money(float(raw), currency)
+            except (TypeError, ValueError):
+                return ''
 
         # Human-readable variant blurb for the AI to read out. Keep ALL
         # variants (so the AI knows the full option set); append the price
         # only when the variant actually has one.
         variants_blurb = ', '.join(
-            (f"{v.get('title', '?')} ${v.get('price')}"
-             if v.get('price') not in (None, '', 'null')
-             else f"{v.get('title', '?')}")
+            f"{v.get('title', '?')}" + (_vmoney(v.get('price')) if v.get('price') not in (None, '', 'null') else '')
             for v in variant_rows
         )
         # Structured variant list for inventory bookkeeping. Each entry
@@ -596,6 +653,8 @@ def _shopify_products(site_url):
         content_parts = [f'Product: {title}', f'URL: {url}']
         if price_line:
             content_parts.append(f'Price: {price_line}')
+        if option_lines:
+            content_parts.append('Available options — ' + ' | '.join(option_lines))
         content_parts.append(body)
         if variants_blurb:
             content_parts.append(f'Variants: {variants_blurb}')
@@ -610,6 +669,8 @@ def _shopify_products(site_url):
                 'shopify_resource': f"product_{p.get('id', '')}",
                 'variants': variants_struct,
                 'price_display': price_line,
+                'options': option_lines,
+                'currency': currency,
                 'is_active': True,
             },
         })
