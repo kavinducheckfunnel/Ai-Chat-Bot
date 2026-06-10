@@ -64,6 +64,23 @@
         <p class="pr-note">Omnichannel (WhatsApp + Facebook Messenger) requires a Meta Developer App and webhook configuration. Setup assistance is included on Growth, Pro, and Enterprise.</p>
       </section>
 
+      <!-- Message-based billing -->
+      <section class="pr-section">
+        <h2 class="pr-h2">How message-based billing works</h2>
+        <div class="pr-byok">
+          <p class="pr-byok-lead">A <strong>message</strong> is counted each time the AI sends a response to a user — so your cost tracks the volume of conversations your chatbot handles. Human agent replies during Live Chat Takeover never count.</p>
+          <div class="pr-byok-grid">
+            <div class="pr-byok-item">✓ Add unlimited team members — no per-seat fees</div>
+            <div class="pr-byok-item">✓ Predictable costs that scale with your business</div>
+            <div class="pr-byok-item">✓ Estimate spend straight from your traffic data</div>
+            <div class="pr-byok-item">✓ Pay annually on any plan and save 15%</div>
+          </div>
+          <div class="pr-byok-default" style="border-left-color:#f59e0b">
+            <strong>Overage policy:</strong> automated alerts at 80% and 100% of your limit. Additional messages are billed at your plan's overage rate (Enterprise rates negotiated at contract) — or simply pause the chatbot once the limit is hit, no overage charged.
+          </div>
+        </div>
+      </section>
+
       <!-- BYOK -->
       <section class="pr-section">
         <h2 class="pr-h2">BYOK — Bring Your Own AI Key</h2>
@@ -77,6 +94,41 @@
           </div>
           <div class="pr-byok-default"><strong>Managed AI (default):</strong> clients without BYOK use our managed AI pool — costs bundled into the plan price.</div>
         </div>
+      </section>
+
+      <!-- Available add-ons -->
+      <section class="pr-section">
+        <h2 class="pr-h2">Available add-ons</h2>
+        <div class="pr-table-wrap">
+          <table class="pr-table">
+            <thead><tr><th>Add-on</th><th>Price</th><th>Description</th></tr></thead>
+            <tbody>
+              <tr><td>Extra Message / Image / Voice Pack</td><td>Contact us</td><td>Top-up credits without changing your plan.</td></tr>
+              <tr><td>White-Label Branding</td><td>Contact us</td><td>Remove all Checkfunnel branding from the widget &amp; emails. Enterprise only.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="pr-note">Add-ons attach to any plan and are billed monthly alongside your base subscription. <a href="mailto:sales@checkfunnel.com" style="color:#a5b4fc">Contact our team</a> to enable one.</p>
+      </section>
+
+      <!-- Integrations & required setup -->
+      <section class="pr-section">
+        <h2 class="pr-h2">Integrations &amp; required setup</h2>
+        <div class="pr-table-wrap">
+          <table class="pr-table">
+            <thead><tr><th>Integration</th><th>Starter</th><th>Growth</th><th>Pro / Enterprise</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr v-for="row in integrationRows" :key="row.name">
+                <td>{{ row.name }}</td>
+                <td>{{ row.starter }}</td>
+                <td>{{ row.growth }}</td>
+                <td>{{ row.pro }}</td>
+                <td>{{ row.notes }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="pr-note">Omnichannel requires a Meta Developer App and webhook configuration. Setup assistance is included on Growth, Pro, and Enterprise.</p>
       </section>
 
       <!-- Industries -->
@@ -112,6 +164,36 @@
         </div>
       </section>
 
+      <!-- Build your own custom package -->
+      <section class="pr-section">
+        <h2 class="pr-h2">Build your own custom package</h2>
+        <p class="pr-note" style="font-style:normal;font-size:14px;color:#94a3b8;margin:-8px 0 22px">
+          Not every business fits a fixed tier. Tell us your needs → we scope &amp; price it → we build &amp; launch. You pay only for what's in your package.
+        </p>
+        <div class="pr-table-wrap" style="margin-bottom:24px">
+          <table class="pr-table">
+            <thead><tr><th>Feature / module</th><th>What it does</th><th>Available from</th></tr></thead>
+            <tbody>
+              <tr v-for="f in featureMenu" :key="f.name">
+                <td>{{ f.name }}</td>
+                <td>{{ f.does }}</td>
+                <td><span class="pr-from">{{ f.from }}</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pr-packages">
+          <div v-for="pkg in packages" :key="pkg.name" class="pr-pkg" :class="pkg.cls">
+            <div class="pr-pkg-name">{{ pkg.name }}</div>
+            <div class="pr-pkg-tagline">{{ pkg.tagline }}</div>
+            <ul class="pr-pkg-features">
+              <li v-for="ft in pkg.features" :key="ft">{{ ft }}</li>
+            </ul>
+            <div class="pr-pkg-price">{{ pkg.price }}</div>
+          </div>
+        </div>
+      </section>
+
       <!-- Custom CTA -->
       <section class="pr-section">
         <div class="pr-custom-cta">
@@ -134,6 +216,43 @@ const industries = [
   { emoji: '🏥', title: 'Healthcare & Clinics', tagline: 'Appointment booking, patient triage, reminders' },
   { emoji: '🏠', title: 'Real Estate & Property', tagline: 'Lead qualification, property discovery, viewings' },
   { emoji: '🎓', title: 'Education & Training', tagline: 'Enrolment, course guidance, fee queries' },
+]
+
+// Section 7 — Integrations & required setup
+const integrationRows = [
+  { name: 'Stripe (Billing)',     starter: 'Required',  growth: 'Required',           pro: 'Required',  notes: 'All plans' },
+  { name: 'WhatsApp Business',    starter: '—',         growth: 'Optional',           pro: 'Required',  notes: 'Stage 4' },
+  { name: 'Facebook Messenger',   starter: '—',         growth: 'Optional',           pro: 'Required',  notes: 'Stage 4' },
+  { name: 'Telegram Bot',         starter: 'Optional',  growth: 'Optional',           pro: 'Optional',  notes: 'All plans' },
+  { name: 'HubSpot CRM',          starter: '—',         growth: 'Optional (Webhook)', pro: 'Required',  notes: 'Growth+' },
+  { name: 'Slack Alerts',         starter: 'Optional',  growth: 'Optional',           pro: 'Optional',  notes: 'All plans' },
+  { name: 'OpenAI / Anthropic',   starter: 'Optional',  growth: 'Optional',           pro: 'Required',  notes: 'BYOK plans' },
+  { name: 'Outbound Webhooks',    starter: 'Optional',  growth: 'Optional',           pro: 'Optional',  notes: 'All plans' },
+]
+
+// Section 12 — Feature menu + example minimal packages
+const featureMenu = [
+  { name: 'Web Chat Widget',       does: 'Embeddable chatbot on your website',       from: 'All plans' },
+  { name: 'WhatsApp Integration',  does: 'Respond via WhatsApp Business API',         from: 'Pro+' },
+  { name: 'Facebook Messenger',    does: 'Chat automation on your Facebook page',     from: 'Pro+' },
+  { name: 'Telegram Bot',          does: 'Automated Telegram channel responses',      from: 'All plans' },
+  { name: 'AI Lead Scoring',       does: 'Score leads by behavior to prioritise',     from: 'All plans' },
+  { name: 'In-Chat Checkout',      does: 'Complete purchases without leaving chat',   from: 'All plans' },
+  { name: 'Live Chat Takeover',    does: 'Human agent joins mid-conversation',        from: 'Growth+' },
+  { name: 'Voice Command Widget',  does: 'Voice-enabled AI interactions on web',      from: 'Growth+' },
+  { name: 'Image Upload',          does: 'Users send images as part of their query',  from: 'Growth+' },
+  { name: 'CRM via Webhook',       does: 'Sync leads to HubSpot, Zapier & more',      from: 'Growth+' },
+  { name: 'Custom DB Integration', does: 'Connect any internal database or system',   from: 'Enterprise' },
+  { name: 'Real-Time Inventory',   does: 'Live product / room / slot availability',   from: 'Pro+' },
+  { name: 'BYOK (Own AI Key)',     does: 'Use your own OpenAI / Anthropic key',       from: 'All plans' },
+  { name: 'White-Label Branding',  does: 'Remove Checkfunnel branding — your logo',   from: 'Enterprise' },
+  { name: 'Advanced Reports',      does: 'Exportable analytics & insights',           from: 'Pro+' },
+]
+const packages = [
+  { cls: 'pkg-wa',   name: 'WhatsApp Starter',  tagline: 'Just WhatsApp + AI replies',  features: ['WhatsApp Business channel', 'AI chatbot responses', 'Basic lead capture', 'Email support'], price: 'Contact sales' },
+  { cls: 'pkg-crm',  name: 'Web + CRM Bundle',  tagline: 'Web chat with lead sync',     features: ['Web chat widget', 'AI lead scoring', 'HubSpot CRM sync', 'Standard reports'], price: 'Contact sales' },
+  { cls: 'pkg-omni', name: 'Omnichannel Lean',  tagline: 'Web + WhatsApp + Facebook',   features: ['Any channel combination', 'In-chat checkout', 'Live chat takeover', 'BYOK support'], price: 'Contact sales' },
+  { cls: 'pkg-full', name: 'Full Custom Build', tagline: 'Everything you need',          features: ['Any DB / platform', 'Custom message volume', 'Custom AI model / flow', 'White label + CSM'], price: 'Quoted per scope' },
 ]
 </script>
 
@@ -179,6 +298,24 @@ const industries = [
 .pr-custom-btn { display: inline-block; background: #fff; color: #4f46e5; font-size: 15px; font-weight: 700; text-decoration: none; padding: 12px 26px; border-radius: 10px; }
 .pr-footer { text-align: center; padding: 28px; font-size: 12px; color: #64748b; border-top: 1px solid rgba(255,255,255,0.07); }
 .pr-footer a { color: #a5b4fc; text-decoration: none; }
+
+/* "Available from" pill in the custom-package feature menu */
+.pr-from { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 20px; background: rgba(99,102,241,0.12); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.25); white-space: nowrap; }
+
+/* Example minimal packages */
+.pr-packages { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.pr-pkg { background: #141821; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 20px 18px 16px; display: flex; flex-direction: column; gap: 6px; }
+.pr-pkg.pkg-wa   { border-top: 3px solid #22c55e; }
+.pr-pkg.pkg-crm  { border-top: 3px solid #60a5fa; }
+.pr-pkg.pkg-omni { border-top: 3px solid #c4b5fd; }
+.pr-pkg.pkg-full { border-top: 3px solid #fbbf24; }
+.pr-pkg-name { font-size: 15px; font-weight: 700; color: #fff; }
+.pr-pkg-tagline { font-size: 12px; color: #94a3b8; margin-bottom: 6px; }
+.pr-pkg-features { margin: 0; padding-left: 18px; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.pr-pkg-features li { position: relative; font-size: 12.5px; color: #cbd5e1; line-height: 1.5; }
+.pr-pkg-features li::before { content: '✓'; position: absolute; left: -16px; color: #22c55e; font-weight: 700; }
+.pr-pkg-price { margin-top: auto; padding-top: 10px; font-size: 13px; font-weight: 600; color: #a5b4fc; border-top: 1px dashed rgba(255,255,255,0.1); }
+
 @media (max-width: 720px) {
   .pr-philosophy { grid-template-columns: 1fr; }
   .pr-byok-grid { grid-template-columns: 1fr; }
