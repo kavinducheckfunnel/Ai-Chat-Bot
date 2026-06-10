@@ -658,7 +658,7 @@ function healthColor(s) {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 async function impersonate(t) {
-  const ok = await confirm(`Impersonate ${t.company}? A 15-min token will be issued and audit-logged.`)
+  const ok = await confirm(`Impersonate ${t.company}? A session token will be issued and audit-logged.`)
   if (!ok) return
   try {
     const res = await api.impersonateTenant(t.tenant_id)

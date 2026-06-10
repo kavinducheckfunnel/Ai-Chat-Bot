@@ -112,6 +112,27 @@ const router = createRouter({
   routes,
 })
 
+// Self-heal stale impersonation sessions created before the refresh-token fix.
+// Those left the super-admin's refresh token in place, so a silent token
+// refresh would revert the session to the super-admin (who has no tenant plan
+// → the portal showed "No plan / Free" and disabled features). We detect such
+// sessions by the absence of the return-refresh marker and cleanly restore the
+// super-admin session, so the user can re-impersonate with the fixed flow.
+;(function healStaleImpersonation() {
+  try {
+    if (localStorage.getItem('cf_impersonating') === 'true'
+        && !localStorage.getItem('cf_impersonate_return_refresh')) {
+      const retToken = localStorage.getItem('cf_impersonate_return_token')
+      const retUser = localStorage.getItem('cf_impersonate_return_user')
+      if (retToken) localStorage.setItem('cf_access_token', retToken)
+      if (retUser) localStorage.setItem('cf_user', retUser)
+      localStorage.removeItem('cf_impersonating')
+      localStorage.removeItem('cf_impersonate_return_token')
+      localStorage.removeItem('cf_impersonate_return_user')
+    }
+  } catch {}
+})()
+
 router.beforeEach((to) => {
   const token = localStorage.getItem('cf_access_token')
 

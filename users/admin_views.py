@@ -2637,10 +2637,12 @@ def impersonate_tenant(request, tenant_id):
     if not tenant_user:
         return Response({'detail': 'Tenant has no linked user account.'}, status=400)
 
-    # Issue a fresh access token for the tenant user (15 min expiry)
+    # Issue a fresh access token for the tenant user. 8h lifetime (matching
+    # normal sessions) so an impersonation session doesn't silently expire
+    # mid-use; the returned refresh token keeps it tenant-scoped beyond that.
     refresh = RefreshToken.for_user(tenant_user)
     access = refresh.access_token
-    access.set_exp(lifetime=timedelta(minutes=15))
+    access.set_exp(lifetime=timedelta(hours=8))
     access['impersonated_by'] = request.user.username
 
     profile = getattr(tenant_user, 'profile', None)
@@ -2668,7 +2670,7 @@ def impersonate_tenant(request, tenant_id):
         # the session back to the super-admin (who has no plan) and making the
         # impersonated portal show "Free / no plan" with all features disabled.
         'refresh': str(refresh),
-        'expires_in': 900,
+        'expires_in': 28800,
         'tenant': {
             'id': tenant.pk,
             'company_name': tenant.company_name,
