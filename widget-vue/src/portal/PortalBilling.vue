@@ -231,6 +231,276 @@
         </p>
       </div>
 
+      <!-- ════════════════════════════════════════════════════════════════
+           Full plan & pricing documentation (mirrors the official PDF).
+           Identical for every tenant.
+           ════════════════════════════════════════════════════════════════ -->
+
+      <!-- 1) Pricing philosophy ─────────────────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">Our pricing philosophy</h3>
+        <div class="doc-card philosophy-card">
+          <div class="philosophy-row">
+            <div class="philosophy-item">
+              <div class="philosophy-icon">💸</div>
+              <div class="philosophy-title">Pay for what you use</div>
+              <div class="philosophy-body">Billing scales with messages, not arbitrary seat counts — add unlimited team members at no extra per-seat cost.</div>
+            </div>
+            <div class="philosophy-item">
+              <div class="philosophy-icon">📈</div>
+              <div class="philosophy-title">Grow at your own pace</div>
+              <div class="philosophy-body">Upgrade or downgrade month-to-month. Upgrades are prorated and apply instantly; downgrades take effect next cycle.</div>
+            </div>
+            <div class="philosophy-item">
+              <div class="philosophy-icon">🔑</div>
+              <div class="philosophy-title">Bring your own AI key</div>
+              <div class="philosophy-body">Connect your own OpenAI or Anthropic key on any plan to control AI inference costs directly — with no markup.</div>
+            </div>
+          </div>
+          <div class="philosophy-divider"></div>
+          <p class="philosophy-foot">
+            <strong>Checkfunnel</strong> is a multi-channel AI chatbot platform that helps you capture, qualify, and
+            convert leads. Subscriptions are structured around monthly message volume and features — so you can
+            <em>choose a plan that matches your stage of growth</em>.
+          </p>
+        </div>
+      </div>
+
+      <!-- 2) Message-based billing ──────────────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">How message-based billing works</h3>
+        <div class="doc-card">
+          <p class="byok-lead" style="margin:0 0 16px">
+            A <strong>message</strong> is counted each time the AI sends a response to a user. This aligns your cost
+            directly with the volume of conversations your chatbot handles. Human agent replies during Live Chat
+            Takeover never count toward your limit.
+          </p>
+          <div class="doc-subheading" style="margin-top:0">Why message-based?</div>
+          <ul class="bullet-list">
+            <li>Add <strong>unlimited team members</strong> — no per-seat fees like Intercom or Drift.</li>
+            <li>Costs stay <strong>predictable</strong> and scale naturally with your business.</li>
+            <li>Estimate monthly spend accurately straight from your traffic data.</li>
+          </ul>
+          <div class="overage-card">
+            <div class="doc-subheading" style="margin:0 0 8px">Overage policy</div>
+            <ul class="bullet-list tight">
+              <li>Automated email alerts at <strong>80%</strong> and <strong>100%</strong> of your limit.</li>
+              <li>Additional messages are billed at your plan's overage rate (Enterprise rates negotiated at contract).</li>
+              <li>Prefer not to pay overages? <strong>Pause the chatbot</strong> once the limit is hit instead.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3) BYOK ───────────────────────────────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">BYOK — bring your own AI key</h3>
+        <div class="doc-card byok-card">
+          <div class="byok-head">
+            <span class="byok-chip">Available on all plans</span>
+            <p class="byok-lead">Connect your own OpenAI or Anthropic API key and pay your provider directly for inference — with no markup from Checkfunnel.</p>
+          </div>
+          <div class="byok-benefits">
+            <div class="byok-benefit"><span class="byok-tick">✓</span><span>Full control over model selection (GPT-4o, Claude Sonnet, etc.)</span></div>
+            <div class="byok-benefit"><span class="byok-tick">✓</span><span>AI costs billed directly to your provider — no markup.</span></div>
+            <div class="byok-benefit"><span class="byok-tick">✓</span><span>Use fine-tuned or custom models.</span></div>
+            <div class="byok-benefit"><span class="byok-tick">✓</span><span>Comply with your organization's AI procurement policies.</span></div>
+          </div>
+          <div class="byok-default">
+            <strong>Managed AI (default):</strong> clients who don't bring their own key use Checkfunnel's managed AI
+            pool — inference costs are bundled into the plan price. Keys are stored securely per-tenant and are never
+            shared across accounts.
+          </div>
+        </div>
+      </div>
+
+      <!-- 4) Available add-ons ──────────────────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">Available add-ons</h3>
+        <div class="doc-card doc-card-table">
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Add-on</th><th>Price</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td>Extra Message / Image / Voice Pack</td><td>Contact us</td><td>Top-up message, image &amp; voice credits without changing your plan.</td></tr>
+                <tr><td>White-Label Branding</td><td>Contact us</td><td>Remove all Checkfunnel branding from the widget &amp; emails. Enterprise only.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="doc-note">Add-ons attach to any plan and are billed monthly alongside your base subscription.
+            <a href="mailto:sales@checkfunnel.com?subject=Add-on%20request">Contact our team</a> to enable one.</p>
+        </div>
+      </div>
+
+      <!-- 5) Integrations & required setup ──────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">Integrations &amp; required setup</h3>
+        <div class="doc-card doc-card-table">
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead>
+                <tr>
+                  <th>Integration</th>
+                  <th class="th-starter">Starter</th>
+                  <th class="th-growth">Growth</th>
+                  <th class="th-pro">Pro / Enterprise</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in integrationRows" :key="row.name">
+                  <td>{{ row.name }}</td>
+                  <td :class="{ req: row.starter === 'Required' }">{{ row.starter }}</td>
+                  <td :class="{ req: row.growth === 'Required' }">{{ row.growth }}</td>
+                  <td :class="{ req: row.pro === 'Required' }">{{ row.pro }}</td>
+                  <td>{{ row.notes }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="doc-note">Omnichannel (WhatsApp + Facebook Messenger) requires a Meta Developer App and webhook
+            configuration. Setup assistance is included for Growth, Pro, and Enterprise subscribers.</p>
+        </div>
+      </div>
+
+      <!-- 6) Competitor comparison ──────────────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">How we compare</h3>
+        <div class="doc-card doc-card-table">
+          <div class="doc-table-wrap">
+            <table class="doc-table compare2">
+              <thead>
+                <tr>
+                  <th>Feature</th>
+                  <th class="th-us">Checkfunnel</th>
+                  <th>Intercom</th>
+                  <th>Drift</th>
+                  <th>ManyChat</th>
+                  <th>Tidio</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in competitorRows" :key="row.label">
+                  <td>{{ row.label }}</td>
+                  <td class="cell-us" v-html="row.cf"></td>
+                  <td v-html="row.intercom"></td>
+                  <td v-html="row.drift"></td>
+                  <td v-html="row.manychat"></td>
+                  <td v-html="row.tidio"></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="doc-note">Checkfunnel is the only platform here to offer AI lead scoring (3-EMA), BYOK, in-chat
+            checkout, and Voice AI in a single message-based subscription. Comparison based on published pricing as of 2025.</p>
+        </div>
+      </div>
+
+      <!-- 7) Industry use cases ─────────────────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">Industry use cases</h3>
+        <p class="doc-sub">Every industry has unique needs. Tap a vertical to see a recommended configuration — each
+          deployable as a custom Enterprise solution or adapted to fit Growth / Pro plans.</p>
+        <div class="industry-grid">
+          <div
+            v-for="ind in industries"
+            :key="ind.key"
+            class="industry-card"
+            :class="[ind.cls, { open: ind.open }]"
+            @click="ind.open = !ind.open"
+          >
+            <div class="industry-head">
+              <div class="industry-title-row">
+                <span class="industry-emoji">{{ ind.emoji }}</span>
+                <div>
+                  <div class="industry-title">{{ ind.title }}</div>
+                  <div class="industry-tagline">{{ ind.tagline }}</div>
+                </div>
+              </div>
+              <svg class="industry-chevron" width="16" height="16" fill="none" viewBox="0 0 24 24" :style="{ transform: ind.open ? 'rotate(180deg)' : '', transition: '.2s' }"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </div>
+            <div class="industry-body" v-if="ind.open" @click.stop>
+              <div class="industry-col">
+                <div class="industry-col-title">Key requirements</div>
+                <ul>
+                  <li v-for="n in ind.needs" :key="n">{{ n }}</li>
+                </ul>
+              </div>
+              <div class="industry-col">
+                <div class="industry-col-title">Recommended setup</div>
+                <dl class="industry-meta">
+                  <template v-for="m in ind.meta" :key="m.k">
+                    <dt>{{ m.k }}</dt><dd>{{ m.v }}</dd>
+                  </template>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 8) Build your own custom package ──────────────────────────────── -->
+      <div class="doc-section">
+        <h3 class="section-heading">Build your own custom package</h3>
+        <div class="doc-card custom-hero">
+          <div class="custom-hero-title">Not every business fits a fixed tier.</div>
+          <div class="custom-hero-sub">Whether you're a startup with one specific need or a growing company that wants
+            only what's relevant — we scope a package around your requirements, not the other way around.</div>
+        </div>
+
+        <div class="custom-steps">
+          <div class="custom-step">
+            <div class="custom-step-num">①</div>
+            <div class="custom-step-title">Tell us your needs</div>
+            <div class="custom-step-body">Channels, integrations, message volume — just tell us. No technical knowledge required.</div>
+          </div>
+          <div class="custom-step">
+            <div class="custom-step-num">②</div>
+            <div class="custom-step-title">We scope &amp; price it</div>
+            <div class="custom-step-body">We scope your exact feature set, channel mix, and message volume — then quote a tailored monthly price.</div>
+          </div>
+          <div class="custom-step">
+            <div class="custom-step-num">③</div>
+            <div class="custom-step-title">We build &amp; launch</div>
+            <div class="custom-step-body">We configure, connect your systems, and go live — you pay only for what's in your package.</div>
+          </div>
+        </div>
+
+        <div class="doc-subheading">Feature menu — pick what you need</div>
+        <div class="doc-card doc-card-table">
+          <div class="doc-table-wrap">
+            <table class="doc-table">
+              <thead><tr><th>Feature / module</th><th>What it does</th><th>Available from</th></tr></thead>
+              <tbody>
+                <tr v-for="f in featureMenu" :key="f.name">
+                  <td>{{ f.name }}</td>
+                  <td>{{ f.does }}</td>
+                  <td><span class="from-badge">{{ f.from }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="doc-subheading">Example minimal packages</div>
+        <div class="packages-grid">
+          <div v-for="pkg in packages" :key="pkg.key" class="package-card" :class="pkg.cls">
+            <div class="package-name">{{ pkg.name }}</div>
+            <div class="package-tagline">{{ pkg.tagline }}</div>
+            <ul class="package-features">
+              <li v-for="f in pkg.features" :key="f">{{ f }}</li>
+            </ul>
+            <div class="package-price">{{ pkg.price }}</div>
+          </div>
+        </div>
+
+        <div class="custom-cta">
+          <div class="custom-cta-title">Ready to build your custom package?</div>
+          <div class="custom-cta-sub">Tell us your channels, integrations, message volume, and any custom features.</div>
+          <a class="custom-cta-btn" href="mailto:sales@checkfunnel.com?subject=Custom%20package%20inquiry">Contact sales →</a>
+        </div>
+      </div>
+
       <!-- ── FAQ ─────────────────────────────────────────────────────────── -->
       <div class="faq-section">
         <h3 class="section-heading">FAQ</h3>
@@ -484,6 +754,188 @@ const usageResources = computed(() => {
     { key: 'voice',    label: 'Voice Commands', used: u.voice?.used || 0,    limit: u.voice?.limit ?? -1,    pct: pct(u.voice?.used || 0,    u.voice?.limit ?? -1) },
   ].filter(r => r.limit !== 0) // hide resources not in plan
 })
+
+// ── PDF documentation content (Sections 1, 3, 5–8, 11, 12) ──────────────────
+// Static reference data mirroring the official pricing doc. Identical for every
+// tenant so all billing pages show the same authoritative information.
+
+// Section 7 — Integrations & required setup
+const integrationRows = [
+  { name: 'Stripe (Billing)',     starter: 'Required',  growth: 'Required',           pro: 'Required',  notes: 'All plans' },
+  { name: 'WhatsApp Business',    starter: '—',         growth: 'Optional',           pro: 'Required',  notes: 'Stage 4' },
+  { name: 'Facebook Messenger',   starter: '—',         growth: 'Optional',           pro: 'Required',  notes: 'Stage 4' },
+  { name: 'Telegram Bot',         starter: 'Optional',  growth: 'Optional',           pro: 'Optional',  notes: 'All plans' },
+  { name: 'HubSpot CRM',          starter: '—',         growth: 'Optional (Webhook)', pro: 'Required',  notes: 'Growth+' },
+  { name: 'Slack Alerts',         starter: 'Optional',  growth: 'Optional',           pro: 'Optional',  notes: 'All plans' },
+  { name: 'OpenAI / Anthropic',   starter: 'Optional',  growth: 'Optional',           pro: 'Required',  notes: 'BYOK plans' },
+  { name: 'Outbound Webhooks',    starter: 'Optional',  growth: 'Optional',           pro: 'Optional',  notes: 'All plans' },
+]
+
+// Section 8 — Competitor comparison. Cells carry pre-classed markup so the
+// ✓ / ✗ / Partial glyphs render with consistent colour.
+const YES = '<span class="c2-yes">✓</span>'
+const NO = '<span class="c2-no">✗</span>'
+const PART = '<span class="c2-part">Partial</span>'
+const competitorRows = [
+  { label: 'Starting price',        cf: 'From $29/mo', intercom: 'Contact sales', drift: 'Contact sales', manychat: 'Contact sales', tidio: 'Contact sales' },
+  { label: 'AI lead scoring',       cf: YES + ' (3-EMA)', intercom: PART, drift: YES, manychat: NO, tidio: PART },
+  { label: 'Omnichannel (WA + FB)', cf: YES, intercom: NO, drift: NO, manychat: YES, tidio: PART },
+  { label: 'In-chat checkout',      cf: YES, intercom: NO, drift: NO, manychat: YES, tidio: NO },
+  { label: 'BYOK (own API key)',    cf: YES, intercom: NO, drift: NO, manychat: NO, tidio: NO },
+  { label: 'CRM sync (HubSpot)',    cf: YES, intercom: YES, drift: YES, manychat: PART, tidio: YES },
+  { label: 'Live chat takeover',    cf: YES, intercom: YES, drift: YES, manychat: YES, tidio: YES },
+  { label: 'Voice AI',              cf: YES, intercom: NO, drift: NO, manychat: NO, tidio: NO },
+  { label: 'Message-based billing', cf: YES, intercom: NO, drift: NO, manychat: YES, tidio: NO },
+  { label: 'White-label option',    cf: YES, intercom: NO, drift: NO, manychat: NO, tidio: NO },
+]
+
+// Section 11 — Industry use cases (expandable cards)
+const industries = ref([
+  {
+    key: 'hotel', emoji: '🏨', cls: 'ind-hotel', open: false,
+    title: 'Hotel & Hospitality',
+    tagline: 'AI concierge, room service & guest experience',
+    needs: [
+      'Multi-language guest chat (English, Chinese, Arabic…)',
+      'Room booking & availability queries via chat',
+      'In-chat room service & amenity requests',
+      'PMS integration (Opera, Salesforce or custom)',
+      'Loyalty points balance & rewards queries',
+      'Voice command support for in-room devices',
+    ],
+    meta: [
+      { k: 'Plan', v: 'Enterprise (Custom)' },
+      { k: 'Channels', v: 'Web + WhatsApp + in-room kiosk' },
+      { k: 'CRM / PMS', v: 'Opera PMS, Salesforce or custom DB' },
+      { k: 'Image upload', v: 'Yes — guest requests with photos' },
+      { k: 'White label', v: 'Yes — branded as the hotel’s assistant' },
+    ],
+  },
+  {
+    key: 'retail', emoji: '🛍️', cls: 'ind-retail', open: false,
+    title: 'Retail & E-Commerce',
+    tagline: 'Product discovery, cart recovery & order tracking',
+    needs: [
+      'Product search & recommendation via chat',
+      'Real-time inventory sync (in-store & online)',
+      'Cart abandonment recovery via WhatsApp / web',
+      'Order status & delivery tracking',
+      'Image upload — send a photo to find similar products',
+      'Shopify / WooCommerce / custom DB integration',
+    ],
+    meta: [
+      { k: 'Plan', v: 'Pro or Enterprise' },
+      { k: 'Channels', v: 'Web + WhatsApp + Facebook' },
+      { k: 'Platform', v: 'Shopify, WooCommerce or custom DB' },
+      { k: 'Inventory', v: 'Yes — live stock sync' },
+      { k: 'In-chat checkout', v: 'Yes — purchase inside chat' },
+    ],
+  },
+  {
+    key: 'healthcare', emoji: '🏥', cls: 'ind-healthcare', open: false,
+    title: 'Healthcare & Clinics',
+    tagline: 'Appointments, triage & prescription reminders',
+    needs: [
+      'Appointment booking & rescheduling via chat',
+      'Symptom-based triage & department routing',
+      'Prescription reminders & refill notifications',
+      'Insurance eligibility queries',
+      'Image upload — referral letters or test results',
+      'EMR / clinic-DB integration with per-tenant isolation',
+    ],
+    meta: [
+      { k: 'Plan', v: 'Enterprise (Custom)' },
+      { k: 'Channels', v: 'Web + WhatsApp' },
+      { k: 'EMR / DB', v: 'Custom internal clinic database' },
+      { k: 'Data retention', v: 'Custom — per compliance policy' },
+      { k: 'Live takeover', v: 'Yes — escalate to doctor / nurse' },
+    ],
+  },
+  {
+    key: 'realestate', emoji: '🏠', cls: 'ind-realestate', open: false,
+    title: 'Real Estate & Property',
+    tagline: 'Lead qualification & viewing scheduling',
+    needs: [
+      'AI lead scoring — qualify buyers vs browsers',
+      'Property search by budget, location, bedrooms',
+      'Viewing appointment booking & calendar sync',
+      'Image upload — buyer sends a preferred style',
+      'HubSpot / custom property-DB integration',
+      'Automated follow-up sequences for warm leads',
+    ],
+    meta: [
+      { k: 'Plan', v: 'Pro or Enterprise' },
+      { k: 'CRM', v: 'HubSpot + custom property DB' },
+      { k: 'Channels', v: 'Web + WhatsApp + Facebook' },
+      { k: 'Lead scoring', v: 'Yes — 3-EMA behavioral tracking' },
+      { k: 'Live takeover', v: 'Yes — agents close high-intent leads' },
+    ],
+  },
+  {
+    key: 'education', emoji: '🎓', cls: 'ind-education', open: false,
+    title: 'Education & Training',
+    tagline: 'Enrolment, course guidance & fee queries',
+    needs: [
+      'Course discovery & eligibility guidance',
+      'Application & enrolment form assistance',
+      'Fee structure, scholarship & payment-plan queries',
+      'Image upload — transcripts & ID documents',
+      'Student-management-system (custom DB) integration',
+      'Exam schedule, timetable & result notifications',
+    ],
+    meta: [
+      { k: 'Plan', v: 'Growth, Pro or Enterprise' },
+      { k: 'Channels', v: 'Web + WhatsApp' },
+      { k: 'Student DB', v: 'Custom internal management DB' },
+      { k: 'Live takeover', v: 'Yes — counsellors for enrolment' },
+      { k: 'White label', v: 'Yes — institute-branded assistant' },
+    ],
+  },
+])
+
+// Section 12 — Feature menu + example minimal packages
+const featureMenu = [
+  { name: 'Web Chat Widget',        does: 'Embeddable chatbot on your website',          from: 'All plans' },
+  { name: 'WhatsApp Integration',   does: 'Respond via WhatsApp Business API',            from: 'Pro+' },
+  { name: 'Facebook Messenger',     does: 'Chat automation on your Facebook page',        from: 'Pro+' },
+  { name: 'Telegram Bot',           does: 'Automated Telegram channel responses',         from: 'All plans' },
+  { name: 'AI Lead Scoring',        does: 'Score leads by behavior to prioritise',        from: 'All plans' },
+  { name: 'In-Chat Checkout',       does: 'Complete purchases without leaving chat',      from: 'All plans' },
+  { name: 'Live Chat Takeover',     does: 'Human agent joins mid-conversation',           from: 'Growth+' },
+  { name: 'Voice Command Widget',   does: 'Voice-enabled AI interactions on web',         from: 'Growth+' },
+  { name: 'Image Upload',           does: 'Users send images as part of their query',     from: 'Growth+' },
+  { name: 'CRM via Webhook',        does: 'Sync leads to HubSpot, Zapier & more',         from: 'Growth+' },
+  { name: 'Custom DB Integration',  does: 'Connect any internal database or system',      from: 'Enterprise' },
+  { name: 'Real-Time Inventory',    does: 'Live product / room / slot availability',      from: 'Pro+' },
+  { name: 'BYOK (Own AI Key)',      does: 'Use your own OpenAI / Anthropic key',          from: 'All plans' },
+  { name: 'White-Label Branding',   does: 'Remove Checkfunnel branding — your logo only', from: 'Enterprise' },
+  { name: 'Custom Website Build',   does: 'Integrate into WordPress or any platform',     from: 'Enterprise' },
+  { name: 'Outbound Broadcasts',    does: 'Send proactive messages to subscriber lists',  from: 'All plans' },
+  { name: 'Slack / Email Alerts',   does: 'Internal notifications for your team',         from: 'All plans' },
+  { name: 'Advanced Reports',       does: 'Exportable analytics & conversation insights', from: 'Pro+' },
+]
+const packages = [
+  {
+    key: 'wa', cls: 'pkg-wa', name: 'WhatsApp Starter', tagline: 'Just WhatsApp + AI replies',
+    features: ['WhatsApp Business channel', 'AI chatbot responses', 'Basic lead capture', 'Email support'],
+    price: 'Contact sales',
+  },
+  {
+    key: 'crm', cls: 'pkg-crm', name: 'Web + CRM Bundle', tagline: 'Web chat with lead sync',
+    features: ['Web chat widget', 'AI lead scoring', 'HubSpot CRM sync', 'Standard reports'],
+    price: 'Contact sales',
+  },
+  {
+    key: 'omni', cls: 'pkg-omni', name: 'Omnichannel Lean', tagline: 'Web + WhatsApp + Facebook',
+    features: ['Any channel combination', 'In-chat checkout', 'Live chat takeover', 'BYOK support'],
+    price: 'Contact sales',
+  },
+  {
+    key: 'full', cls: 'pkg-full', name: 'Full Custom Build', tagline: 'Everything you need, nothing you don’t',
+    features: ['Any DB / platform integration', 'Custom message volume', 'Custom AI model / flow', 'White label + dedicated CSM'],
+    price: 'Quoted per scope',
+  },
+]
 
 const faqs = ref([
   { q: 'Can I switch plans mid-month?', a: 'Yes. Upgrades are pro-rated and take effect immediately. Downgrades apply at the start of the next billing cycle.', open: false },
@@ -1392,6 +1844,53 @@ async function openPortal() {
   transition: transform 0.12s;
 }
 .custom-cta-btn:hover { transform: translateY(-1px); }
+
+/* Bullet lists used inside doc cards (message-billing, overage). */
+.bullet-list { margin: 0 0 4px; padding-left: 18px; list-style: none; display: flex; flex-direction: column; gap: 7px; }
+.bullet-list li {
+  position: relative;
+  font-size: 13px;
+  color: var(--cf-text-secondary);
+  line-height: 1.55;
+}
+.bullet-list li::before {
+  content: '';
+  position: absolute;
+  left: -16px; top: 8px;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  background: #6366f1;
+}
+.bullet-list li strong { color: var(--cf-text-primary); }
+.bullet-list.tight { gap: 6px; }
+
+/* Overage policy callout inside the message-billing card. */
+.overage-card {
+  margin-top: 18px;
+  background: var(--cf-bg-input);
+  border-left: 3px solid #f59e0b;
+  border-radius: 8px;
+  padding: 14px 16px 14px 18px;
+}
+.overage-card .bullet-list li::before { background: #f59e0b; }
+
+/* Competitor comparison glyph colours. */
+:deep(.c2-yes)  { color: #22c55e; font-weight: 800; }
+:deep(.c2-no)   { color: var(--cf-text-muted); opacity: 0.7; }
+:deep(.c2-part) { color: #f59e0b; font-size: 12px; font-weight: 600; }
+.doc-table.compare2 td { white-space: nowrap; }
+.doc-table.compare2 td.cell-us { font-weight: 700; }
+
+/* "Available from" pill in the custom-package feature menu. */
+.from-badge {
+  display: inline-block;
+  font-size: 11px; font-weight: 600;
+  padding: 2px 9px; border-radius: 20px;
+  background: rgba(99,102,241,0.12);
+  color: #a5b4fc;
+  border: 1px solid rgba(99,102,241,0.25);
+  white-space: nowrap;
+}
 
 /* ── Mobile breakpoints for doc sections ─────────────────────────────── */
 @media (max-width: 720px) {
