@@ -146,7 +146,7 @@
       <!-- ── Plan cards ──────────────────────────────────────────────────── -->
       <div class="plans-grid">
         <div
-          v-for="plan in plans"
+          v-for="plan in sortedPlans"
           :key="plan.id"
           class="plan-card"
           :class="{ current: isCurrentPlan(plan), popular: plan.name === 'Growth' }"
@@ -200,7 +200,7 @@
               <tr>
                 <th class="cmp-feature-h">Feature</th>
                 <th
-                  v-for="p in plans"
+                  v-for="p in sortedPlans"
                   :key="p.id"
                   :class="{ 'cmp-col-current': isCurrentPlan(p), 'cmp-col-popular': p.name === 'Growth' }"
                 >
@@ -214,7 +214,7 @@
               <tr v-for="row in compareRows" :key="row.label">
                 <td class="cmp-feature">{{ row.label }}</td>
                 <td
-                  v-for="p in plans"
+                  v-for="p in sortedPlans"
                   :key="p.id"
                   :class="{ 'cmp-col-current': isCurrentPlan(p) }"
                   v-html="row.cell(p)"
@@ -262,6 +262,21 @@ const checkoutLoading = ref(null)
 const error = ref('')
 const sub = ref({})
 const plans = ref([])
+
+// Display order: priced tiers ascending (Free → Starter → Growth → Pro), with
+// the custom/no-price tier (Enterprise) pinned LAST. The API sorts by
+// price_monthly, which floats Enterprise (Custom = no/negative price) to the
+// front — this reorders it for display.
+const sortedPlans = computed(() => {
+  return [...plans.value].sort((a, b) => {
+    const pa = parseFloat(a.price_monthly)
+    const pb = parseFloat(b.price_monthly)
+    const aCustom = isNaN(pa) || pa < 0
+    const bCustom = isNaN(pb) || pb < 0
+    if (aCustom !== bCustom) return aCustom ? 1 : -1
+    return pa - pb
+  })
+})
 const billingInterval = ref('monthly')
 
 // ── Invoices section ────────────────────────────────────────────────────────
