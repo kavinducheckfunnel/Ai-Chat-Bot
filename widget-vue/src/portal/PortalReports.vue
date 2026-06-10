@@ -151,12 +151,13 @@
             <div class="funnel-seg" v-for="(stage, i) in funnel" :key="stage.key">
               <div class="funnel-seg-head">
                 <span class="funnel-label">{{ stage.label }}</span>
-                <span class="funnel-nums">
-                  <span class="funnel-count" :style="{ color: stage.color }">{{ stage.count }}</span>
-                  <span class="funnel-pct" v-if="i > 0 && funnel[0].count">{{ funnelPct(stage.count) }}%</span>
-                </span>
+                <span class="funnel-pct" v-if="i > 0">{{ funnelPct(stage.count) }}% of new</span>
               </div>
-              <div class="funnel-bar" :style="{ width: funnelWidth(stage.count) + '%', background: stage.color }"></div>
+              <div class="funnel-bar-row">
+                <div class="funnel-bar" :style="{ width: funnelWidth(stage.count) + '%', background: stage.color }">
+                  <span class="funnel-bar-count">{{ stage.count }}</span>
+                </div>
+              </div>
             </div>
           </div>
           <div v-else class="funnel-skeleton"><div class="sk-stage" v-for="n in 4" :key="n"></div></div>
@@ -530,12 +531,12 @@ const funnel = computed(() => {
   ]
 })
 
-// Bar width relative to the widest stage so the funnel visibly tapers; a small
-// floor keeps non-zero stages from disappearing to a sliver.
+// Bar width relative to the widest stage so the funnel visibly tapers. A
+// generous floor (so even 0/low stages render a readable, labelled block)
+// keeps it looking like an intentional funnel rather than broken slivers.
 function funnelWidth(count) {
   const max = Math.max(...funnel.value.map(s => s.count), 1)
-  if (!count) return 0
-  return Math.max(Math.round((count / max) * 100), 9)
+  return Math.max(Math.round((count / max) * 100), 22)
 }
 // Conversion % relative to the top of the funnel (the "New" stage).
 function funnelPct(count) {
@@ -891,19 +892,21 @@ watch(() => props.client, () => load())
 /* Section row */
 .section-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 
-/* Funnel — tapered, centered bars so it reads as an actual funnel */
-.funnel-chart { display: flex; flex-direction: column; gap: 14px; padding-top: 4px; }
-.funnel-seg { display: flex; flex-direction: column; gap: 6px; }
+/* Funnel — centered tapered blocks with the count inside each, stacked
+   close together so they read as one funnel shape. */
+.funnel-chart { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.funnel-seg { display: flex; flex-direction: column; gap: 5px; }
 .funnel-seg-head { display: flex; justify-content: space-between; align-items: baseline; }
-.funnel-label { font-size: 12px; color: var(--cf-text-muted); font-weight: 500; }
-.funnel-nums { display: flex; align-items: baseline; gap: 8px; }
-.funnel-count { font-size: 15px; font-weight: 800; }
+.funnel-label { font-size: 12px; color: var(--cf-text-secondary); font-weight: 600; }
 .funnel-pct { font-size: 11px; color: var(--cf-text-muted); font-variant-numeric: tabular-nums; }
+.funnel-bar-row { display: flex; justify-content: center; }
 .funnel-bar {
-  height: 26px; margin: 0 auto; border-radius: 7px; min-width: 6px;
+  height: 38px; border-radius: 9px; min-width: 44px;
+  display: flex; align-items: center; justify-content: center;
   transition: width 0.5s cubic-bezier(.34,1.2,.64,1);
-  box-shadow: inset 0 -8px 14px rgba(0,0,0,0.12);
+  box-shadow: inset 0 -10px 16px rgba(0,0,0,0.14);
 }
+.funnel-bar-count { font-size: 15px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.25); }
 
 .funnel-skeleton { display: flex; flex-direction: column; gap: 12px; }
 .sk-stage { height: 28px; background: #1e293b; border-radius: 6px; }

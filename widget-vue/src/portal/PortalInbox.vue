@@ -1177,15 +1177,21 @@ watch(selected, (s) => {
 }
 
 .message { display: flex; }
-.user-msg { justify-content: flex-end; }
-.ai-msg { justify-content: flex-start; }
+/* Agent/god-view inbox layout: the VISITOR (customer) sits on the LEFT, and
+   the business side — the AI bot and you when you take over — sits on the
+   RIGHT. This makes takeover read as "I'm replying to the customer", not
+   "I'm chatting as the customer". */
+.user-msg { justify-content: flex-start; }
+.ai-msg { justify-content: flex-end; }
 
 .bubble {
   max-width: 72%; padding: 10px 14px; border-radius: 14px;
   font-size: 13px; line-height: 1.55;
 }
-.user-msg .bubble { background: #6366f1; color: white; border-bottom-right-radius: 4px; }
-.ai-msg .bubble { background: var(--cf-chat-ai-bubble-bg); color: var(--cf-chat-ai-bubble-text); border-bottom-left-radius: 4px; }
+/* Visitor (customer) — neutral bubble on the left. */
+.user-msg .bubble { background: var(--cf-chat-ai-bubble-bg); color: var(--cf-chat-ai-bubble-text); border-bottom-left-radius: 4px; }
+/* AI bot — your automated side, soft indigo on the right. */
+.ai-msg .bubble { background: rgba(99,102,241,0.16); color: var(--cf-text-primary); border-bottom-right-radius: 4px; }
 
 /* ── Visitor panel ───────────────────────────────────────────────────── */
 .visitor-panel {
@@ -1415,9 +1421,11 @@ watch(selected, (s) => {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* You (admin) after takeover — solid accent on the right, clearly distinct
+   from the AI's soft-indigo bubble so it's obvious a human is now replying. */
 .admin-msg { flex-direction: column; align-items: flex-end; }
-.admin-msg .bubble { background: rgba(99,102,241,0.15); color: var(--cf-chat-admin-bubble-text); border-bottom-right-radius: 4px; }
-.msg-role-label { font-size: 10px; font-weight: 600; color: #6366f1; margin-bottom: 2px; }
+.admin-msg .bubble { background: #6366f1; color: #fff; border-bottom-right-radius: 4px; }
+.msg-role-label { font-size: 10px; font-weight: 600; color: #6366f1; margin-bottom: 2px; align-self: flex-end; }
 
 .header-right-actions {
   display: flex; align-items: center; gap: 8px; flex-shrink: 0;

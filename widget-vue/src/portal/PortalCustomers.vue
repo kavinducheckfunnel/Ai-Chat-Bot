@@ -20,7 +20,7 @@
         Hot leads <span class="tab-count hot" v-if="hotLeads.length">{{ hotLeads.length }}</span>
       </button>
       <button class="tab" :class="{ active: activeTab === 'converted' }" @click="activeTab = 'converted'">
-        Converted
+        Converted <span class="tab-count" v-if="convertedLeads.length">{{ convertedLeads.length }}</span>
       </button>
     </div>
 
@@ -146,10 +146,18 @@ const loadingSession = ref(false)
 
 const hotLeads = computed(() => leads.value.filter(l => l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD'))
 
+// A converted lead = one that handed over BOTH email and phone (the
+// conversion event for this funnel). We also include anything already marked
+// CONVERTED on the Kanban so manual moves still show here.
+function isConverted(l) {
+  return !!((l.lead_email && l.lead_phone) || l.kanban_state === 'CONVERTED')
+}
+const convertedLeads = computed(() => leads.value.filter(isConverted))
+
 const filtered = computed(() => {
   let list = leads.value
   if (activeTab.value === 'hot') list = hotLeads.value
-  if (activeTab.value === 'converted') list = list.filter(l => l.kanban_state === 'CONVERTED')
+  if (activeTab.value === 'converted') list = convertedLeads.value
   if (search.value) {
     const q = search.value.toLowerCase()
     list = list.filter(l => (l.lead_email || '').toLowerCase().includes(q) || (l.kanban_state || '').toLowerCase().includes(q))
