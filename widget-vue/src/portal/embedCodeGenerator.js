@@ -365,7 +365,7 @@ export function generateEmbedCode(id, url, color, botName, format) {
 <button id="cf-xb" aria-label="Close">&#10005;</button>
 </div>
 <div id="cf-msgs"><div class="cf-ai">&#128075; Hi! How can I help you today?</div></div>
-<div id="cf-imgprev"><div class="cf-prev-wrap"><img class="cf-prev-thumb" id="cf-pt" src="" alt=""/><button class="cf-prev-rm" id="cf-prm">&#10005;</button></div></div>
+<div id="cf-imgprev"><div class="cf-prev-wrap"><img class="cf-prev-thumb" id="cf-pt" src="" alt="" width="52" height="52"/><button class="cf-prev-rm" id="cf-prm">&#10005;</button></div></div>
 <div id="cf-lead">
   <div class="cf-lead-head">
     <span class="cf-lead-ttl">Want a personalised follow-up?</span>
@@ -1205,14 +1205,22 @@ if($('cf-lead-ph')){
     // untouched because Liquid only processes `{% %}` and `{{ }}`. Wrap
     // the snippet with merchant-facing headers so it's obvious in
     // theme.liquid what was pasted and why.
+    // theme-check-disable wraps the vendored block so Shopify's linter
+    // doesn't flag our self-contained widget (img width/height, remote
+    // asset, inline script, etc.) — these are best-practice hints meant for
+    // theme authors, not a third-party snippet that must stay self-hosted.
     return [
       '{% comment %}',
       '  Checkfunnel AI chat widget — paste this block right before',
       '  </body> in Layout/theme.liquid (Online Store → Themes → Edit code).',
       '  Branding, color, name, and CTA stay live-editable from the',
       '  Checkfunnel portal — no re-paste needed.',
+      '  PASTE ONCE: if you already have a "Start of Checkfunnel code" block,',
+      '  replace it — do not add a second copy.',
       '{% endcomment %}',
+      '{% # theme-check-disable %}',
       fullSnippet,
+      '{% # theme-check-enable %}',
     ].join('\n')
   }
 

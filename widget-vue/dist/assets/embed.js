@@ -339,7 +339,7 @@
 <button id="cf-xb" aria-label="Close">&#10005;</button>
 </div>
 <div id="cf-msgs"><div class="cf-ai">&#128075; Hi! How can I help you today?</div></div>
-<div id="cf-imgprev"><div class="cf-prev-wrap"><img class="cf-prev-thumb" id="cf-pt" src="" alt=""/><button class="cf-prev-rm" id="cf-prm">&#10005;</button></div></div>
+<div id="cf-imgprev"><div class="cf-prev-wrap"><img class="cf-prev-thumb" id="cf-pt" src="" alt="" width="52" height="52"/><button class="cf-prev-rm" id="cf-prm">&#10005;</button></div></div>
 <div id="cf-lead">
   <div class="cf-lead-head">
     <span class="cf-lead-ttl">Want a personalised follow-up?</span>
