@@ -17,6 +17,8 @@ upserts by plan name and:
     Starter $29, Growth $79, Pro $199, Enterprise custom. Override the
     display price with --starter-price / --growth-price / --pro-price; make
     sure it matches the amount configured on the Stripe Price.
+    NOTE: Pro is intentionally kept at $149 / unlimited (live production
+    values) rather than the doc's $199 / 15,000 — see the Pro spec comment.
 
 Usage:
     python manage.py seed_plans
@@ -119,8 +121,13 @@ PLAN_SPECS = [
     {
         'name': 'Pro',
         'sort_order': 3,
-        'price_monthly': Decimal('199'),          # display price; override via --pro-price
-        'max_messages_per_month': 15000,
+        # Product decision: Pro is kept at the live production price + an
+        # UNLIMITED message allowance so the existing Pro tenants aren't
+        # disrupted. (The pricing doc lists Pro as $199 / 15,000 msgs — switch
+        # these two lines to Decimal('199') / 15000 if/when you want to align
+        # to the doc and migrate those tenants.)
+        'price_monthly': Decimal('149'),          # override via --pro-price
+        'max_messages_per_month': -1,             # unlimited (doc: 15000)
         'max_clients': 10,
         'max_sessions_per_month': UNLIMITED,
         'max_images_per_month': UNLIMITED,
