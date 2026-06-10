@@ -357,11 +357,15 @@ export function useAdminApi() {
     returnFromImpersonation() {
       const returnToken = localStorage.getItem('cf_impersonate_return_token')
       const returnUser = localStorage.getItem('cf_impersonate_return_user')
+      const returnRefresh = localStorage.getItem('cf_impersonate_return_refresh')
       localStorage.setItem('cf_access_token', returnToken)
       localStorage.setItem('cf_user', returnUser)
+      // Restore the super-admin's refresh token (swapped out during impersonation).
+      if (returnRefresh) localStorage.setItem('cf_refresh_token', returnRefresh)
       localStorage.removeItem('cf_impersonating')
       localStorage.removeItem('cf_impersonate_return_token')
       localStorage.removeItem('cf_impersonate_return_user')
+      localStorage.removeItem('cf_impersonate_return_refresh')
       window.location.href = '/admin/tenants'
     },
 

@@ -2662,6 +2662,12 @@ def impersonate_tenant(request, tenant_id):
 
     return Response({
         'access': str(access),
+        # Also hand back a refresh token scoped to the TENANT user. Without it,
+        # the frontend's silent token-refresh would fall back to the
+        # super-admin's refresh token once the 15-min access expired, switching
+        # the session back to the super-admin (who has no plan) and making the
+        # impersonated portal show "Free / no plan" with all features disabled.
+        'refresh': str(refresh),
         'expires_in': 900,
         'tenant': {
             'id': tenant.pk,

@@ -921,11 +921,16 @@ async function loginAsTenant(t) {
   try {
     const data = await api.impersonateTenant(t.id)
     const prevToken = localStorage.getItem('cf_access_token')
+    const prevRefresh = localStorage.getItem('cf_refresh_token')
     const prevUser = localStorage.getItem('cf_user')
     localStorage.setItem('cf_access_token', data.access)
     localStorage.setItem('cf_user', JSON.stringify({ ...data.tenant, role: data.tenant.role }))
     localStorage.setItem('cf_impersonate_return_token', prevToken)
     localStorage.setItem('cf_impersonate_return_user', prevUser)
+    // Swap the refresh token to the tenant's too, so the silent refresh keeps
+    // the impersonation identity instead of reverting to the super-admin.
+    if (prevRefresh) localStorage.setItem('cf_impersonate_return_refresh', prevRefresh)
+    if (data.refresh) localStorage.setItem('cf_refresh_token', data.refresh)
     localStorage.setItem('cf_impersonating', 'true')
     toast.success(`Logged in as ${data.tenant.username} (${data.tenant.company_name})`)
     setTimeout(() => { window.location.href = '/admin/' }, 1200)

@@ -664,6 +664,12 @@ async function impersonate(t) {
     const res = await api.impersonateTenant(t.tenant_id)
     localStorage.setItem('cf_impersonate_return_token', localStorage.getItem('cf_access_token'))
     localStorage.setItem('cf_impersonate_return_user', localStorage.getItem('cf_user'))
+    // Preserve the super-admin's refresh token and swap in the tenant's, so the
+    // silent token refresh keeps the impersonation session instead of reverting
+    // to the super-admin (who has no plan → portal shows Free).
+    const prevRefresh = localStorage.getItem('cf_refresh_token')
+    if (prevRefresh) localStorage.setItem('cf_impersonate_return_refresh', prevRefresh)
+    if (res.refresh) localStorage.setItem('cf_refresh_token', res.refresh)
     localStorage.setItem('cf_impersonating', 'true')
     localStorage.setItem('cf_access_token', res.access)
     window.location.href = '/portal/inbox'
