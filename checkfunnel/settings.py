@@ -288,4 +288,8 @@ DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Checkfunnel <noreply@
 STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
 STRIPE_PUBLISHABLE_KEY = os.environ.get('STRIPE_PUBLISHABLE_KEY', '')
 STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
-STRIPE_PORTAL_RETURN_URL = os.environ.get('STRIPE_PORTAL_RETURN_URL', 'https://ai.checkfunnels.com/portal/billing')
+STRIPE_PORTAL_RETURN_URL = os.environ.get('STRIPE_PORTAL_RETURN_URL', 'https://growmiq.io/portal/billing')
+
+# Absolute public origin used to build links the backend embeds in emails
+# (invoice PDF/view links, etc.). Env-overridable so it tracks the live domain.
+BACKEND_PUBLIC_URL = os.environ.get('BACKEND_PUBLIC_URL', 'https://growmiq.io')
