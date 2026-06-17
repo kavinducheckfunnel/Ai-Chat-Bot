@@ -1,7 +1,7 @@
 <template>
   <div class="inbox-page">
     <div class="page-header">
-      <div>
+      <div v-if="!embedded">
         <h1 class="page-title">Inbox</h1>
         <p class="page-sub">Real-time conversations from your website</p>
       </div>
@@ -433,7 +433,7 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAdminApi } from '../composables/useAdminApi'
 
-const props = defineProps({ client: Object })
+const props = defineProps({ client: Object, embedded: Boolean })
 const api = useAdminApi()
 
 const sessions = ref([])
@@ -979,7 +979,10 @@ watch(selected, (s) => {
 .inbox-page {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  /* 100vh when standalone; 100% lets it fill the Conversations wrapper's body
+     (which is itself height-constrained) without overflowing past it. */
+  height: 100%;
+  min-height: 0;
   padding: 28px 32px 0;
   font-family: 'Inter', -apple-system, sans-serif;
 }

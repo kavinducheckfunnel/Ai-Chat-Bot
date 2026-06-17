@@ -27,14 +27,12 @@ import AdminPromptEditor from './admin/AdminPromptEditor.vue'
 
 import PortalLayout from './portal/PortalLayout.vue'
 import OnboardingWizard from './portal/OnboardingWizard.vue'
-import PortalInbox from './portal/PortalInbox.vue'
-import PortalCustomers from './portal/PortalCustomers.vue'
+import PortalConversations from './portal/PortalConversations.vue'
+import PortalLeads from './portal/PortalLeads.vue'
 import PortalReports from './portal/PortalReports.vue'
 import PortalReferrals from './portal/PortalReferrals.vue'
 import PortalSettings from './portal/PortalSettings.vue'
 import PortalIntegrations from './portal/PortalIntegrations.vue'
-import PortalLiveView from './portal/PortalLiveView.vue'
-import PortalKanban from './portal/PortalKanban.vue'
 import PortalBilling from './portal/PortalBilling.vue'
 import PortalActivity from './portal/PortalActivity.vue'
 import PortalVisitors from './portal/PortalVisitors.vue'
@@ -89,16 +87,18 @@ const routes = [
     children: [
       { path: '', redirect: '/portal/inbox' },
       { path: 'setup', component: OnboardingWizard },
-      { path: 'inbox', component: PortalInbox },
-      { path: 'customers', component: PortalCustomers },
+      // Conversations = merged Inbox + Live View (view toggle inside)
+      { path: 'inbox', component: PortalConversations },
+      { path: 'live', redirect: { path: '/portal/inbox', query: { view: 'live' } } },
+      // Leads = merged All leads + Pipeline (view toggle inside)
+      { path: 'customers', component: PortalLeads },
+      { path: 'pipeline', redirect: { path: '/portal/customers', query: { view: 'board' } } },
       { path: 'reports', component: PortalReports },
       { path: 'referrals', component: PortalReferrals },
       { path: 'settings', component: PortalSettings },
       { path: 'integrations', component: PortalIntegrations },
-      { path: 'live', component: PortalLiveView },
       { path: 'activity', component: PortalActivity },
       { path: 'visitors', component: PortalVisitors },
-      { path: 'pipeline', component: PortalKanban },
       { path: 'billing', component: PortalBilling },
     ],
   },

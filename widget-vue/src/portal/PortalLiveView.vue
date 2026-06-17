@@ -1,7 +1,7 @@
 <template>
   <div class="live-page">
     <div class="page-header">
-      <div>
+      <div v-if="!embedded">
         <h1 class="page-title">Live View</h1>
         <p class="page-sub">Real-time sessions from your chatbot</p>
       </div>
@@ -174,7 +174,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
-const props = defineProps({ client: Object })
+const props = defineProps({ client: Object, embedded: Boolean })
 const api = useAdminApi()
 const sessions = ref([])
 const loading = ref(false)

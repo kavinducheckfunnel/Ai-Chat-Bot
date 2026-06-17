@@ -23,76 +23,50 @@
     </div>
 
     <nav class="nav">
-      <!-- INBOX -->
-      <p class="nav-section">Inbox</p>
+      <!-- ── WORKSPACE ── -->
+      <p class="nav-section">Workspace</p>
       <router-link to="/portal/inbox" class="nav-item" :class="{ active: $route.path === '/portal/inbox' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        All chats
+        Conversations
         <span class="badge" v-if="liveBadge > 0">{{ liveBadge }}</span>
       </router-link>
-
-      <!-- CUSTOMERS -->
-      <p class="nav-section">Customers</p>
       <router-link to="/portal/customers" class="nav-item" :class="{ active: $route.path === '/portal/customers' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/></svg>
-        All leads
+        Leads
+      </router-link>
+      <router-link to="/portal/visitors" class="nav-item" :class="{ active: $route.path.startsWith('/portal/visitors') }" @click="$emit('close')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Audience
       </router-link>
 
-      <!-- REPORTS -->
-      <p class="nav-section">Reports</p>
+      <!-- ── INSIGHTS ── -->
+      <p class="nav-section">Insights</p>
       <router-link to="/portal/reports" class="nav-item" :class="{ active: $route.path === '/portal/reports' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
-        Overview
+        Dashboard
       </router-link>
-
-      <!-- REFERRALS -->
+      <router-link to="/portal/activity" class="nav-item" :class="{ active: $route.path === '/portal/activity' }" @click="$emit('close')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="2" fill="currentColor"/><circle cx="14" cy="9" r="3" fill="currentColor" opacity="0.6"/><circle cx="18" cy="16" r="1.5" fill="currentColor"/></svg>
+        Behavior
+      </router-link>
       <router-link to="/portal/referrals" class="nav-item" :class="{ active: $route.path === '/portal/referrals' }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         Referrals
       </router-link>
 
-      <!-- LIVE VIEW -->
-      <p class="nav-section">Live</p>
-      <router-link to="/portal/live" class="nav-item" :class="{ active: $route.path === '/portal/live' }" @click="$emit('close')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
-        Live View
-      </router-link>
-
-      <!-- ACTIVITY -->
-      <router-link to="/portal/activity" class="nav-item" :class="{ active: $route.path === '/portal/activity' }" @click="$emit('close')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M3 3v18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="14" r="2" fill="currentColor"/><circle cx="14" cy="9" r="3" fill="currentColor" opacity="0.6"/><circle cx="18" cy="16" r="1.5" fill="currentColor"/></svg>
-        Activity
-      </router-link>
-
-      <!-- VISITORS -->
-      <router-link to="/portal/visitors" class="nav-item" :class="{ active: $route.path.startsWith('/portal/visitors') }" @click="$emit('close')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Visitors
-      </router-link>
-
-      <!-- PIPELINE -->
-      <p class="nav-section">Pipeline</p>
-      <router-link to="/portal/pipeline" class="nav-item" :class="{ active: $route.path === '/portal/pipeline' }" @click="$emit('close')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="4" height="18" rx="1" stroke="currentColor" stroke-width="2"/><rect x="10" y="3" width="4" height="13" rx="1" stroke="currentColor" stroke-width="2"/><rect x="17" y="3" width="4" height="8" rx="1" stroke="currentColor" stroke-width="2"/></svg>
-        Pipeline
-      </router-link>
-
-      <!-- BILLING -->
-      <p class="nav-section">Account</p>
-      <router-link to="/portal/billing" class="nav-item" :class="{ active: $route.path === '/portal/billing' }" @click="$emit('close')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="1" y1="10" x2="23" y2="10" stroke="currentColor" stroke-width="2"/></svg>
-        Billing
-      </router-link>
-
-      <!-- SETTINGS -->
+      <!-- ── SETTINGS ── -->
       <p class="nav-section">Settings</p>
+      <router-link to="/portal/settings" class="nav-item" :class="{ active: $route.path.startsWith('/portal/settings') }" @click="$emit('close')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Channels &amp; Embed
+      </router-link>
       <router-link to="/portal/integrations" class="nav-item" :class="{ active: $route.path.startsWith('/portal/integrations') }" @click="$emit('close')">
         <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="14" y="3" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="3" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><rect x="14" y="14" width="7" height="7" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
         Integrations
       </router-link>
-      <router-link to="/portal/settings" class="nav-item" :class="{ active: $route.path.startsWith('/portal/settings') }" @click="$emit('close')">
-        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Channels & embed
+      <router-link to="/portal/billing" class="nav-item" :class="{ active: $route.path === '/portal/billing' }" @click="$emit('close')">
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><line x1="1" y1="10" x2="23" y2="10" stroke="currentColor" stroke-width="2"/></svg>
+        Billing
       </router-link>
     </nav>
 

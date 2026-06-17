@@ -1,7 +1,7 @@
 <template>
   <div class="customers-page">
     <div class="page-header">
-      <div>
+      <div v-if="!embedded">
         <h1 class="page-title">Customers</h1>
         <p class="page-sub">Leads and contacts from your chatbot</p>
       </div>
@@ -131,7 +131,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
-const props = defineProps({ client: Object })
+const props = defineProps({ client: Object, embedded: Boolean })
 const api = useAdminApi()
 
 const leads = ref([])

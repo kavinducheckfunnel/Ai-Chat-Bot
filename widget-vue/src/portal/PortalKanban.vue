@@ -1,7 +1,7 @@
 <template>
   <div class="kanban-page">
     <div class="page-header">
-      <div>
+      <div v-if="!embedded">
         <h1 class="page-title">Pipeline</h1>
         <p class="page-sub">Drag sessions to update their stage</p>
       </div>
@@ -151,7 +151,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
-const props = defineProps({ client: Object })
+const props = defineProps({ client: Object, embedded: Boolean })
 const api = useAdminApi()
 const sessions = ref([])
 const loading = ref(false)
