@@ -104,12 +104,23 @@ class TestPageViewAnalytics:
         assert ev['exit_intent_count'] == 1
 
     def test_top_pages(self, tenant_client, client_obj):
-        for _ in range(3):
-            AnalyticEvent.objects.create(client=client_obj, session_id='s', event_type='page_view', page_url='https://x.com/popular')
-        AnalyticEvent.objects.create(client=client_obj, session_id='s', event_type='page_view', page_url='https://x.com/rare')
+        # top_pages is built from each session's page_visits (so it can attribute
+        # chats/leads/heat per page), not raw page_view events.
+        ChatSession.objects.create(
+            client=client_obj, visitor_id='p1', channel='website', message_count=2,
+            lead_email='a@b.com',
+            page_visits=[{'url': 'https://x.com/popular'}, {'url': 'https://x.com/popular'}, {'url': 'https://x.com/rare'}],
+        )
+        ChatSession.objects.create(
+            client=client_obj, visitor_id='p2', channel='website', message_count=1,
+            page_visits=[{'url': 'https://x.com/popular'}],
+        )
         data = tenant_client.get(analytics_url(client_obj.id) + '?period=all').json()
-        assert data['top_pages'][0]['page'].endswith('/popular')
-        assert data['top_pages'][0]['views'] == 3
+        top = data['top_pages']
+        assert top[0]['page'] == '/popular'
+        assert top[0]['views'] == 3   # 2 + 1 across sessions
+        assert top[0]['chats'] == 2   # both sessions had a visitor message
+        assert top[0]['leads'] == 1   # one had an email
 
 
 # ─── Lead-stage metrics (#9) ──────────────────────────────────────────────────

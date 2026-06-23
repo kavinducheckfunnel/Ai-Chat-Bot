@@ -1781,14 +1781,19 @@ def client_analytics(request, client_id):
 
         # ── Lead-stage breakdown (for the Leads tab) ──────────────────────────
         # Counts by kanban_state so the Leads pipeline + funnel are accurate.
+        # NOTE: "Hot Leads" is the kanban STAGE (HOT_LEAD), which is distinct
+        # from "High Heat Conversations" (heat_score >= 70, the `hot` var above).
         qualified = qs.filter(kanban_state__in=['QUALIFIED', 'HOT_LEAD', 'READY_TO_BUY', 'CONVERTED']).count()
+        hot_lead = qs.filter(kanban_state='HOT_LEAD').count()
         ready_to_buy = qs.filter(Q(kanban_state='READY_TO_BUY') | Q(conversation_state='READY_TO_BUY')).count()
         converted = qs.filter(kanban_state='CONVERTED').count()
         contact_captured = leads  # leads already = sessions with email/phone
         # Rates over the honest denominators.
         capture_rate = round((leads / total * 100) if total else 0, 1)
-        hot_lead_rate = round((hot / active_total * 100) if active_total else 0, 1)
+        hot_lead_rate = round((hot_lead / active_total * 100) if active_total else 0, 1)
         conversion_rate = round((converted / active_total * 100) if active_total else 0, 1)
+        # Chat-start rate = answered chats / all opened sessions.
+        chat_start_rate = round((active_total / total * 100) if total else 0, 1)
         avg_intent = round((qs.aggregate(a=Avg('current_intent_ema'))['a'] or 0) * 100, 1)
         avg_budget = round((qs.aggregate(a=Avg('current_budget_ema'))['a'] or 0) * 100, 1)
         avg_urgency = round((qs.aggregate(a=Avg('current_urgency_ema'))['a'] or 0) * 100, 1)
@@ -1801,10 +1806,11 @@ def client_analytics(request, client_id):
             'avg_dur_s': avg_dur_s, 'total_dur_s': total_dur_s,
             'leads': leads, 'hot': hot, 'warm': warm, 'cold': cold,
             'avg_heat': round(avg_heat, 1), 'ai_resolution_rate': ai_res_rate,
-            'qualified': qualified, 'ready_to_buy': ready_to_buy, 'converted': converted,
+            'qualified': qualified, 'hot_lead': hot_lead,
+            'ready_to_buy': ready_to_buy, 'converted': converted,
             'contact_captured': contact_captured,
             'capture_rate': capture_rate, 'hot_lead_rate': hot_lead_rate,
-            'conversion_rate': conversion_rate,
+            'conversion_rate': conversion_rate, 'chat_start_rate': chat_start_rate,
             'avg_intent': avg_intent, 'avg_budget': avg_budget, 'avg_urgency': avg_urgency,
         }
 
@@ -1919,13 +1925,108 @@ def client_analytics(request, client_id):
     total_pricing_visits = ev_qs.filter(event_type='pricing_visit').count()
     total_exit_intent = ev_qs.filter(event_type='exit_intent').count()
 
-    # Top pages by views, with chats started / leads / avg heat (Engagement tab).
-    top_pages_raw = (
-        ev_qs.filter(event_type='page_view')
-        .exclude(page_url__isnull=True).exclude(page_url='')
-        .values('page_url').annotate(views=Count('id')).order_by('-views')[:8]
-    )
-    top_pages = [{'page': r['page_url'], 'views': r['views']} for r in top_pages_raw]
+    # ── Top pages with views / chats / leads / avg heat (Engagement tab) ──────
+    # Built from each session's page_visits so we can attribute chats, leads and
+    # heat per page (AnalyticEvent alone only gives raw view counts).
+    page_stats = {}
+    for s in sessions.only('page_visits', 'message_count', 'lead_email', 'lead_phone',
+                           'current_intent_ema', 'current_budget_ema', 'current_urgency_ema'):
+        heat = _calc_heat(s)
+        is_chat = (s.message_count or 0) >= 1
+        is_lead = bool((s.lead_email or '').strip() or (s.lead_phone or '').strip())
+        seen = set()
+        for pv in (s.page_visits or []):
+            url = (pv or {}).get('url')
+            if not url:
+                continue
+            st = page_stats.setdefault(url, {'views': 0, 'chats': 0, 'leads': 0, 'heat_sum': 0.0, 'heat_n': 0})
+            st['views'] += 1
+            if url not in seen:
+                seen.add(url)
+                if is_chat:
+                    st['chats'] += 1
+                if is_lead:
+                    st['leads'] += 1
+                st['heat_sum'] += heat
+                st['heat_n'] += 1
+
+    def _short_page(u):
+        try:
+            from urllib.parse import urlparse
+            p = urlparse(u)
+            return (p.path or '/') if p.path not in ('', '/') else (p.netloc or u)
+        except Exception:
+            return u
+
+    top_pages = sorted(page_stats.items(), key=lambda kv: kv[1]['views'], reverse=True)[:8]
+    top_pages = [{
+        'page': _short_page(u),
+        'url': u,
+        'views': st['views'],
+        'chats': st['chats'],
+        'leads': st['leads'],
+        'avg_heat': round(st['heat_sum'] / st['heat_n'], 1) if st['heat_n'] else 0,
+    } for u, st in top_pages]
+
+    # ── Engagement trend (daily page views / chat starts / exit intent) ───────
+    def _daily_event_map(etype):
+        raw = (ev_qs.filter(event_type=etype).annotate(day=TruncDate('created_at'))
+               .values('day').annotate(c=Count('id')))
+        return {r['day']: r['c'] for r in raw}
+    pv_map = _daily_event_map('page_view')
+    ei_map = _daily_event_map('exit_intent')
+    engagement_trend = []
+    for i in range(trend_days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        engagement_trend.append({
+            'date': d.strftime('%b %d'),
+            'page_views': pv_map.get(d, 0),
+            'chat_starts': daily_ai.get(d, 0) + daily_human.get(d, 0),
+            'exit_intent': ei_map.get(d, 0),
+        })
+
+    # ── Lead funnel trend (daily qualified / hot / converted) ─────────────────
+    def _daily_kanban_map(states):
+        raw = (sessions.filter(kanban_state__in=states).annotate(day=TruncDate('created_at'))
+               .values('day').annotate(c=Count('session_id')))
+        return {r['day']: r['c'] for r in raw}
+    q_map = _daily_kanban_map(['QUALIFIED', 'HOT_LEAD', 'READY_TO_BUY', 'CONVERTED'])
+    h_map = _daily_kanban_map(['HOT_LEAD'])
+    c_map = _daily_kanban_map(['CONVERTED'])
+    lead_funnel_trend = []
+    for i in range(trend_days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        lead_funnel_trend.append({
+            'date': d.strftime('%b %d'),
+            'qualified': q_map.get(d, 0),
+            'hot': h_map.get(d, 0),
+            'converted': c_map.get(d, 0),
+        })
+
+    # ── Recent leads (Leads tab table) ────────────────────────────────────────
+    lead_rows = (sessions.filter(Q(lead_email__isnull=False) | Q(lead_phone__isnull=False))
+                 .exclude(lead_email='').order_by('-created_at')[:25])
+    recent_leads = []
+    for s in lead_rows:
+        email = (s.lead_email or '').strip()
+        phone = (s.lead_phone or '').strip()
+        contact = 'Email & Phone' if (email and phone) else ('Email' if email else ('Phone' if phone else 'Captured'))
+        # Source = first page the visitor landed on, else channel.
+        source = ''
+        pv = s.page_visits or []
+        if pv:
+            source = _short_page((pv[0] or {}).get('url') or '')
+        if not source:
+            source = (s.channel or 'website').title()
+        recent_leads.append({
+            'session_id': str(s.session_id),
+            'visitor': s.lead_email or ('Visitor #' + str(s.session_id)[:6]),
+            'stage': s.kanban_state,
+            'source': source,
+            'contact': contact,
+            'heat': _calc_heat(s),
+            'created_at': s.created_at.isoformat(),
+        })
 
     # F8 — plan-tiered dashboard metrics. The frontend uses
     # `allowed_metric_keys` to decide which tiles to render vs gate
@@ -1954,7 +2055,11 @@ def client_analytics(request, client_id):
         'avg_duration_seconds':  metric_obj(curr['avg_dur_s'], prev['avg_dur_s']),
         'total_duration_seconds': metric_obj(curr['total_dur_s'], prev['total_dur_s']),
         'leads_captured':        metric_obj(curr['leads'], prev['leads']),
-        'hot_sessions':          metric_obj(curr['hot'], prev['hot']),
+        # Hot Leads = kanban HOT_LEAD stage (Overview/Leads cards).
+        'hot_sessions':          metric_obj(curr['hot_lead'], prev['hot_lead']),
+        # High Heat Conversations = heat_score >= 70 (Engagement card / distribution).
+        'high_heat_conversations': metric_obj(curr['hot'], prev['hot']),
+        'chat_start_rate':       metric_obj(curr['chat_start_rate'], prev['chat_start_rate']),
         # Real, computed replacements for the old N/A placeholder cards.
         'ai_response_seconds':   metric_obj(ai_response_seconds, ai_response_seconds_prev),
         'chats_per_hour':        metric_obj(chats_per_hour, chats_per_hour_prev),
@@ -1970,7 +2075,7 @@ def client_analytics(request, client_id):
         'leads': {
             'captured':       metric_obj(curr['leads'], prev['leads']),
             'qualified':      metric_obj(curr['qualified'], prev['qualified']),
-            'hot':            metric_obj(curr['hot'], prev['hot']),
+            'hot':            metric_obj(curr['hot_lead'], prev['hot_lead']),
             'ready_to_buy':   metric_obj(curr['ready_to_buy'], prev['ready_to_buy']),
             'converted':      metric_obj(curr['converted'], prev['converted']),
             'contact_captured': metric_obj(curr['contact_captured'], prev['contact_captured']),
@@ -1982,6 +2087,7 @@ def client_analytics(request, client_id):
             'avg_urgency':    curr['avg_urgency'],
             'avg_heat':       curr['avg_heat'],
         },
+        'recent_leads': recent_leads,
 
         # ── EMA signal averages ───────────────────────────────────────────────
         'avg_intent':  round((agg['avg_intent'] or 0) * 100, 1),
@@ -2006,6 +2112,8 @@ def client_analytics(request, client_id):
         },
         'kanban_breakdown': kanban_breakdown,
         'daily_trend': daily_trend,
+        'engagement_trend': engagement_trend,
+        'lead_funnel_trend': lead_funnel_trend,
         'top_pages': top_pages,
 
         # ── Analytics events ──────────────────────────────────────────────────
