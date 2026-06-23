@@ -410,6 +410,13 @@ export function useAdminApi() {
     reregisterTelegramWebhook: (clientId) =>
       apiFetch(`/api/admin/clients/${clientId}/telegram-webhook/`, { method: 'POST' }),
 
+    // ── Shopify order tracking (OAuth) ─────────────────────────────────────────
+    getShopifyStatus: (clientId) => apiFetch(`/api/shopify/status/${clientId}/`),
+    getShopifyAuthorizeUrl: (clientId, shop) =>
+      apiFetch(`/api/shopify/authorize-url/?client_id=${clientId}&shop=${encodeURIComponent(shop)}`),
+    disconnectShopify: (clientId) =>
+      apiFetch(`/api/shopify/disconnect/${clientId}/`, { method: 'POST', body: '{}' }),
+
     getPortalSessions: (clientId, params = {}) => {
       const qs = new URLSearchParams(
         Object.fromEntries(Object.entries(params).filter(([, v]) => v !== '' && v !== null && v !== undefined))

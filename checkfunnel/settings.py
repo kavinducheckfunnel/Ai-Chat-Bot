@@ -293,3 +293,10 @@ STRIPE_PORTAL_RETURN_URL = os.environ.get('STRIPE_PORTAL_RETURN_URL', 'https://g
 # Absolute public origin used to build links the backend embeds in emails
 # (invoice PDF/view links, etc.). Env-overridable so it tracks the live domain.
 BACKEND_PUBLIC_URL = os.environ.get('BACKEND_PUBLIC_URL', 'https://growmiq.io')
+
+# ── Shopify public app (order tracking) ───────────────────────────────────────
+# One app, installed by many merchant stores via OAuth. Secret lives in .env only.
+SHOPIFY_APP_CLIENT_ID = os.environ.get('SHOPIFY_APP_CLIENT_ID', '')
+SHOPIFY_APP_CLIENT_SECRET = os.environ.get('SHOPIFY_APP_CLIENT_SECRET', '')
+SHOPIFY_APP_SCOPES = os.environ.get('SHOPIFY_APP_SCOPES', 'read_orders,read_fulfillments')
+SHOPIFY_API_VERSION = os.environ.get('SHOPIFY_API_VERSION', '2024-10')

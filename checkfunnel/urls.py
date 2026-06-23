@@ -7,6 +7,7 @@ from . import widget_views, health_views
 urlpatterns = [
     path('django-admin/', admin.site.urls),
     path('api/chat/', include('chat.urls')),
+    path('api/shopify/', include('chat.shopify_urls')),
     path('api/analytics/', include('analytics.urls')),
     path('api/scraper/', include('scraper.urls')),
     path('api/admin/', include('users.urls')),

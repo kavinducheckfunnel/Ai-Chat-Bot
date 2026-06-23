@@ -196,6 +196,12 @@ class Client(models.Model):
     messenger_verify_token = models.CharField(max_length=100, blank=True, null=True)
     messenger_enabled = models.BooleanField(default=False)
 
+    # ── Shopify Admin API (order tracking — OAuth offline token) ──────────────
+    shopify_shop_domain = models.CharField(max_length=255, blank=True, default='')
+    shopify_access_token = models.CharField(max_length=255, blank=True, default='')
+    shopify_scopes = models.CharField(max_length=255, blank=True, default='')
+    shopify_connected_at = models.DateTimeField(null=True, blank=True)
+
     # ── HubSpot CRM ───────────────────────────────────────────────────────────
     hubspot_api_key = models.CharField(max_length=500, blank=True, null=True)
 

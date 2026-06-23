@@ -829,6 +829,62 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         conversation_summary=session.conversation_summary or '',
         current_focus=current_focus,
     )
+
+    # ── Order-status intent (Shopify-connected stores) ───────────────────────
+    # If the visitor is asking about an order, look it up live and inject a
+    # verified ORDER STATUS block so the bot answers from real data (never
+    # invents a status). Verification = order number + matching email.
+    order_block = ''
+    if user_message and not image_data and session.client_id:
+        try:
+            from . import shopify_orders as _so
+            if _so.is_order_query(user_message):
+                client = session.client
+                if _so.is_connected(client):
+                    order_no = _so.extract_order_number(user_message)
+                    email = (session.lead_email or '').strip()
+                    if not email:
+                        from .phone_utils import extract_email
+                        email = extract_email(user_message) or ''
+                    if order_no and email:
+                        res = _so.lookup_order(client, order_no, email)
+                        if res.get('ok'):
+                            order_block = (
+                                "\n\nORDER STATUS MODE — the visitor asked about an order and the "
+                                "order number + email MATCHED. Answer naturally and warmly using "
+                                "ONLY these verified facts (include the tracking link if present). "
+                                "Never invent details.\n" + _so.format_order_context(res['order'])
+                            )
+                        elif res.get('reason') == 'not_found':
+                            order_block = (
+                                "\n\nORDER STATUS MODE — no order matched that number + email. "
+                                "Politely say you couldn't find a match, ask them to double-check "
+                                "both the order number and the email used on the order, and offer to "
+                                "connect them with the team. NEVER reveal whether any order exists."
+                            )
+                        else:
+                            order_block = (
+                                "\n\nORDER STATUS MODE — order lookup is temporarily unavailable. "
+                                "Apologize briefly and offer to have the team follow up."
+                            )
+                    else:
+                        order_block = (
+                            "\n\nORDER STATUS MODE — the visitor wants their order status. To look it "
+                            "up you still need their ORDER NUMBER and the EMAIL used on the order. Ask "
+                            "for both in ONE friendly sentence. Do not make up a status."
+                        )
+                else:
+                    order_block = (
+                        "\n\nORDER STATUS MODE — live order tracking isn't connected for this store. "
+                        "Apologize briefly, then offer to pass their question to the team — ask for "
+                        "their order number and email so a human can follow up."
+                    )
+        except Exception as e:
+            logger.warning(f'[ai] order-status injection failed: {e}')
+    if order_block:
+        system_prompt += order_block
+        dynamic_system += order_block  # Anthropic path reads dynamic_system, not system_prompt
+
     # JSON-mode tail-prompt — used for text-only turns. Vision turns get a
     # plain-text instruction instead: image-capable models reliably break
     # strict-JSON output when an image is also in the request, so forcing

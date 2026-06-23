@@ -8,6 +8,34 @@
       </p>
     </div>
 
+    <!-- Shopify order tracking (OAuth) -->
+    <div class="shopify-ot-card">
+      <div class="ot-head">
+        <span class="ot-icon">🛍️</span>
+        <div class="ot-titles">
+          <span class="ot-name">Shopify Order Tracking</span>
+          <span class="ot-tagline">Let the AI answer "where's my order?" with live status &amp; tracking.</span>
+        </div>
+        <span v-if="shopify.connected" class="ot-pill on">● Connected</span>
+        <span v-else class="ot-pill off">Not connected</span>
+      </div>
+
+      <div v-if="shopify.connected" class="ot-body">
+        <p class="ot-connected-line">Connected to <strong>{{ shopify.shop_domain }}</strong>. The chatbot can now look up orders by order number + email.</p>
+        <button class="ot-btn ghost" @click="disconnectShopify" :disabled="shopify.busy">Disconnect</button>
+      </div>
+      <div v-else class="ot-body">
+        <p class="ot-help">Enter your Shopify store domain, then authorize read-only order access. (One-time, ~10 seconds.)</p>
+        <div class="ot-row">
+          <input v-model="shopify.shop" class="ot-input" placeholder="your-store.myshopify.com" @keydown.enter="connectShopify" />
+          <button class="ot-btn primary" @click="connectShopify" :disabled="shopify.busy || !shopify.shop.trim()">
+            {{ shopify.busy ? 'Connecting…' : 'Connect Shopify' }}
+          </button>
+        </div>
+        <p v-if="shopify.error" class="ot-error">{{ shopify.error }}</p>
+      </div>
+    </div>
+
     <!-- Filter tabs -->
     <div class="filter-tabs">
       <button
@@ -68,7 +96,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, inject } from 'vue'
+import { ref, computed, onMounted, watch, inject } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const api = useAdminApi()
@@ -77,6 +105,44 @@ const portalClient = inject('portalClient', ref(null))
 const activeFilter = ref('all')
 const features = ref({})  // plan feature flags
 const subscription = ref(null)
+
+// ── Shopify order tracking (OAuth) ──────────────────────────────────────────
+const shopify = ref({ connected: false, shop_domain: '', shop: '', busy: false, error: '' })
+
+async function loadShopifyStatus() {
+  const c = portalClient.value
+  if (!c?.id) return
+  try {
+    const s = await api.getShopifyStatus(c.id)
+    shopify.value.connected = !!s.connected
+    shopify.value.shop_domain = s.shop_domain || ''
+  } catch {}
+}
+
+async function connectShopify() {
+  const c = portalClient.value
+  if (!c?.id || !shopify.value.shop.trim()) return
+  shopify.value.busy = true; shopify.value.error = ''
+  try {
+    const res = await api.getShopifyAuthorizeUrl(c.id, shopify.value.shop.trim())
+    if (res?.url) { window.location.href = res.url; return }  // redirect to Shopify
+    shopify.value.error = 'Could not start the connection.'
+  } catch (e) {
+    shopify.value.error = e?.message || 'Enter a valid myshopify.com domain.'
+  } finally {
+    shopify.value.busy = false
+  }
+}
+
+async function disconnectShopify() {
+  const c = portalClient.value
+  if (!c?.id) return
+  shopify.value.busy = true
+  try {
+    await api.disconnectShopify(c.id)
+    shopify.value.connected = false; shopify.value.shop_domain = ''
+  } catch {} finally { shopify.value.busy = false }
+}
 
 const tabs = [
   { key: 'all',       label: 'All' },
@@ -274,11 +340,44 @@ async function loadFeatures() {
   }
 }
 
-onMounted(loadFeatures)
+onMounted(() => {
+  loadFeatures()
+  loadShopifyStatus()
+  // Surface the OAuth round-trip result (?shopify=connected|error).
+  try {
+    const p = new URLSearchParams(window.location.search).get('shopify')
+    if (p === 'connected') { shopify.value.connected = true; loadShopifyStatus() }
+    else if (p === 'error') { shopify.value.error = 'Shopify connection failed — please try again.' }
+    if (p) window.history.replaceState({}, '', window.location.pathname)
+  } catch {}
+})
+watch(() => portalClient.value?.id, () => loadShopifyStatus())
 </script>
 
 <style scoped>
 .integrations-page { padding: 28px 32px; max-width: 1200px; font-family: 'Inter', -apple-system, sans-serif; }
+
+/* Shopify order tracking card */
+.shopify-ot-card { background: var(--cf-bg-surface-raised); border: 1px solid var(--cf-border-default); border-radius: 14px; padding: 18px 20px; margin-bottom: 20px; }
+.ot-head { display: flex; align-items: center; gap: 12px; }
+.ot-icon { font-size: 24px; }
+.ot-titles { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.ot-name { font-size: 15px; font-weight: 700; color: var(--cf-text-primary); }
+.ot-tagline { font-size: 12.5px; color: var(--cf-text-muted); margin-top: 2px; }
+.ot-pill { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+.ot-pill.on { background: rgba(34,197,94,.14); color: #22c55e; }
+.ot-pill.off { background: var(--cf-bg-ghost); color: var(--cf-text-muted); }
+.ot-body { margin-top: 14px; }
+.ot-help, .ot-connected-line { font-size: 13px; color: var(--cf-text-secondary); margin: 0 0 12px; line-height: 1.5; }
+.ot-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.ot-input { flex: 1; min-width: 220px; padding: 10px 12px; background: var(--cf-bg-input); border: 1px solid var(--cf-border-default); border-radius: 9px; color: var(--cf-text-primary); font-size: 13px; font-family: inherit; outline: none; }
+.ot-input:focus { border-color: #6366f1; }
+.ot-btn { padding: 10px 18px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid transparent; font-family: inherit; }
+.ot-btn.primary { background: #95bf47; color: #fff; }
+.ot-btn.primary:hover:not(:disabled) { background: #7fa83c; }
+.ot-btn.ghost { background: var(--cf-bg-surface); border-color: var(--cf-border-default); color: var(--cf-text-secondary); }
+.ot-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ot-error { color: #ef4444; font-size: 12px; margin: 8px 0 0; }
 .page-header { margin-bottom: 24px; }
 .page-title { font-size: 24px; font-weight: 700; color: var(--cf-text-primary); margin: 0 0 6px; letter-spacing: -0.4px; }
 .page-sub { font-size: 14px; color: var(--cf-text-muted); margin: 0; max-width: 700px; line-height: 1.55; }
