@@ -106,14 +106,18 @@ def session_messages(request, session_id):
 
     history = session.chat_history or []
     # Only the visitor-facing fields; never leak internal scoring/meta.
+    # Keep a message if it has TEXT or ATTACHMENTS — an admin can send an
+    # attachment-only message (e.g. a voice note) during takeover, which has an
+    # empty `message` but must still survive a widget reload (QA #3).
     cleaned = [
         {
             'role': m.get('role', 'ai'),
             'message': m.get('message', ''),
             'source': m.get('source', ''),
+            'attachments': m.get('attachments', []),
         }
         for m in history
-        if isinstance(m, dict) and m.get('message')
+        if isinstance(m, dict) and (m.get('message') or m.get('attachments'))
     ]
     return Response({
         'messages': cleaned[-limit:],

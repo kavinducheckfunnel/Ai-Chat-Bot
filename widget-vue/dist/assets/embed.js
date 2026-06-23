@@ -81,6 +81,13 @@
 #cf-w .cf-img-msg { align-self: flex-end; max-width: 180px; border-radius: 14px;
   object-fit: cover; display: block; border: 1px solid rgba(255,255,255,0.08); }
 
+/* Agent takeover media attachments (image / voice / file) inside AI bubbles */
+#cf-w .cf-att-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+#cf-w .cf-att-img { max-width: 200px; max-height: 200px; border-radius: 12px; display: block; cursor: pointer; }
+#cf-w .cf-att-aud { width: 210px; max-width: 100%; height: 36px; }
+#cf-w .cf-att-file { display: inline-flex; align-items: center; gap: 5px; font-size: 13px;
+  color: var(--cf-accent); text-decoration: underline; word-break: break-all; }
+
 #cf-w .cf-ai ol { margin: 6px 0 4px 0; padding-left: 20px; list-style-type: decimal; }
 #cf-w .cf-ai li { margin-bottom: 6px; color: var(--cf-text); line-height: 1.5; display: list-item; }
 #cf-w .cf-ai li:last-child { margin-bottom: 2px; }
@@ -642,7 +649,10 @@ function renderServerMsgs(messages){
   msgLog.length=0;
   messages.forEach(function(m){
     var who=(m.role==='user')?'me':'ai';
-    var html=(who==='ai')?renderMd(m.message):'<p>'+escHtml(m.message)+'</p>';
+    var a=attHtml(m.attachments);
+    var body=m.message?((who==='ai')?renderMd(m.message):'<p>'+escHtml(m.message)+'</p>'):'';
+    var html=a+body;
+    if(!html)return; // skip truly empty entries
     renderBubble(html,who);
     msgLog.push({who:who,html:html});
   });
@@ -679,6 +689,19 @@ function restoreFromServer(){
 function dots(){var d=document.createElement('div');d.className='cf-typ';d.id='cf-tdots';d.innerHTML='<span></span><span></span><span></span>';$('cf-msgs').appendChild(d);$('cf-msgs').scrollTop=9999}
 function rmDots(){var t=$('cf-tdots');if(t)t.remove()}
 function escHtml(t){var d=document.createElement('div');d.textContent=t;return d.innerHTML}
+function escAttr(t){return String(t||'').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+// Build HTML for media attachments an agent sent during takeover (image/voice/file).
+function attHtml(atts){
+  if(!atts||!atts.length)return'';
+  var out='';
+  atts.forEach(function(a){
+    var u=a&&a.url?escAttr(a.url):'';if(!u)return;
+    if(a.kind==='image'){out+='<a href="'+u+'" target="_blank" rel="noopener"><img class="cf-att-img" src="'+u+'" alt="attachment"/></a>';}
+    else if(a.kind==='audio'){out+='<audio class="cf-att-aud" src="'+u+'" controls></audio>';}
+    else{out+='<a class="cf-att-file" href="'+u+'" target="_blank" rel="noopener">\\uD83D\\uDCCE '+escHtml(a.name||'Download')+'</a>';}
+  });
+  return out?'<div class="cf-att-wrap">'+out+'</div>':'';
+}
 
 // ── Visitor metadata (sent once on WebSocket open) ───────────────────
 function parseDevice(ua){if(/tablet|ipad|playbook|silk/i.test(ua))return'tablet';if(/mobile|iphone|ipod|android|blackberry/i.test(ua))return'mobile';return'desktop'}
@@ -773,11 +796,13 @@ function connect(){
       // Everything below is a terminal/assistant event → safe to clear the
       // typing indicator + re-enable input.
       rmDots();busy=false;$('cf-sb').disabled=!$('cf-inp').value.trim()&&!pendingImg;
-      if(d.type==='ai_message'&&d.message){
+      var _hasAtt=d.attachments&&d.attachments.length;
+      if(d.type==='ai_message'&&(d.message||_hasAtt)){
         // Dedupe by server msg_id so the reply renders exactly once per tab.
         if(d.msg_id&&isSeen(d.msg_id))return;
         if(d.msg_id)markSeen(d.msg_id);
-        bubble(renderMd(d.message),'ai');chime();
+        // Render media attachments (agent takeover: photo/voice/file) + text.
+        bubble(attHtml(d.attachments)+(d.message?renderMd(d.message):''),'ai');chime();
         // Q3: render clickable chip suggestions if the bot included any
         if(Array.isArray(d.quick_replies)&&d.quick_replies.length){
           var qrEl=document.createElement('div');qrEl.className='cf-qrs';

@@ -89,6 +89,7 @@ def _js_response(content, status=200):
     response['Cross-Origin-Resource-Policy'] = 'cross-origin'
     # ── Prevent content-type sniffing ─────────────────────────────────────────
     response['X-Content-Type-Options'] = 'nosniff'
-    # ── Cache 5 min in browser, 1 hour on CDN ─────────────────────────────────
-    response['Cache-Control'] = 'public, max-age=300, s-maxage=3600'
+    # ── Short cache so widget/embed fixes propagate to host sites quickly ─────
+    # (was 5 min browser / 1 h shared — too sticky when shipping fixes).
+    response['Cache-Control'] = 'public, max-age=120'
     return response

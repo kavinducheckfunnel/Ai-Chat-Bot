@@ -173,6 +173,26 @@ class TestTakeoverMedia:
         last = chat_session.chat_history[-1]
         assert last['attachments'][0]['kind'] == 'image'
 
+    def test_widget_history_restore_includes_attachments(self, anon_client, chat_session):
+        """The visitor widget restores history via /api/chat/session/<id>/messages/.
+        Attachment-only and attachment-bearing messages must survive restore (QA #3)."""
+        chat_session.chat_history = [
+            {'role': 'user', 'message': 'hi'},
+            {'role': 'ai', 'message': 'pic for you', 'source': 'admin',
+             'attachments': [{'url': 'https://growmiq.io/media/x.png', 'kind': 'image', 'name': 'x.png'}]},
+            {'role': 'ai', 'message': '', 'source': 'admin',
+             'attachments': [{'url': 'https://growmiq.io/media/v.webm', 'kind': 'audio', 'name': 'v.webm'}]},
+        ]
+        chat_session.save(update_fields=['chat_history'])
+        resp = anon_client.get(f'/api/chat/session/{chat_session.session_id}/messages/')
+        assert resp.status_code == 200
+        msgs = resp.json()['messages']
+        # All three survive (incl. the empty-text voice note), with attachments intact.
+        assert len(msgs) == 3
+        assert msgs[1]['attachments'][0]['kind'] == 'image'
+        assert msgs[2]['attachments'][0]['kind'] == 'audio'
+        assert msgs[2]['message'] == ''
+
 
 # ─── Inline contact capture (#13) ─────────────────────────────────────────────
 

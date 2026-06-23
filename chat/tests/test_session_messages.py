@@ -24,7 +24,7 @@ class TestSessionMessages:
         body = resp.json()
         assert body['message_count'] == 2
         assert len(body['messages']) == 2
-        assert body['messages'][0] == {'role': 'user', 'message': 'hi', 'source': ''}
+        assert body['messages'][0] == {'role': 'user', 'message': 'hi', 'source': '', 'attachments': []}
         assert body['messages'][1]['message'] == 'Hello! How can I help?'
 
     def test_unknown_session_returns_empty(self, anon_client):
