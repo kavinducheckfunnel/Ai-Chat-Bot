@@ -141,7 +141,7 @@ const summaryStats = computed(() => {
   return [
     { icon: '💬', label: 'Chat sessions', value: (a.total_sessions?.value ?? 0).toLocaleString() },
     { icon: '👥', label: 'Unique visitors', value: (a.unique_visitors?.value ?? 0).toLocaleString() },
-    { icon: '📄', label: 'Page views', value: (a.total_page_views ?? 0).toLocaleString() },
+    { icon: '📄', label: 'Page views', value: (a.analytics_events?.page_views ?? a.total_page_views ?? 0).toLocaleString() },
     { icon: '👆', label: 'Total clicks', value: pages.value.reduce((s, p) => s + (p.total_clicks || 0), 0).toLocaleString() },
   ]
 })
