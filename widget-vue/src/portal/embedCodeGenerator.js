@@ -804,13 +804,12 @@ function connect(){
   ws.onmessage=function(e){
     try{
       var d=JSON.parse(e.data);
-      // Server-pushed hot-lead trigger: visitor reached READY_TO_BUY / hot
-      // score and we still don't have their contact. Auto-opens the chat
-      // window if closed and pops the lead modal after a short delay so the
-      // visitor sees the AI confirmation first.
-      if(d.type==='lead_capture_required'&&!leadDone){
+      // QA #13 — no interrupting lead popup. The AI asks for contact details
+      // conversationally and the server detects email/phone inline from the
+      // visitor's own messages. We just open the window so the visitor sees
+      // the AI's ask; we never pop the modal.
+      if(d.type==='lead_capture_required'){
         if(!isOpen)toggleOpen();
-        setTimeout(showLead,1200);
         return;
       }
       // Cross-tab live sync: a visitor message typed in ANOTHER tab. Render
@@ -876,8 +875,10 @@ function send(){
   var msg=text||'[User sent an image]';
   bubble(escHtml(msg),'me');
   $('cf-inp').value='';$('cf-sb').disabled=true;busy=true;dots();
-  // Track user-message count for inline lead capture trigger (after 3 user msgs)
-  msgCount++;if(msgCount>=3&&!leadDone)setTimeout(showLead,1500);
+  // QA #13 — no auto lead popup. The AI asks for contact details in-conversation
+  // and the server captures any email/phone the visitor types. (msgCount kept
+  // for any other heuristics that read it.)
+  msgCount++;
   // Tag with a client msg_id so when the server echoes this message to the
   // session group (for other tabs), THIS tab dedupes and doesn't re-render it.
   var mid=newMsgId();markSeen(mid);
