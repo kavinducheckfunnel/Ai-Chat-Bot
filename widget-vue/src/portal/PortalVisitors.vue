@@ -2,7 +2,7 @@
   <div class="visitors-page">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Visitors</h1>
+        <h1 class="page-title">Visitors <span v-if="totalCount" class="title-count">{{ totalCount }}</span></h1>
         <p class="page-sub">One row per real person — across all their sessions.</p>
       </div>
       <div class="header-controls">
@@ -61,6 +61,10 @@
           <span v-if="v.city || v.country" class="visitor-tag">{{ [v.city, v.country].filter(Boolean).join(', ') }}</span>
         </div>
       </div>
+
+      <!-- Infinite-scroll sentinel (QA #7) -->
+      <div ref="sentinel" class="scroll-sentinel"></div>
+      <div v-if="loadingMore" class="visitors-foot">Loading more…</div>
     </div>
 
     <!-- Detail view -->
@@ -129,31 +133,69 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
 
 const visitors = ref([])
+const totalCount = ref(0)
+const nextOffset = ref(null)
+const loadingMore = ref(false)
 const loading = ref(false)
 const search = ref('')
 const days = ref(7)
 const selectedVisitor = ref(null)
 const detail = ref({})
+const sentinel = ref(null)
+const PAGE = 60
+let observer = null
+
+function _params(offset = 0) {
+  const params = { limit: PAGE, offset }
+  if (days.value > 0) params.days = days.value
+  if (search.value.trim()) params.q = search.value.trim()
+  return params
+}
 
 async function loadVisitors() {
   if (!props.client) return
   loading.value = true
   try {
-    const params = {}
-    if (days.value > 0) params.days = days.value
-    if (search.value.trim()) params.q = search.value.trim()
-    const data = await api.getClientVisitors(props.client.id, params)
+    const data = await api.getClientVisitors(props.client.id, _params(0))
     visitors.value = data?.visitors || []
+    // total_count is the true count across all pages (QA #7) — the header now
+    // reads this instead of the loaded-card count, so they match.
+    totalCount.value = data?.total_count ?? visitors.value.length
+    nextOffset.value = data?.next ?? null
   } finally {
     loading.value = false
+    nextTick(observeSentinel)
   }
+}
+
+async function loadMore() {
+  if (loadingMore.value || nextOffset.value == null || !props.client) return
+  loadingMore.value = true
+  try {
+    const data = await api.getClientVisitors(props.client.id, _params(nextOffset.value))
+    const more = data?.visitors || []
+    const seen = new Set(visitors.value.map(v => v.visitor_uid))
+    visitors.value.push(...more.filter(v => !seen.has(v.visitor_uid)))
+    nextOffset.value = data?.next ?? null
+  } finally {
+    loadingMore.value = false
+  }
+}
+
+function observeSentinel() {
+  if (observer) observer.disconnect()
+  if (!sentinel.value) return
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0]?.isIntersecting) loadMore()
+  }, { rootMargin: '300px' })
+  observer.observe(sentinel.value)
 }
 
 async function selectVisitor(v) {
@@ -247,6 +289,7 @@ function eventLabel(ev) {
 }
 
 onMounted(loadVisitors)
+onUnmounted(() => { if (observer) observer.disconnect() })
 watch(() => props.client, loadVisitors)
 </script>
 
@@ -254,6 +297,9 @@ watch(() => props.client, loadVisitors)
 .visitors-page { padding: 28px 32px; font-family: 'Inter', -apple-system, sans-serif; }
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; gap: 16px; }
 .page-title { font-size: 22px; font-weight: 700; color: var(--cf-text-primary); letter-spacing: -.4px; }
+.title-count { font-size: 13px; font-weight: 700; color: #a5b4fc; background: rgba(99,102,241,.15); padding: 2px 9px; border-radius: 20px; vertical-align: middle; margin-left: 6px; }
+.scroll-sentinel { height: 1px; grid-column: 1 / -1; }
+.visitors-foot { grid-column: 1 / -1; text-align: center; padding: 12px; font-size: 12px; color: var(--cf-text-muted); }
 .page-sub { font-size: 13px; color: var(--cf-text-muted); margin-top: 3px; }
 .header-controls { display: flex; gap: 8px; }
 .search-input, .period-select {

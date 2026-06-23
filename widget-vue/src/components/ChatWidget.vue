@@ -35,8 +35,15 @@
             :style="msg.sender === 'user' ? { background: branding.chatbot_color || '#6366f1' } : {}"
           >
             <template v-if="msg.type === 'text'">
-              <div v-if="msg.sender === 'ai'" v-html="renderMarkdown(msg.text)" class="markdown-body"></div>
-              <div v-else>{{ msg.text }}</div>
+              <div v-if="msg.attachments && msg.attachments.length" class="cf-msg-atts">
+                <template v-for="(att, ai) in msg.attachments" :key="ai">
+                  <img v-if="att.kind === 'image'" :src="att.url" class="cf-att-image" @click="openExternal(att.url)" alt="attachment" />
+                  <audio v-else-if="att.kind === 'audio'" :src="att.url" controls class="cf-att-audio"></audio>
+                  <a v-else :href="att.url" target="_blank" rel="noopener" class="cf-att-file">📎 {{ att.name || 'Download file' }}</a>
+                </template>
+              </div>
+              <div v-if="msg.sender === 'ai' && msg.text" v-html="renderMarkdown(msg.text)" class="markdown-body"></div>
+              <div v-else-if="msg.text">{{ msg.text }}</div>
             </template>
             <template v-else-if="msg.type === 'image'">
               <img :src="msg.src" class="chat-image" alt="Sent image" />
@@ -172,20 +179,8 @@
       <div class="powered-by">Powered by <a href="https://checkfunnels.com" target="_blank" rel="noopener">Checkfunnels</a></div>
     </div>
 
-    <!-- ── Lead Capture Modal ──────────────────────────────────────────── -->
-    <div v-if="showLeadForm" class="cf-lead-overlay" @click.self="dismissLeadForm">
-      <div class="cf-lead-modal">
-        <button class="cf-lead-close" @click="dismissLeadForm">&times;</button>
-        <div class="cf-lead-icon">📬</div>
-        <h3 class="cf-lead-title">Stay in touch</h3>
-        <p class="cf-lead-sub">Leave your contact and we'll follow up with a personalised answer.</p>
-        <input v-model="leadEmail" type="email" class="cf-lead-input" placeholder="Your email address" @keydown.enter="submitLead" />
-        <input v-model="leadPhone" type="tel" class="cf-lead-input" placeholder="Phone number (optional)" @keydown.enter="submitLead" />
-        <button class="cf-lead-submit" :style="{ background: branding.chatbot_color }" @click="submitLead" :disabled="!leadEmail.trim()">
-          {{ leadSubmitting ? 'Saving…' : 'Send my details' }}
-        </button>
-      </div>
-    </div>
+    <!-- Lead Capture Modal removed (QA #13) — contact details are detected
+         inline from the conversation instead of via an interrupting popup. -->
 
     <!-- ── Pill Bar (idle state) ──────────────────────────────────────── -->
     <div id="cf-pill-bar" @click="toggleWindow" v-show="!isOpen">
@@ -300,16 +295,18 @@ function connectWebSocket() {
       const data = JSON.parse(event.data)
       removeTypingIndicator()
       isTyping.value = false
-      if (data.type === 'ai_message' && data.message) {
+      const hasAttachments = Array.isArray(data.attachments) && data.attachments.length > 0
+      if (data.type === 'ai_message' && (data.message || hasAttachments)) {
         chatMessages.value.push({
           type: 'text',
-          text: data.message,
+          text: data.message || '',
           sender: 'ai',
           reaction: null,
+          attachments: hasAttachments ? data.attachments : undefined,
           // Q3 — clickable chips below the bubble. Bot decides when to send.
           quickReplies: Array.isArray(data.quick_replies) ? data.quick_replies.slice(0, 4) : [],
         })
-        speakText(data.message)
+        if (data.message) speakText(data.message)
         playChime()
         // Auto-open widget for trigger-based messages so the visitor sees them
         const AUTO_OPEN_SOURCES = new Set(['afk_nudge', 'fomo', 'exit_intent', 'pricing_hesitation',
@@ -321,9 +318,9 @@ function connectWebSocket() {
             if (messagesContainer.value) messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
           })
         }
-        if (!leadCaptured.value && userMessageCount.value >= 2) {
-          setTimeout(() => { showLeadForm.value = true }, 1500)
-        }
+        // QA #13 — no more interrupting popup. Contact details are now detected
+        // inline from the visitor's own messages (server-side) and the AI asks
+        // for them gently in-conversation when intent is high.
       }
     } catch {
       removeTypingIndicator()
@@ -545,6 +542,10 @@ function react(index, emoji) {
   const msg = chatMessages.value[index]
   if (!msg) return
   msg.reaction = msg.reaction === emoji ? null : emoji
+}
+
+function openExternal(url) {
+  if (url) window.open(url, '_blank', 'noopener')
 }
 
 // ── Lead capture ──────────────────────────────────────────────────────────────
@@ -922,6 +923,12 @@ onBeforeUnmount(() => {
   object-fit: cover;
   display: block;
 }
+
+/* Takeover media attachments (QA #3) */
+.cf-msg-atts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.cf-att-image { max-width: 200px; max-height: 200px; border-radius: 10px; cursor: pointer; display: block; }
+.cf-att-audio { max-width: 220px; height: 34px; }
+.cf-att-file { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: inherit; text-decoration: underline; }
 
 /* ── Typing indicator ───────────────────────────────────────────────── */
 .typing-indicator { display: flex; gap: 5px; align-items: center; height: 20px; }

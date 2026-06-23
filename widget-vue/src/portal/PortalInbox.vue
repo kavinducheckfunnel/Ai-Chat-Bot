@@ -28,7 +28,7 @@
     <div class="tabs">
       <button class="tab" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">
         All chats
-        <span class="tab-badge" v-if="sessions.length">{{ sessions.length }}</span>
+        <span class="tab-badge" v-if="totalCount">{{ totalCount }}</span>
       </button>
       <button class="tab" :class="{ active: activeTab === 'ai' }" @click="activeTab = 'ai'">AI handled</button>
       <button class="tab" :class="{ active: activeTab === 'hot' }" @click="activeTab = 'hot'">
@@ -50,7 +50,7 @@
 
     <div class="inbox-layout">
       <!-- ── Session list ─────────────────────────────────────────────── -->
-      <div class="session-list" :class="{ 'mobile-hidden': mobileView !== 'list' }">
+      <div class="session-list" ref="listEl" @scroll="onListScroll" :class="{ 'mobile-hidden': mobileView !== 'list' }">
         <div v-if="loading" class="loading-state">
           <div class="skeleton-session" v-for="n in 4" :key="n">
             <div class="sk-avatar"></div>
@@ -92,6 +92,11 @@
             </div>
           </div>
         </button>
+
+        <div v-if="loadingMore" class="list-loading-more">Loading more…</div>
+        <div v-else-if="!loading && nextOffset == null && sessions.length" class="list-end">
+          {{ totalCount }} conversation{{ totalCount === 1 ? '' : 's' }}
+        </div>
       </div>
 
       <!-- ── Chat panel ──────────────────────────────────────────────── -->
@@ -142,23 +147,56 @@
             :class="[msg.role === 'user' ? 'user-msg' : 'ai-msg', msg.source === 'admin' ? 'admin-msg' : '']"
           >
             <span v-if="msg.source === 'admin'" class="msg-role-label">You (Admin)</span>
-            <div class="bubble">{{ msg.message || msg.content }}</div>
+            <div class="bubble">
+              <div v-if="msg.attachments && msg.attachments.length" class="bubble-attachments">
+                <template v-for="(att, ai) in msg.attachments" :key="ai">
+                  <img v-if="att.kind === 'image'" :src="att.url" class="att-image" @click="openAttachment(att.url)" alt="attachment" />
+                  <audio v-else-if="att.kind === 'audio'" :src="att.url" controls class="att-audio"></audio>
+                  <a v-else :href="att.url" target="_blank" rel="noopener" class="att-file">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                    {{ att.name || 'Download file' }}
+                  </a>
+                </template>
+              </div>
+              <span v-if="msg.message || msg.content">{{ msg.message || msg.content }}</span>
+            </div>
           </div>
         </div>
 
         <!-- Admin message input (visible only during takeover) -->
-        <div v-if="selected.takeover_active" class="admin-input-area">
-          <textarea
-            class="admin-textarea"
-            v-model="adminMsg"
-            placeholder="Type your message… (Ctrl+Enter to send)"
-            rows="2"
-            @keydown.ctrl.enter.prevent="sendAdminMsg"
-          ></textarea>
-          <button class="admin-send-btn" @click="sendAdminMsg" :disabled="!adminMsg.trim() || sendingMsg">
-            <svg v-if="!sendingMsg" width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="22 2 15 22 11 13 2 9 22 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <div v-else class="send-spinner"></div>
-          </button>
+        <div v-if="selected.takeover_active" class="admin-input-wrap">
+          <!-- Pending attachments preview (QA #3) -->
+          <div v-if="pendingAttachments.length" class="pending-atts">
+            <div v-for="(att, i) in pendingAttachments" :key="i" class="pending-att">
+              <img v-if="att.kind === 'image'" :src="att.url" class="pending-thumb" alt="" />
+              <span v-else class="pending-file">{{ att.kind === 'audio' ? '🎙 voice note' : (att.name || 'file') }}</span>
+              <button class="pending-remove" @click="removePending(i)">&times;</button>
+            </div>
+          </div>
+          <div v-if="recording" class="recording-bar">
+            <span class="rec-dot"></span> Recording… {{ recordSeconds }}s
+            <button class="rec-stop" @click="stopRecording">Stop</button>
+          </div>
+          <div class="admin-input-area">
+            <input ref="fileInput" type="file" class="hidden-file" @change="onFilePicked" accept="image/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" />
+            <button class="attach-btn" @click="fileInput?.click()" :disabled="uploadingAtt" title="Attach image or file">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button class="attach-btn" :class="{ recording: recording }" @click="recording ? stopRecording() : startRecording()" :disabled="uploadingAtt" title="Record voice note">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" stroke="currentColor" stroke-width="2"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+            <textarea
+              class="admin-textarea"
+              v-model="adminMsg"
+              placeholder="Type your message… (Ctrl+Enter to send)"
+              rows="2"
+              @keydown.ctrl.enter.prevent="sendAdminMsg"
+            ></textarea>
+            <button class="admin-send-btn" @click="sendAdminMsg" :disabled="(!adminMsg.trim() && !pendingAttachments.length) || sendingMsg || uploadingAtt">
+              <svg v-if="!sendingMsg" width="16" height="16" fill="none" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><polygon points="22 2 15 22 11 13 2 9 22 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <div v-else class="send-spinner"></div>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -432,16 +470,28 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAdminApi } from '../composables/useAdminApi'
+import { timeAgo, formatDuration } from '../composables/useFormat'
 
-const props = defineProps({ client: Object, embedded: Boolean })
+const props = defineProps({
+  client: Object,
+  embedded: Boolean,
+  // Shared filters owned by the Conversations wrapper (QA #1, #10).
+  channel: { type: String, default: 'all' },
+  dateRange: { type: Object, default: () => ({ period: 'all', dateFrom: null, dateTo: null }) },
+})
 const api = useAdminApi()
 
 const sessions = ref([])
+const totalCount = ref(0)
+const nextOffset = ref(null)
+const loadingMore = ref(false)
 const loading = ref(true)
 const activeTab = ref('all')
 const selectedId = ref(null)
 const messagesEl = ref(null)
+const listEl = ref(null)
 let ws = null
+const PAGE = 50
 
 // ── Mobile panel navigation ───────────────────────────────────────────────────
 const mobileView = ref('list') // 'list' | 'chat' | 'details'
@@ -452,6 +502,73 @@ const adminMsg = ref('')
 const takingOver = ref(false)
 const releasingTakeover = ref(false)
 const sendingMsg = ref(false)
+
+// ── Takeover media (QA #3) ─────────────────────────────────────────────────────
+const fileInput = ref(null)
+const pendingAttachments = ref([])
+const uploadingAtt = ref(false)
+const recording = ref(false)
+const recordSeconds = ref(0)
+let mediaRecorder = null
+let recordChunks = []
+let recordTimer = null
+
+function openAttachment(url) { window.open(url, '_blank', 'noopener') }
+function removePending(i) { pendingAttachments.value.splice(i, 1) }
+
+async function uploadFile(file, kind) {
+  if (!selected.value) return
+  uploadingAtt.value = true
+  try {
+    const res = await api.uploadAttachment(selected.value.session_id, file, kind)
+    pendingAttachments.value.push(res)
+  } catch (e) {
+    console.error('upload failed', e)
+  } finally {
+    uploadingAtt.value = false
+  }
+}
+
+function onFilePicked(e) {
+  const file = e.target.files?.[0]
+  if (file) {
+    const kind = file.type.startsWith('image/') ? 'image' : (file.type.startsWith('audio/') ? 'audio' : 'file')
+    uploadFile(file, kind)
+  }
+  e.target.value = ''
+}
+
+async function startRecording() {
+  if (recording.value) return
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    mediaRecorder = new MediaRecorder(stream)
+    recordChunks = []
+    mediaRecorder.ondataavailable = (ev) => { if (ev.data.size) recordChunks.push(ev.data) }
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop())
+      const blob = new Blob(recordChunks, { type: 'audio/webm' })
+      const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' })
+      await uploadFile(file, 'audio')
+    }
+    mediaRecorder.start()
+    recording.value = true
+    recordSeconds.value = 0
+    recordTimer = setInterval(() => {
+      recordSeconds.value++
+      if (recordSeconds.value >= 120) stopRecording() // 2-min cap
+    }, 1000)
+  } catch (e) {
+    console.error('mic access denied', e)
+  }
+}
+
+function stopRecording() {
+  if (!recording.value) return
+  recording.value = false
+  clearInterval(recordTimer)
+  try { mediaRecorder?.stop() } catch {}
+}
 
 async function takeover() {
   if (!selected.value || takingOver.value) return
@@ -476,19 +593,23 @@ async function releaseTakeover() {
 
 async function sendAdminMsg() {
   const msg = adminMsg.value.trim()
-  if (!msg || !selected.value || sendingMsg.value) return
+  const atts = [...pendingAttachments.value]
+  if ((!msg && !atts.length) || !selected.value || sendingMsg.value) return
   sendingMsg.value = true
   const sid = selected.value.session_id
   const idx = sessions.value.findIndex(s => s.session_id === sid)
   // Optimistic bubble for instant feedback.
   if (idx !== -1) {
-    const history = [...(sessions.value[idx].chat_history || []), { role: 'ai', message: msg, source: 'admin', _optimistic: true }]
+    const entry = { role: 'ai', message: msg, source: 'admin', _optimistic: true }
+    if (atts.length) entry.attachments = atts
+    const history = [...(sessions.value[idx].chat_history || []), entry]
     sessions.value[idx] = { ...sessions.value[idx], chat_history: history }
   }
   adminMsg.value = ''
+  pendingAttachments.value = []
   nextTick(() => { if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight })
   try {
-    await api.sendMessage(sid, msg)
+    await api.sendMessage(sid, msg, atts)
     // Authoritative refresh of THIS session's transcript replaces the
     // optimistic copy with the DB version, so a concurrent poll can't
     // leave a duplicate ("Hi Hi").
@@ -625,18 +746,54 @@ function clearDateFilter() {
   loadSessions()
 }
 
+function _baseParams() {
+  const params = { limit: PAGE }
+  // Channel filter (QA #1) from the wrapper.
+  if (props.channel && props.channel !== 'all') params.channel = props.channel
+  // Date filter (QA #10) — explicit ?from/?to (invoice deep-link) wins, else the
+  // shared wrapper date range.
+  if (dateFrom.value) params.date_from = dateFrom.value
+  else if (props.dateRange?.dateFrom) params.date_from = props.dateRange.dateFrom
+  if (dateTo.value) params.date_to = dateTo.value
+  else if (props.dateRange?.dateTo) params.date_to = props.dateRange.dateTo
+  if (!params.date_from && !params.date_to && props.dateRange?.period && props.dateRange.period !== 'all' && props.dateRange.period !== 'custom') {
+    params.period = props.dateRange.period
+  }
+  return params
+}
+
 async function loadSessions() {
   if (!props.client) return
   loading.value = true
   try {
-    const params = { limit: 50 }
-    if (dateFrom.value) params.date_from = dateFrom.value
-    if (dateTo.value)   params.date_to   = dateTo.value
-    const data = await api.getPortalSessions(props.client.id, params)
-    sessions.value = Array.isArray(data) ? data : (data?.results || [])
+    const data = await api.getPortalSessions(props.client.id, { ..._baseParams(), offset: 0 })
+    const res = Array.isArray(data) ? data : (data?.results || [])
+    sessions.value = res
+    totalCount.value = Array.isArray(data) ? res.length : (data?.count ?? res.length)
+    nextOffset.value = Array.isArray(data) ? null : (data?.next ?? null)
   } catch {} finally {
     loading.value = false
   }
+}
+
+// Infinite scroll: append the next page when the list nears its end (QA #4).
+async function loadMore() {
+  if (loadingMore.value || nextOffset.value == null || !props.client) return
+  loadingMore.value = true
+  try {
+    const data = await api.getPortalSessions(props.client.id, { ..._baseParams(), offset: nextOffset.value })
+    const res = Array.isArray(data) ? data : (data?.results || [])
+    const seen = new Set(sessions.value.map(s => s.session_id))
+    sessions.value.push(...res.filter(s => !seen.has(s.session_id)))
+    nextOffset.value = Array.isArray(data) ? null : (data?.next ?? null)
+  } catch {} finally {
+    loadingMore.value = false
+  }
+}
+
+function onListScroll(e) {
+  const el = e.target
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 240) loadMore()
 }
 
 function select(s) {
@@ -645,15 +802,6 @@ function select(s) {
   nextTick(() => {
     if (messagesEl.value) messagesEl.value.scrollTop = messagesEl.value.scrollHeight
   })
-}
-
-function timeAgo(ts) {
-  if (!ts) return ''
-  const diff = Date.now() - new Date(ts).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m}m`
-  return `${Math.floor(m / 60)}h`
 }
 
 function lastMessage(s) {
@@ -686,6 +834,8 @@ function kanbanClass(state) {
 function channelLabel(channel) {
   if (channel === 'whatsapp') return 'WhatsApp'
   if (channel === 'messenger') return 'Messenger'
+  if (channel === 'instagram') return 'Instagram'
+  if (channel === 'telegram') return 'Telegram'
   return 'Web'
 }
 
@@ -835,14 +985,6 @@ function referrerHost(url) {
   try { return new URL(url).hostname.replace('www.', '') } catch { return url }
 }
 
-function formatDuration(seconds) {
-  if (!seconds) return '< 1s'
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
-  if (m === 0) return `${s}s`
-  return `${m}m ${s}s`
-}
-
 // ── Tags ─────────────────────────────────────────────────────────────────────
 const tagInput = ref('')
 const tagError = ref('')
@@ -946,6 +1088,12 @@ onUnmounted(() => {
 })
 
 watch(() => props.client, loadSessions)
+
+// Re-fetch from the top whenever the wrapper changes channel or date range.
+watch(() => [props.channel, props.dateRange], () => {
+  selectedId.value = null
+  loadSessions()
+}, { deep: true })
 
 // React to back/forward nav and to programmatic `router.push({ query })`.
 watch(() => [route.query.from, route.query.to], () => {
@@ -1139,6 +1287,12 @@ watch(selected, (s) => {
 .ch-website  { background: rgba(99,102,241,0.1); color: #a5b4fc; }
 .ch-whatsapp { background: rgba(37,211,102,0.12); color: #25d366; }
 .ch-messenger { background: rgba(0,132,255,0.12); color: #0084ff; }
+.ch-instagram { background: rgba(225,48,108,0.12); color: #e1306c; }
+.ch-telegram { background: rgba(42,171,238,0.12); color: #2aabee; }
+
+.list-loading-more, .list-end {
+  text-align: center; padding: 12px; font-size: 11px; color: var(--cf-text-muted);
+}
 
 /* ── Chat panel ──────────────────────────────────────────────────────── */
 .chat-panel {
@@ -1392,13 +1546,40 @@ watch(selected, (s) => {
   flex-shrink: 0;
 }
 
+.admin-input-wrap { flex-shrink: 0; border-top: 1px solid rgba(99,102,241,0.2); background: rgba(99,102,241,0.04); }
 .admin-input-area {
-  display: flex; gap: 10px; align-items: flex-end;
+  display: flex; gap: 8px; align-items: flex-end;
   padding: 12px 16px;
-  border-top: 1px solid rgba(99,102,241,0.2);
-  background: rgba(99,102,241,0.04);
-  flex-shrink: 0;
 }
+
+/* Attachment controls (QA #3) */
+.hidden-file { display: none; }
+.attach-btn {
+  width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+  background: var(--cf-bg-input); border: 1px solid rgba(99,102,241,0.3);
+  color: var(--cf-text-muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; transition: all .15s;
+}
+.attach-btn:hover:not(:disabled) { color: #a5b4fc; border-color: rgba(99,102,241,0.6); }
+.attach-btn:disabled { opacity: .5; cursor: not-allowed; }
+.attach-btn.recording { color: #ef4444; border-color: #ef4444; }
+
+.pending-atts { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px 0; }
+.pending-att { position: relative; display: flex; align-items: center; gap: 6px; background: var(--cf-bg-input); border: 1px solid var(--cf-border-default); border-radius: 8px; padding: 4px 8px; font-size: 11px; color: var(--cf-text-secondary); }
+.pending-thumb { width: 28px; height: 28px; object-fit: cover; border-radius: 5px; }
+.pending-remove { background: none; border: none; color: var(--cf-text-muted); font-size: 16px; cursor: pointer; line-height: 1; }
+.pending-remove:hover { color: #ef4444; }
+
+.recording-bar { display: flex; align-items: center; gap: 8px; padding: 8px 16px 0; font-size: 12px; color: #ef4444; font-weight: 600; }
+.rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; animation: pulse 1s infinite; }
+.rec-stop { margin-left: auto; background: #ef4444; color: #fff; border: none; border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 600; cursor: pointer; }
+
+/* Attachment bubbles */
+.bubble-attachments { display: flex; flex-direction: column; gap: 6px; margin-bottom: 4px; }
+.att-image { max-width: 220px; max-height: 220px; border-radius: 8px; cursor: pointer; display: block; }
+.att-audio { max-width: 240px; height: 36px; }
+.att-file { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #a5b4fc; text-decoration: none; padding: 6px 8px; background: rgba(99,102,241,0.1); border-radius: 6px; }
+.att-file:hover { background: rgba(99,102,241,0.18); }
 
 .admin-textarea {
   flex: 1; background: var(--cf-bg-input);

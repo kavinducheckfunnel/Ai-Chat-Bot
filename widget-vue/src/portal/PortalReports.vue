@@ -8,11 +8,7 @@
         <p class="page-sub">Performance overview for your chatbot</p>
       </div>
       <div class="header-right">
-        <div class="period-tabs">
-          <button v-for="p in periods" :key="p.val" class="period-btn" :class="{ active: period === p.val }" @click="period = p.val; load()">
-            {{ p.label }}
-          </button>
-        </div>
+        <PortalDateFilter v-model="period" @change="onDateChange" />
         <button class="export-btn" @click="exportCSV" :disabled="exporting" title="Download CSV">
           <svg v-if="!exporting" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <span v-if="exporting" class="mini-spinner-sm"></span>
@@ -300,6 +296,73 @@
 
     </template>
 
+    <!-- ═══════════════════════ LEADS TAB ═══════════════════════ -->
+    <template v-if="activeTab === 'leads' && canSeeChatsTab">
+
+      <!-- Lead-stage counters -->
+      <div class="metric-grid" v-if="!loading">
+        <div class="metric-card" v-for="c in leadStageCards" :key="c.key">
+          <div class="metric-body">
+            <div class="metric-value" :style="{ color: c.color }">{{ leadVal(c.key) }}</div>
+            <div class="metric-label">{{ c.label }}</div>
+            <div class="metric-delta" :class="deltaCls(leadDelta(c.key))">{{ formatDelta(leadDelta(c.key)) }} vs prev period</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Conversion rates -->
+      <div class="breakdown-grid" v-if="!loading">
+        <div class="breakdown-card" v-for="r in leadRateCards" :key="r.key">
+          <div class="bk-label">{{ r.label }}</div>
+          <div class="bk-value">{{ leadVal(r.key) }}%</div>
+          <div class="bk-delta" :class="deltaCls(leadDelta(r.key))">{{ formatDelta(leadDelta(r.key)) }} vs prev period</div>
+        </div>
+      </div>
+
+      <!-- Lead pipeline funnel -->
+      <div class="card funnel-card" v-if="!loading">
+        <h3 class="card-title">Lead pipeline</h3>
+        <div class="funnel-list">
+          <div class="funnel-row" v-for="(stage, i) in leadFunnel" :key="stage.label">
+            <span class="funnel-name">{{ stage.label }}</span>
+            <div class="funnel-bar" :style="{ width: leadFunnelWidth(stage.count) + '%', background: stage.color }">
+              <span class="funnel-bar-count">{{ stage.count }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Buyer signal averages + heat -->
+      <div class="section-row" v-if="!loading">
+        <div class="card signals-card">
+          <h3 class="card-title">Buyer signal averages</h3>
+          <div class="signals-grid">
+            <div class="signal-item">
+              <div class="sig-label">Purchase intent</div>
+              <div class="sig-bar-wrap"><div class="sig-bar" :style="{ width: (leadsData.avg_intent||0) + '%', background: '#6366f1' }"></div></div>
+              <div class="sig-value" style="color:#6366f1">{{ leadsData.avg_intent || 0 }}%</div>
+            </div>
+            <div class="signal-item">
+              <div class="sig-label">Budget signal</div>
+              <div class="sig-bar-wrap"><div class="sig-bar" :style="{ width: (leadsData.avg_budget||0) + '%', background: '#22c55e' }"></div></div>
+              <div class="sig-value" style="color:#22c55e">{{ leadsData.avg_budget || 0 }}%</div>
+            </div>
+            <div class="signal-item">
+              <div class="sig-label">Urgency signal</div>
+              <div class="sig-bar-wrap"><div class="sig-bar" :style="{ width: (leadsData.avg_urgency||0) + '%', background: '#f59e0b' }"></div></div>
+              <div class="sig-value" style="color:#f59e0b">{{ leadsData.avg_urgency || 0 }}%</div>
+            </div>
+          </div>
+        </div>
+        <div class="card hot-card">
+          <h3 class="card-title">Avg heat score</h3>
+          <div class="big-number" :style="{ color: heatColor(leadsData.avg_heat) }">{{ leadsData.avg_heat || 0 }}%</div>
+          <div class="big-delta delta-neutral">across captured leads</div>
+        </div>
+      </div>
+
+    </template>
+
     <!-- ═══════════════════════ ENGAGEMENT TAB ═══════════════════════ -->
     <template v-if="activeTab === 'engagement' && canSeeEngagementTab">
 
@@ -384,6 +447,20 @@
         </div>
       </div>
 
+      <!-- Top pages -->
+      <div class="card recent-card" v-if="!loading && topPages.length">
+        <h3 class="card-title">Top pages</h3>
+        <table class="activity-table">
+          <thead><tr><th>Page</th><th>Views</th></tr></thead>
+          <tbody>
+            <tr v-for="p in topPages" :key="p.page">
+              <td class="tp-url">{{ shortUrl(p.page) }}</td>
+              <td>{{ p.views }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
     </template>
 
   </div>
@@ -393,6 +470,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, h } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 import { useToast } from '../composables/useToast'
+import PortalDateFilter from './PortalDateFilter.vue'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
@@ -401,6 +479,13 @@ const toast = useToast()
 const loading = ref(true)
 const exporting = ref(false)
 const period = ref('30d')
+const dateRange = ref({ period: '30d', dateFrom: null, dateTo: null })
+
+function onDateChange(payload) {
+  dateRange.value = payload
+  period.value = payload.period
+  load()
+}
 const activeTab = ref('overview')
 const analytics = ref({})
 const recentSessions = ref([])
@@ -418,23 +503,51 @@ function showUpgrade(plan) {
   upgradeMsg.value = `This section requires the ${plan} plan or higher.`
 }
 
-// ── Periods (limit to 30d on Starter) ─────────────────────────────────────────
-
-const periods = computed(() => {
-  const all = [
-    { val: 'today', label: 'Today' },
-    { val: '7d', label: '7 days' },
-    { val: '30d', label: '30 days' },
-    { val: '90d', label: '90 days' },
-  ]
-  return canSeeCharts.value ? all : all.slice(0, 3)
-})
-
 const tabs = computed(() => [
   { key: 'overview',   label: 'Overview',   locked: false },
   { key: 'chats',      label: 'Chats',      locked: !canSeeChatsTab.value,      requiredPlan: 'Growth' },
+  { key: 'leads',      label: 'Leads',      locked: !canSeeChatsTab.value,      requiredPlan: 'Growth' },
   { key: 'engagement', label: 'Engagement', locked: !canSeeEngagementTab.value,  requiredPlan: 'Pro' },
 ])
+
+// Leads-tab data (backend `leads` object). Mirrors the metrics brief.
+const leadsData = computed(() => analytics.value.leads || {})
+function leadVal(key) {
+  const m = leadsData.value[key]
+  if (m && typeof m === 'object' && 'value' in m) return m.value
+  return m ?? 0
+}
+function leadDelta(key) {
+  const m = leadsData.value[key]
+  if (m && typeof m === 'object' && 'delta' in m) return m.delta
+  return 0
+}
+const leadStageCards = computed(() => [
+  { key: 'captured',     label: 'Leads Captured', color: '#a5b4fc' },
+  { key: 'qualified',    label: 'Qualified',      color: '#c084fc' },
+  { key: 'hot',          label: 'Hot Leads',      color: '#f59e0b' },
+  { key: 'ready_to_buy', label: 'Ready to Buy',   color: '#fb923c' },
+  { key: 'converted',    label: 'Converted',      color: '#22c55e' },
+])
+const leadRateCards = computed(() => [
+  { key: 'capture_rate',   label: 'Lead Capture Rate' },
+  { key: 'hot_lead_rate',  label: 'Hot Lead Rate' },
+  { key: 'conversion_rate', label: 'Conversion Rate' },
+])
+const leadFunnel = computed(() => {
+  const lf = analytics.value.lead_funnel || {}
+  return [
+    { label: 'Chat Started', count: lf.chat_started || 0, color: '#64748b' },
+    { label: 'Qualified',    count: lf.qualified    || 0, color: '#c084fc' },
+    { label: 'Hot Lead',     count: lf.hot_lead     || 0, color: '#f59e0b' },
+    { label: 'Ready to Buy', count: lf.ready_to_buy || 0, color: '#fb923c' },
+    { label: 'Converted',    count: lf.converted    || 0, color: '#22c55e' },
+  ]
+})
+function leadFunnelWidth(count) {
+  const max = Math.max(...leadFunnel.value.map(s => s.count), 1)
+  return Math.max(Math.round((count / max) * 100), 18)
+}
 
 // ── Metric helpers ───────────────────────────────────────────────────────────
 function val(key) {
@@ -600,6 +713,16 @@ const extraMetrics = computed(() => [
     value: val('chats_per_hour') || '—',
     hint: 'throughput during active hours',
   },
+  {
+    label: 'Avg messages / chat',
+    value: analytics.value.avg_messages_per_chat || '—',
+    hint: 'avg over answered chats',
+  },
+  {
+    label: 'Peak hours',
+    value: analytics.value.peak_hours || '—',
+    hint: 'busiest chat window',
+  },
 ])
 
 // ── Engagement tab ────────────────────────────────────────────────────────────
@@ -641,6 +764,12 @@ const engagementEvents = computed(() => {
   ]
 })
 
+const topPages = computed(() => analytics.value.top_pages || [])
+function shortUrl(u) {
+  if (!u) return '(unknown)'
+  try { const x = new URL(u); return (x.pathname === '/' ? x.hostname : x.pathname).slice(0, 50) } catch { return u.slice(0, 50) }
+}
+
 // ── Common helpers ────────────────────────────────────────────────────────────
 function heatColor(score) {
   if (!score) return '#1e293b'
@@ -668,11 +797,12 @@ async function load(silent = false) {
   // the skeletons, so the dashboard feels live.
   if (!silent) loading.value = true
   try {
+    const dr = dateRange.value || {}
     const [a, sessions, sub, clicks] = await Promise.all([
-      api.getPortalAnalytics(props.client.id, period.value),
+      api.getPortalAnalytics(props.client.id, period.value, { dateFrom: dr.dateFrom, dateTo: dr.dateTo }),
       api.getPortalSessions(props.client.id, { limit: 20 }),
       api.getSubscription().catch(() => null),
-      api.getClientLinkClicks(props.client.id, period.value).catch(() => null),
+      api.getClientLinkClicks(props.client.id, period.value === 'custom' ? '30d' : period.value).catch(() => null),
     ])
     analytics.value = a || {}
     recentSessions.value = Array.isArray(sessions) ? sessions : (sessions?.results || [])
@@ -910,6 +1040,12 @@ watch(() => props.client, () => load())
 
 .funnel-skeleton { display: flex; flex-direction: column; gap: 12px; }
 .sk-stage { height: 28px; background: #1e293b; border-radius: 6px; }
+
+/* Leads-tab pipeline funnel (left-aligned rows with label + bar) */
+.funnel-list { display: flex; flex-direction: column; gap: 9px; padding-top: 4px; }
+.funnel-row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 12px; }
+.funnel-name { font-size: 12px; font-weight: 600; color: var(--cf-text-secondary); }
+.tp-url { font-family: ui-monospace, monospace; font-size: 12px; color: var(--cf-text-secondary); }
 
 /* States */
 .states-list { display: flex; flex-direction: column; gap: 10px; }

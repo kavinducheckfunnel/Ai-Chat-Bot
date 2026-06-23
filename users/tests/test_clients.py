@@ -145,11 +145,13 @@ class TestClientDetail:
 @pytest.mark.django_db
 class TestClientSessions:
     def test_list_sessions(self, tenant_client, client_obj, chat_session):
+        # Sessions endpoint is now paginated: {results, count, next, offset, limit}.
         resp = tenant_client.get(sessions_url(client_obj.id))
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, list)
-        assert any(str(s['session_id']) == str(chat_session.session_id) for s in data)
+        assert isinstance(data, dict)
+        assert 'results' in data and 'count' in data
+        assert any(str(s['session_id']) == str(chat_session.session_id) for s in data['results'])
 
     def test_sessions_filtered_by_state(self, tenant_client, client_obj, chat_session):
         from chat.models import ChatSession
@@ -158,11 +160,11 @@ class TestClientSessions:
         )
         resp = tenant_client.get(sessions_url(client_obj.id) + '?state=EVALUATION')
         assert resp.status_code == 200
-        assert len(resp.json()) >= 1
+        assert len(resp.json()['results']) >= 1
 
         resp2 = tenant_client.get(sessions_url(client_obj.id) + '?state=RESEARCH')
         assert resp2.status_code == 200
-        assert len(resp2.json()) == 0
+        assert len(resp2.json()['results']) == 0
 
     def test_sessions_other_tenant_blocked(self, tenant_client, client_obj2):
         resp = tenant_client.get(sessions_url(client_obj2.id))

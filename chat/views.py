@@ -769,6 +769,29 @@ def _send_whatsapp_reply(phone_number_id, access_token, to, text):
         logger.error(f'[whatsapp_reply] Failed: {e}')
 
 
+def _send_whatsapp_media(phone_number_id, access_token, to, media_url, kind, caption=None):
+    """Send a media message (image / document / audio) over WhatsApp Cloud API
+    by passing a public link (QA #3 takeover media delivery)."""
+    if not media_url:
+        return
+    type_map = {'image': 'image', 'audio': 'audio', 'file': 'document'}
+    wtype = type_map.get(kind, 'document')
+    media_obj = {'link': media_url}
+    if wtype == 'image' and caption:
+        media_obj['caption'] = caption
+    if wtype == 'document' and caption:
+        media_obj['filename'] = caption
+    try:
+        http_requests.post(
+            f'https://graph.facebook.com/v20.0/{phone_number_id}/messages',
+            headers={'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'},
+            json={'messaging_product': 'whatsapp', 'to': to, 'type': wtype, wtype: media_obj},
+            timeout=15,
+        )
+    except Exception as e:
+        logger.error(f'[whatsapp_media] Failed: {e}')
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([AllowAny])
 def whatsapp_webhook(request, client_id):
@@ -847,6 +870,28 @@ def _send_messenger_reply(page_access_token, recipient_id, text):
             logger.info(f'[messenger_reply] Sent OK to {recipient_id}')
     except Exception as e:
         logger.error(f'[messenger_reply] Failed: {e}')
+
+
+def _send_messenger_media(page_access_token, recipient_id, media_url, kind):
+    """Send a media attachment over Messenger by URL (QA #3)."""
+    if not media_url:
+        return
+    type_map = {'image': 'image', 'audio': 'audio', 'file': 'file'}
+    mtype = type_map.get(kind, 'file')
+    try:
+        resp = http_requests.post(
+            'https://graph.facebook.com/v20.0/me/messages',
+            params={'access_token': page_access_token},
+            json={
+                'recipient': {'id': recipient_id},
+                'message': {'attachment': {'type': mtype, 'payload': {'url': media_url, 'is_reusable': False}}},
+            },
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            logger.error(f'[messenger_media] Graph API error {resp.status_code}: {resp.text}')
+    except Exception as e:
+        logger.error(f'[messenger_media] Failed: {e}')
 
 
 @api_view(['GET', 'POST'])

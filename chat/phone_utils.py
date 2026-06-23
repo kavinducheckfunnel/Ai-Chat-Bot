@@ -105,3 +105,48 @@ def extract_lk_phone(text):
         if ok:
             return norm
     return None
+
+
+# Reasonably strict email matcher — good enough to auto-capture from chat text
+# without false-positives on things like "v1.0" or "8am-5pm".
+_EMAIL_RE = re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b')
+
+
+def extract_email(text):
+    """Return the first valid-looking email address in free text, or None."""
+    if not text:
+        return None
+    m = _EMAIL_RE.search(text)
+    if not m:
+        return None
+    email = m.group(0).strip('.').lower()
+    # Guard against trailing-dot / double-dot garbage.
+    if '..' in email or email.startswith('.') or email.endswith('.'):
+        return None
+    return email
+
+
+def extract_phone(text, country=DEFAULT_COUNTRY):
+    """
+    Find and normalise the first phone number in free text (QA #13 inline
+    capture). Tries the country rules first (strict for LK), then falls back to
+    a permissive international match so non-LK tenants still capture numbers.
+    Returns the normalized string or None.
+    """
+    if not text:
+        return None
+    country = (country or DEFAULT_COUNTRY).upper()
+    if country == 'LK':
+        lk = extract_lk_phone(text)
+        if lk:
+            return lk
+    # International fallback: a run of 8–15 digits (optionally +-prefixed) that
+    # isn't obviously something else. Require at least 8 digits to avoid years,
+    # prices, order numbers, etc.
+    for m in re.finditer(r'(?:\+?\d[\d\s\-()]{6,}\d)', text):
+        digits = re.sub(r'\D', '', m.group(0))
+        if 8 <= len(digits) <= 15:
+            norm, ok = normalize_phone(m.group(0), country)
+            if ok:
+                return norm
+    return None

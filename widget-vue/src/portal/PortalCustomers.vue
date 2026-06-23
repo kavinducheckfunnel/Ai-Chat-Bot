@@ -14,7 +14,7 @@
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">
-        All leads <span class="tab-count">{{ leads.length }}</span>
+        All leads <span class="tab-count">{{ activeTab === 'all' ? totalCount : leads.length }}</span>
       </button>
       <button class="tab" :class="{ active: activeTab === 'hot' }" @click="activeTab = 'hot'">
         Hot leads <span class="tab-count hot" v-if="hotLeads.length">{{ hotLeads.length }}</span>
@@ -88,6 +88,13 @@
           </tr>
         </tbody>
       </table>
+
+      <!-- Infinite-scroll sentinel + status (QA #6) -->
+      <div ref="sentinel" class="scroll-sentinel"></div>
+      <div v-if="loadingMore" class="list-foot">Loading more…</div>
+      <div v-else-if="!loading && nextOffset == null && leads.length" class="list-foot">
+        {{ totalCount }} lead{{ totalCount === 1 ? '' : 's' }} total
+      </div>
     </div>
 
     <!-- Chat History Modal -->
@@ -128,13 +135,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
 const props = defineProps({ client: Object, embedded: Boolean })
 const api = useAdminApi()
 
 const leads = ref([])
+const totalCount = ref(0)
+const nextOffset = ref(null)
+const loadingMore = ref(false)
 const loading = ref(true)
 const activeTab = ref('all')
 const search = ref('')
@@ -143,6 +153,9 @@ const exporting = ref(false)
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
+const sentinel = ref(null)
+const PAGE = 100
+let observer = null
 
 const hotLeads = computed(() => leads.value.filter(l => l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD'))
 
@@ -172,11 +185,39 @@ async function loadLeads() {
   if (!props.client) return
   loading.value = true
   try {
-    const data = await api.getPortalSessions(props.client.id, { limit: 200 })
-    leads.value = Array.isArray(data) ? data : (data?.results || [])
+    // Only sessions that became leads (captured email or phone). QA #6.
+    const data = await api.getPortalSessions(props.client.id, { limit: PAGE, has_lead: 'true', offset: 0 })
+    const res = Array.isArray(data) ? data : (data?.results || [])
+    leads.value = res
+    totalCount.value = Array.isArray(data) ? res.length : (data?.count ?? res.length)
+    nextOffset.value = Array.isArray(data) ? null : (data?.next ?? null)
   } catch {} finally {
     loading.value = false
+    nextTick(observeSentinel)
   }
+}
+
+async function loadMore() {
+  if (loadingMore.value || nextOffset.value == null || !props.client) return
+  loadingMore.value = true
+  try {
+    const data = await api.getPortalSessions(props.client.id, { limit: PAGE, has_lead: 'true', offset: nextOffset.value })
+    const res = Array.isArray(data) ? data : (data?.results || [])
+    const seen = new Set(leads.value.map(l => l.session_id))
+    leads.value.push(...res.filter(l => !seen.has(l.session_id)))
+    nextOffset.value = Array.isArray(data) ? null : (data?.next ?? null)
+  } catch {} finally {
+    loadingMore.value = false
+  }
+}
+
+function observeSentinel() {
+  if (observer) observer.disconnect()
+  if (!sentinel.value) return
+  observer = new IntersectionObserver((entries) => {
+    if (entries[0]?.isIntersecting) loadMore()
+  }, { rootMargin: '300px' })
+  observer.observe(sentinel.value)
 }
 
 async function exportCSV() {
@@ -226,6 +267,7 @@ function formatDate(ts) {
 }
 
 onMounted(loadLeads)
+onUnmounted(() => { if (observer) observer.disconnect() })
 watch(() => props.client, loadLeads)
 </script>
 
@@ -362,6 +404,9 @@ watch(() => props.client, loadLeads)
 .sk-cell.narrow { flex: 0.5; }
 
 .clickable-row { cursor: pointer; }
+
+.scroll-sentinel { height: 1px; }
+.list-foot { text-align: center; padding: 14px; font-size: 12px; color: var(--cf-text-muted); }
 
 /* Modal */
 .modal-overlay {

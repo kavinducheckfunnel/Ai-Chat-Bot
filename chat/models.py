@@ -87,7 +87,9 @@ class ChatSession(models.Model):
     KANBAN_CHOICES = [
         ('NEW', 'New'),
         ('ENGAGED', 'Engaged'),
+        ('QUALIFIED', 'Qualified'),
         ('HOT_LEAD', 'Hot Lead'),
+        ('READY_TO_BUY', 'Ready to Buy'),
         ('CONVERTED', 'Converted'),
         ('LOST', 'Lost'),
     ]
@@ -96,6 +98,7 @@ class ChatSession(models.Model):
         ('website', 'Website'),
         ('whatsapp', 'WhatsApp'),
         ('messenger', 'Messenger'),
+        ('instagram', 'Instagram'),
         ('telegram', 'Telegram'),
     ]
 
@@ -389,3 +392,36 @@ class PromptVersion(models.Model):
 
     def __str__(self):
         return f'PromptVersion<{self.template.slug} v{self.version}>'
+
+
+def _attachment_upload_path(instance, filename):
+    """Store under media/chat_attachments/<session_id>/<filename>."""
+    sid = (instance.session_id or 'unknown')[:40]
+    return f'chat_attachments/{sid}/{filename}'
+
+
+class ChatAttachment(models.Model):
+    """A media file (image / document / voice note) sent by a human agent
+    during live-chat takeover (QA #3). Stored on disk; the URL is embedded in
+    the chat_history message entry's `attachments` array."""
+    KIND_CHOICES = [
+        ('image', 'Image'),
+        ('file', 'File'),
+        ('audio', 'Audio'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='chat_attachments', null=True, blank=True)
+    session_id = models.CharField(max_length=255, db_index=True)
+    file = models.FileField(upload_to=_attachment_upload_path)
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES, default='file')
+    name = models.CharField(max_length=255, blank=True)
+    mime = models.CharField(max_length=120, blank=True)
+    size = models.PositiveIntegerField(default=0)
+    uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='chat_attachments')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'ChatAttachment<{self.kind} {self.name}>'

@@ -634,7 +634,8 @@ def client_sessions(request, client_id):
     # coalesce to keep them in a sensible position).
     from django.db.models.functions import Coalesce
     qs = (ChatSession.objects.filter(client=client)
-          .annotate(last_activity=Coalesce('last_message_at', 'updated_at'))
+          .annotate(last_activity=Coalesce('last_message_at', 'updated_at'),
+                    heat=heat_sql_expr())
           .order_by('-last_activity'))
 
     # ── Filters ────────────────────────────────────────────────────────
@@ -642,34 +643,34 @@ def client_sessions(request, client_id):
     if state:
         qs = qs.filter(conversation_state=state)
 
-    date_from = request.query_params.get('date_from', '').strip()
-    if date_from:
-        qs = qs.filter(created_at__date__gte=date_from)
+    # Channel filter (website/whatsapp/messenger/instagram/telegram). `all`/blank = no filter.
+    channel = (request.query_params.get('channel') or '').strip().lower()
+    if channel and channel != 'all' and channel in VALID_CHANNELS:
+        qs = qs.filter(channel=channel)
 
-    date_to = request.query_params.get('date_to', '').strip()
-    if date_to:
-        qs = qs.filter(created_at__date__lte=date_to)
+    # Uniform date handling: ?period=... or explicit ?date_from/&date_to.
+    qs, _ = apply_period_filter(qs, request)
 
     if request.query_params.get('has_lead') == 'true':
         qs = qs.exclude(lead_email='').exclude(lead_email__isnull=True)
 
     q = request.query_params.get('q', '').strip()
     if q:
-        qs = qs.filter(lead_email__icontains=q)
+        qs = qs.filter(Q(lead_email__icontains=q) | Q(lead_phone__icontains=q) | Q(visitor_id__icontains=q))
 
-    # Fetch up to 200; heat-score range filter applied in-memory
+    # Heat-score range filter — now in SQL so it composes with pagination.
     min_heat_raw = request.query_params.get('min_heat', '').strip()
     max_heat_raw = request.query_params.get('max_heat', '').strip()
-    min_heat = float(min_heat_raw) if min_heat_raw else None
-    max_heat = float(max_heat_raw) if max_heat_raw else None
+    if min_heat_raw:
+        qs = qs.filter(heat__gte=float(min_heat_raw))
+    if max_heat_raw:
+        qs = qs.filter(heat__lte=float(max_heat_raw))
+
+    page, meta = paginate_qs(request, qs, default_limit=50, max_limit=200)
 
     data = []
-    for s in qs[:200]:
-        heat = _calc_heat(s)
-        if min_heat is not None and heat < min_heat:
-            continue
-        if max_heat is not None and heat > max_heat:
-            continue
+    for s in page:
+        heat = round(min(s.heat or 0, 100), 1)
         data.append({
             'session_id': str(s.session_id),
             'visitor_id': s.visitor_id,
@@ -707,7 +708,7 @@ def client_sessions(request, client_id):
             'budget_trend': s.budget_trend,
             'urgency_trend': s.urgency_trend,
         })
-    return Response(data)
+    return Response({'results': data, **meta})
 
 
 @api_view(['GET'])
@@ -971,6 +972,10 @@ def client_visitors(request, client_id):
         limit = max(10, min(int(request.query_params.get('limit', '50')), 200))
     except ValueError:
         limit = 50
+    try:
+        offset = max(0, int(request.query_params.get('offset', '0')))
+    except ValueError:
+        offset = 0
     days_raw = request.query_params.get('days', '').strip()
     qs = Visitor.objects.filter(client=client)
     if days_raw:
@@ -991,8 +996,11 @@ def client_visitors(request, client_id):
         last_session_at=Max('sessions__updated_at'),
     ).order_by('-composite_heat', '-last_seen')
 
+    # True total (matches the count the Audience header shows) BEFORE slicing.
+    total_count = qs.count()
+
     data = []
-    for v in qs[:limit]:
+    for v in qs[offset:offset + limit]:
         # Lifetime stats from session relation (computed at query time)
         stats = ChatSession.objects.filter(visitor_obj=v).aggregate(
             messages=Sum('message_count'),
@@ -1030,7 +1038,15 @@ def client_visitors(request, client_id):
             'country_code': v.country_code,
         })
 
-    return Response({'visitors': data, 'count': len(data)})
+    next_offset = offset + limit if offset + limit < total_count else None
+    return Response({
+        'visitors': data,
+        'count': len(data),
+        'total_count': total_count,
+        'offset': offset,
+        'limit': limit,
+        'next': next_offset,
+    })
 
 
 @api_view(['GET'])
@@ -1485,6 +1501,10 @@ def session_release(request, session_id):
 def session_send_message(request, session_id):
     """Admin sends a message directly to visitor during God View takeover.
     Routes the reply to the correct channel (WebSocket, WhatsApp, Messenger, Telegram).
+
+    Supports media attachments (QA #3): pass `attachments` as a list of
+    {url, kind, name, mime, size} (already uploaded via upload_attachment).
+    Either `message` or `attachments` (or both) must be present.
     """
     try:
         session = ChatSession.objects.select_related('client').get(session_id=session_id)
@@ -1492,12 +1512,18 @@ def session_send_message(request, session_id):
         return Response({'detail': 'Not found.'}, status=404)
 
     message = request.data.get('message', '').strip()
-    if not message:
-        return Response({'detail': 'Message is required.'}, status=400)
+    attachments = request.data.get('attachments') or []
+    if not isinstance(attachments, list):
+        attachments = []
+    if not message and not attachments:
+        return Response({'detail': 'Message or attachment is required.'}, status=400)
 
-    # Save to chat history
+    # Save to chat history (attachments ride along on the message entry).
     history = session.chat_history or []
-    history.append({'role': 'ai', 'message': message, 'source': 'admin'})
+    entry = {'role': 'ai', 'message': message, 'source': 'admin'}
+    if attachments:
+        entry['attachments'] = attachments
+    history.append(entry)
     session.chat_history = history
     from chat.utils import truncate_chat_history
     update_fields = truncate_chat_history(session)
@@ -1526,40 +1552,100 @@ def session_send_message(request, session_id):
             'type': 'chat_message',
             'message': message,
             'source': 'admin',
+            'attachments': attachments,
         })
     except Exception:
         pass
 
+    # Build absolute URLs for media so external channels (Meta) can fetch them.
+    def _abs(url):
+        if not url:
+            return url
+        if url.startswith('http://') or url.startswith('https://'):
+            return url
+        return request.build_absolute_uri(url)
+
     # Route to the visitor's actual messaging channel
     if client and channel == 'whatsapp':
         if client.whatsapp_phone_number_id and client.whatsapp_access_token:
-            from chat.views import _send_whatsapp_reply
-            _send_whatsapp_reply(
-                client.whatsapp_phone_number_id,
-                client.whatsapp_access_token,
-                session.visitor_id,
-                message,
-            )
+            from chat.views import _send_whatsapp_reply, _send_whatsapp_media
+            if message:
+                _send_whatsapp_reply(client.whatsapp_phone_number_id, client.whatsapp_access_token, session.visitor_id, message)
+            for att in attachments:
+                _send_whatsapp_media(client.whatsapp_phone_number_id, client.whatsapp_access_token,
+                                     session.visitor_id, _abs(att.get('url')), att.get('kind'), att.get('name'))
 
     elif client and channel == 'messenger':
         if client.messenger_page_access_token:
-            from chat.views import _send_messenger_reply
-            _send_messenger_reply(
-                client.messenger_page_access_token,
-                session.visitor_id,
-                message,
-            )
+            from chat.views import _send_messenger_reply, _send_messenger_media
+            if message:
+                _send_messenger_reply(client.messenger_page_access_token, session.visitor_id, message)
+            for att in attachments:
+                _send_messenger_media(client.messenger_page_access_token, session.visitor_id,
+                                      _abs(att.get('url')), att.get('kind'))
 
     elif client and channel == 'telegram':
         if client.telegram_bot_token:
             from chat.views import _send_telegram_reply
-            _send_telegram_reply(
-                client.telegram_bot_token,
-                session.visitor_id,
-                message,
-            )
+            if message:
+                _send_telegram_reply(client.telegram_bot_token, session.visitor_id, message)
+            # Telegram media: send the file URL as a link fallback if no media helper.
+            for att in attachments:
+                _send_telegram_reply(client.telegram_bot_token, session.visitor_id, _abs(att.get('url')))
 
     return Response({'detail': 'Message sent.', 'channel': channel})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_attachment(request, session_id):
+    """Upload a media file for a live-chat takeover reply (QA #3).
+
+    Accepts multipart form-data: `file` (+ optional `kind`). Stores a
+    ChatAttachment and returns {url, kind, name, mime, size} for the caller to
+    then pass to session_send_message's `attachments`.
+    """
+    from chat.models import ChatAttachment
+    try:
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    f = request.FILES.get('file')
+    if not f:
+        return Response({'detail': 'No file uploaded.'}, status=400)
+
+    # 25 MB cap — generous for images/docs/voice, blocks abuse.
+    if f.size > 25 * 1024 * 1024:
+        return Response({'detail': 'File too large (max 25 MB).'}, status=400)
+
+    mime = getattr(f, 'content_type', '') or ''
+    kind = request.data.get('kind') or ''
+    if not kind:
+        if mime.startswith('image/'):
+            kind = 'image'
+        elif mime.startswith('audio/'):
+            kind = 'audio'
+        else:
+            kind = 'file'
+
+    att = ChatAttachment.objects.create(
+        client=session.client,
+        session_id=str(session_id),
+        file=f,
+        kind=kind,
+        name=f.name[:255],
+        mime=mime[:120],
+        size=f.size,
+        uploaded_by=request.user if request.user.is_authenticated else None,
+    )
+    return Response({
+        'url': att.file.url,
+        'kind': att.kind,
+        'name': att.name,
+        'mime': att.mime,
+        'size': att.size,
+    }, status=201)
 
 
 # ─── Analytics ───────────────────────────────────────────────────────────────
@@ -1574,22 +1660,56 @@ def client_analytics(request, client_id):
         return Response({'detail': 'Not found.'}, status=404)
 
     # ── Period window ─────────────────────────────────────────────────────────
+    # Supports presets (today/7d/30d/90d), all-time, and a custom date range
+    # (?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD). The previous window (for the
+    # "vs prev period" deltas) is the equal-length span immediately before.
     period = request.query_params.get('period', '30d')
     now = timezone.now()
     period_days_map = {'today': 1, '7d': 7, '30d': 30, '90d': 90}
-    days = period_days_map.get(period, 30)
 
-    if period == 'today':
-        period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    else:
-        period_start = now - timedelta(days=days)
-
-    prev_end = period_start
-    prev_start = period_start - timedelta(days=days)
-
+    date_from = (request.query_params.get('date_from') or '').strip()
+    date_to = (request.query_params.get('date_to') or '').strip()
     all_sessions = ChatSession.objects.filter(client=client)
-    sessions = all_sessions.filter(created_at__gte=period_start)
-    prev_sessions = all_sessions.filter(created_at__gte=prev_start, created_at__lt=prev_end)
+
+    from datetime import datetime, time as dtime
+    def _parse(d):
+        try:
+            return timezone.make_aware(datetime.combine(datetime.strptime(d, '%Y-%m-%d').date(), dtime.min))
+        except (ValueError, TypeError):
+            return None
+
+    custom_from = _parse(date_from)
+    custom_to = _parse(date_to)
+
+    if custom_from or custom_to:
+        # Custom range. period label becomes 'custom'.
+        period = 'custom'
+        period_start = custom_from or (now - timedelta(days=30))
+        period_end = (custom_to + timedelta(days=1)) if custom_to else now  # inclusive end-day
+        span = period_end - period_start
+        days = max(1, span.days)
+        prev_end = period_start
+        prev_start = period_start - span
+        sessions = all_sessions.filter(created_at__gte=period_start, created_at__lt=period_end)
+        prev_sessions = all_sessions.filter(created_at__gte=prev_start, created_at__lt=prev_end)
+    elif period == 'all':
+        days = 36500
+        period_start = None
+        period_end = now
+        prev_start = prev_end = None
+        sessions = all_sessions
+        prev_sessions = all_sessions.none()
+    else:
+        days = period_days_map.get(period, 30)
+        if period == 'today':
+            period_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        else:
+            period_start = now - timedelta(days=days)
+        period_end = now
+        prev_end = period_start
+        prev_start = period_start - timedelta(days=days)
+        sessions = all_sessions.filter(created_at__gte=period_start)
+        prev_sessions = all_sessions.filter(created_at__gte=prev_start, created_at__lt=prev_end)
 
     # ── Reusable metric computation ───────────────────────────────────────────
     heat_expr = ExpressionWrapper(
@@ -1652,6 +1772,20 @@ def client_analytics(request, client_id):
         # shouldn't count toward the bot's competence stat.
         ai_res_rate = round((ai_handled / active_total * 100) if active_total > 0 else 0, 1)
 
+        # ── Lead-stage breakdown (for the Leads tab) ──────────────────────────
+        # Counts by kanban_state so the Leads pipeline + funnel are accurate.
+        qualified = qs.filter(kanban_state__in=['QUALIFIED', 'HOT_LEAD', 'READY_TO_BUY', 'CONVERTED']).count()
+        ready_to_buy = qs.filter(Q(kanban_state='READY_TO_BUY') | Q(conversation_state='READY_TO_BUY')).count()
+        converted = qs.filter(kanban_state='CONVERTED').count()
+        contact_captured = leads  # leads already = sessions with email/phone
+        # Rates over the honest denominators.
+        capture_rate = round((leads / total * 100) if total else 0, 1)
+        hot_lead_rate = round((hot / active_total * 100) if active_total else 0, 1)
+        conversion_rate = round((converted / active_total * 100) if active_total else 0, 1)
+        avg_intent = round((qs.aggregate(a=Avg('current_intent_ema'))['a'] or 0) * 100, 1)
+        avg_budget = round((qs.aggregate(a=Avg('current_budget_ema'))['a'] or 0) * 100, 1)
+        avg_urgency = round((qs.aggregate(a=Avg('current_urgency_ema'))['a'] or 0) * 100, 1)
+
         return {
             'total': total, 'unique_visitors': unique_visitors,
             'active_total': active_total,
@@ -1660,6 +1794,11 @@ def client_analytics(request, client_id):
             'avg_dur_s': avg_dur_s, 'total_dur_s': total_dur_s,
             'leads': leads, 'hot': hot, 'warm': warm, 'cold': cold,
             'avg_heat': round(avg_heat, 1), 'ai_resolution_rate': ai_res_rate,
+            'qualified': qualified, 'ready_to_buy': ready_to_buy, 'converted': converted,
+            'contact_captured': contact_captured,
+            'capture_rate': capture_rate, 'hot_lead_rate': hot_lead_rate,
+            'conversion_rate': conversion_rate,
+            'avg_intent': avg_intent, 'avg_budget': avg_budget, 'avg_urgency': avg_urgency,
         }
 
     def metric_obj(curr_val, prev_val):
@@ -1675,7 +1814,9 @@ def client_analytics(request, client_id):
     from django.db.models.functions import TruncHour
 
     def _ai_response_seconds(start, end=None):
-        qs = LLMCallLog.objects.filter(client=client, status='ok', created_at__gte=start)
+        qs = LLMCallLog.objects.filter(client=client, status='ok')
+        if start is not None:
+            qs = qs.filter(created_at__gte=start)
         if end is not None:
             qs = qs.filter(created_at__lt=end)
         avg_ms = qs.aggregate(a=Avg('latency_ms'))['a']
@@ -1697,6 +1838,29 @@ def client_analytics(request, client_id):
     chats_per_hour = _chats_per_hour(sessions)
     chats_per_hour_prev = _chats_per_hour(prev_sessions)
 
+    # ── Avg first response & peak hours (Chats tab) ───────────────────────────
+    # First-response proxy = first successful LLM call's latency averaged across
+    # the period's sessions. Peak hour = clock-hour with the most active sessions.
+    hour_dist_raw = (
+        sessions.filter(message_count__gte=1)
+        .annotate(h=TruncHour('created_at')).values('h')
+        .annotate(c=Count('session_id'))
+    )
+    hour_buckets = {}
+    for row in hour_dist_raw:
+        if row['h'] is not None:
+            hour_buckets[row['h'].hour] = hour_buckets.get(row['h'].hour, 0) + row['c']
+    hourly_distribution = [{'hour': h, 'count': hour_buckets.get(h, 0)} for h in range(24)]
+    if hour_buckets:
+        peak_hour = max(hour_buckets, key=hour_buckets.get)
+        peak_hours_label = f"{peak_hour:02d}:00–{(peak_hour + 1) % 24:02d}:00"
+    else:
+        peak_hours_label = '—'
+
+    # Avg messages per answered chat
+    answered_msg_total = sessions.filter(message_count__gte=1).aggregate(s=Sum('message_count'))['s'] or 0
+    avg_messages_per_chat = round(answered_msg_total / curr['active_total'], 1) if curr['active_total'] else 0
+
     # ── Funnel + EMA (current period) ─────────────────────────────────────────
     state_counts = sessions.values('conversation_state').annotate(count=Count('session_id'))
     funnel = {item['conversation_state']: item['count'] for item in state_counts}
@@ -1710,32 +1874,51 @@ def client_analytics(request, client_id):
     kanban_raw = sessions.values('kanban_state').annotate(count=Count('session_id'))
     kanban_breakdown = {item['kanban_state']: item['count'] for item in kanban_raw}
 
-    # ── Daily trend ───────────────────────────────────────────────────────────
+    # ── Daily trend (total + AI / Human / Missed split) ───────────────────────
     today = now.date()
     trend_days = min(days, 30)
-    daily_raw = (
-        sessions
-        .annotate(day=TruncDate('created_at'))
-        .values('day')
-        .annotate(count=Count('session_id'))
-        .order_by('day')
-    )
-    daily_map = {item['day']: item['count'] for item in daily_raw}
-    daily_trend = [
-        {'date': (today - timedelta(days=i)).strftime('%b %d'), 'count': daily_map.get(today - timedelta(days=i), 0)}
-        for i in range(trend_days - 1, -1, -1)
-    ]
 
-    # ── Analytics events ──────────────────────────────────────────────────────
-    total_page_views = 0
-    total_exit_intent = 0
-    total_pricing_visits = 0
-    for ctx_val in sessions.values_list('behavioral_context', flat=True):
-        ctx = ctx_val or {}
-        total_page_views += ctx.get('pages_viewed', 0) or 0
-        total_pricing_visits += ctx.get('pricing_page_visits', 0) or 0
-        if ctx.get('exit_intent_triggered'):
-            total_exit_intent += 1
+    def _daily_map(qs):
+        raw = (qs.annotate(day=TruncDate('created_at')).values('day')
+                 .annotate(count=Count('session_id')).order_by('day'))
+        return {item['day']: item['count'] for item in raw}
+
+    daily_map = _daily_map(sessions)
+    daily_ai = _daily_map(sessions.filter(message_count__gte=1, taken_over_by__isnull=True))
+    daily_human = _daily_map(sessions.filter(message_count__gte=1, taken_over_by__isnull=False))
+    daily_missed = _daily_map(sessions.filter(message_count=0))
+    daily_trend = []
+    for i in range(trend_days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        daily_trend.append({
+            'date': d.strftime('%b %d'),
+            'count': daily_map.get(d, 0),
+            'ai': daily_ai.get(d, 0),
+            'human': daily_human.get(d, 0),
+            'missed': daily_missed.get(d, 0),
+        })
+
+    # ── Analytics events (REAL counts from AnalyticEvent) ─────────────────────
+    # Previously summed behavioral_context['pages_viewed'], which is only written
+    # when an engagement signal fires — so low-engagement page views (the common
+    # case) were dropped and the tile read 0. Count the event rows instead.
+    from analytics.models import AnalyticEvent
+    ev_qs = AnalyticEvent.objects.filter(client=client)
+    if period_start is not None:
+        ev_qs = ev_qs.filter(created_at__gte=period_start)
+    if period == 'custom':
+        ev_qs = ev_qs.filter(created_at__lt=period_end)
+    total_page_views = ev_qs.filter(event_type='page_view').count()
+    total_pricing_visits = ev_qs.filter(event_type='pricing_visit').count()
+    total_exit_intent = ev_qs.filter(event_type='exit_intent').count()
+
+    # Top pages by views, with chats started / leads / avg heat (Engagement tab).
+    top_pages_raw = (
+        ev_qs.filter(event_type='page_view')
+        .exclude(page_url__isnull=True).exclude(page_url='')
+        .values('page_url').annotate(views=Count('id')).order_by('-views')[:8]
+    )
+    top_pages = [{'page': r['page_url'], 'views': r['views']} for r in top_pages_raw]
 
     # F8 — plan-tiered dashboard metrics. The frontend uses
     # `allowed_metric_keys` to decide which tiles to render vs gate
@@ -1771,6 +1954,28 @@ def client_analytics(request, client_id):
         'avg_heat_score':        curr['avg_heat'],
         'heat_distribution':     {'hot': curr['hot'], 'warm': curr['warm'], 'cold': curr['cold']},
 
+        # ── Chats tab extras ──────────────────────────────────────────────────
+        'avg_messages_per_chat': avg_messages_per_chat,
+        'peak_hours':            peak_hours_label,
+        'hourly_distribution':   hourly_distribution,
+
+        # ── Leads tab: stage breakdown + rates ────────────────────────────────
+        'leads': {
+            'captured':       metric_obj(curr['leads'], prev['leads']),
+            'qualified':      metric_obj(curr['qualified'], prev['qualified']),
+            'hot':            metric_obj(curr['hot'], prev['hot']),
+            'ready_to_buy':   metric_obj(curr['ready_to_buy'], prev['ready_to_buy']),
+            'converted':      metric_obj(curr['converted'], prev['converted']),
+            'contact_captured': metric_obj(curr['contact_captured'], prev['contact_captured']),
+            'capture_rate':   metric_obj(curr['capture_rate'], prev['capture_rate']),
+            'hot_lead_rate':  metric_obj(curr['hot_lead_rate'], prev['hot_lead_rate']),
+            'conversion_rate': metric_obj(curr['conversion_rate'], prev['conversion_rate']),
+            'avg_intent':     curr['avg_intent'],
+            'avg_budget':     curr['avg_budget'],
+            'avg_urgency':    curr['avg_urgency'],
+            'avg_heat':       curr['avg_heat'],
+        },
+
         # ── EMA signal averages ───────────────────────────────────────────────
         'avg_intent':  round((agg['avg_intent'] or 0) * 100, 1),
         'avg_budget':  round((agg['avg_budget'] or 0) * 100, 1),
@@ -1784,8 +1989,17 @@ def client_analytics(request, client_id):
             'RECOVERY':    funnel.get('RECOVERY', 0),
             'READY_TO_BUY': funnel.get('READY_TO_BUY', 0),
         },
+        # Lead pipeline funnel (kanban-stage based) for the Leads/Overview funnel viz.
+        'lead_funnel': {
+            'chat_started': curr['active_total'],
+            'qualified':    curr['qualified'],
+            'hot_lead':     curr['hot'],
+            'ready_to_buy': curr['ready_to_buy'],
+            'converted':    curr['converted'],
+        },
         'kanban_breakdown': kanban_breakdown,
         'daily_trend': daily_trend,
+        'top_pages': top_pages,
 
         # ── Analytics events ──────────────────────────────────────────────────
         'analytics_events': {
@@ -2782,6 +2996,81 @@ def _calc_heat(session):
         session.current_urgency_ema * 0.25
     ) * 100
     return round(min(score, 100), 1)
+
+
+def heat_sql_expr():
+    """Composite heat (0-100) as a DB expression, mirroring `_calc_heat`.
+
+    Single source of truth so list/leads/kanban endpoints can filter & sort by
+    heat in SQL instead of slicing first and filtering in Python (which broke
+    once results were paginated)."""
+    return ExpressionWrapper(
+        (F('current_intent_ema') * 0.45
+         + F('current_budget_ema') * 0.30
+         + F('current_urgency_ema') * 0.25) * 100,
+        output_field=FloatField(),
+    )
+
+
+# Canonical channel values accepted by list/kanban filters.
+VALID_CHANNELS = {'website', 'whatsapp', 'messenger', 'instagram', 'telegram'}
+
+
+def apply_period_filter(qs, request, field='created_at'):
+    """Apply a uniform date filter across analytics/list endpoints.
+
+    Accepts either:
+      - ?period=today|7d|30d|90d|all   (preset windows; `all` = no filter)
+      - ?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD  (explicit custom range)
+
+    Explicit date_from/date_to take precedence over period when supplied.
+    Returns (filtered_qs, period_start_or_None).
+    """
+    date_from = (request.query_params.get('date_from') or '').strip()
+    date_to = (request.query_params.get('date_to') or '').strip()
+    if date_from or date_to:
+        if date_from:
+            qs = qs.filter(**{f'{field}__date__gte': date_from})
+        if date_to:
+            qs = qs.filter(**{f'{field}__date__lte': date_to})
+        return qs, None
+
+    period = (request.query_params.get('period') or '').strip().lower()
+    if period in ('', 'all'):
+        return qs, None
+    days_map = {'today': 1, '7d': 7, '30d': 30, '90d': 90}
+    days = days_map.get(period)
+    if days is None:
+        return qs, None
+    now = timezone.now()
+    if period == 'today':
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        start = now - timedelta(days=days)
+    return qs.filter(**{f'{field}__gte': start}), start
+
+
+def paginate_qs(request, qs, default_limit=50, max_limit=200):
+    """Offset-paginate a queryset for infinite scroll.
+
+    Returns (page_items_list, meta_dict) where meta carries count/offset/next.
+    `count` is the full filtered total (so the UI can show "X conversations").
+    """
+    try:
+        limit = int(request.query_params.get('limit', default_limit))
+    except (TypeError, ValueError):
+        limit = default_limit
+    limit = max(1, min(limit, max_limit))
+    try:
+        offset = int(request.query_params.get('offset', 0))
+    except (TypeError, ValueError):
+        offset = 0
+    offset = max(0, offset)
+
+    total = qs.count()
+    items = list(qs[offset:offset + limit])
+    next_offset = offset + limit if offset + limit < total else None
+    return items, {'count': total, 'offset': offset, 'limit': limit, 'next': next_offset}
 
 
 # ─── Webhook secret rotation ──────────────────────────────────────────────────

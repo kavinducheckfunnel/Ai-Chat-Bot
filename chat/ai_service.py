@@ -601,6 +601,32 @@ def _maybe_promote_kanban(session) -> bool:
     return False
 
 
+def _promote_lead_on_capture(session):
+    """Promote the kanban stage after an inline contact capture (QA #13).
+
+    Mirrors the explicit lead-modal logic, minus the injected confirmation
+    message (the AI already replied conversationally):
+      • BOTH email + phone  → CONVERTED (the conversion event for this funnel)
+      • partial + warm/intent → HOT_LEAD
+    Never demotes. Saves the session if it changed.
+    """
+    cur = (session.kanban_state or '').upper()
+    has_full_contact = bool((session.lead_email or '').strip() and (session.lead_phone or '').strip())
+    heat = session.heat_score or 0
+    intent = session.current_intent_ema or 0
+    new_state = None
+    if has_full_contact and cur not in {'CONVERTED', 'LOST'}:
+        new_state = 'CONVERTED'
+    elif (heat >= 60 or intent >= 0.6) and cur in {'NEW', 'ENGAGED', 'CONTACTED', 'QUALIFIED'}:
+        new_state = 'HOT_LEAD'
+    if new_state and new_state != cur:
+        session.kanban_state = new_state
+        try:
+            session.save(update_fields=['kanban_state'])
+        except Exception:
+            pass
+
+
 import re as _re
 
 # "List everything you sell" type queries. Normal RAG retrieval only returns
@@ -1019,22 +1045,31 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     session.chat_history.append({'role': 'user', 'message': user_entry_text})
     session.chat_history.append({'role': 'ai', 'message': result.get('reply_text')})
 
-    # 8b. Inline phone capture — if the visitor typed a phone number in this
-    # message, normalise it to the LK +94 standard and store it on the
-    # session (only when we don't already have one). This means a number
-    # given mid-chat ("call me on 077 123 4567") lands in the CRM in clean
-    # E.164 form, not raw text, matching what the lead modal produces.
-    if user_message and not (session.lead_phone or '').strip():
+    # 8b. Inline contact capture (QA #13) — detect an email and/or phone number
+    # the visitor typed in this message and store them silently on the session
+    # (only fields we don't already have). Replaces the old interrupting popup:
+    # "call me on 077 123 4567" or "email me at jo@x.com" now lands in the CRM
+    # in clean form, with no friction in the chat flow.
+    if user_message:
         try:
-            from .phone_utils import extract_lk_phone
+            from .phone_utils import extract_phone, extract_email
+            captured_fields = []
             country = getattr(session.client, 'lead_country', None) or 'LK'
-            if country == 'LK':
-                inline = extract_lk_phone(user_message)
-                if inline:
-                    session.lead_phone = inline
-                    session.save(update_fields=['lead_phone'])
+            if not (session.lead_phone or '').strip():
+                inline_phone = extract_phone(user_message, country)
+                if inline_phone:
+                    session.lead_phone = inline_phone
+                    captured_fields.append('lead_phone')
+            if not (session.lead_email or '').strip():
+                inline_email = extract_email(user_message)
+                if inline_email:
+                    session.lead_email = inline_email
+                    captured_fields.append('lead_email')
+            if captured_fields:
+                session.save(update_fields=captured_fields)
+                _promote_lead_on_capture(session)
         except Exception as e:
-            logger.warning(f'[ai] inline phone capture failed: {e}')
+            logger.warning(f'[ai] inline contact capture failed: {e}')
 
     from .utils import truncate_chat_history
     update_fields = truncate_chat_history(session)

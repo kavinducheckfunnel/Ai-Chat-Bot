@@ -28,7 +28,7 @@
         </div>
         <div>
           <p class="stat-label">Total Sessions</p>
-          <p class="stat-value">{{ sessions.length }}</p>
+          <p class="stat-value">{{ totalCount || sessions.length }}</p>
         </div>
       </div>
       <div class="stat-card">
@@ -127,9 +127,18 @@
 
         <div class="session-footer">
           <span class="visitor-id">{{ (session.lead_email || session.visitor_id || 'anon').slice(0, 18) }}</span>
-          <span class="msg-count">{{ session.message_count || 0 }} msgs</span>
+          <span class="footer-right">
+            <span class="ch-tag" :class="'ch-' + (session.channel || 'website')">{{ channelShort(session.channel) }}</span>
+            <span class="msg-count">{{ session.message_count || 0 }} msgs</span>
+          </span>
         </div>
       </div>
+    </div>
+
+    <div v-if="nextOffset != null && !loading" class="load-more-wrap">
+      <button class="load-more-btn" @click="loadMore" :disabled="loadingMore">
+        {{ loadingMore ? 'Loading…' : `Load more (${sessions.length} of ${totalCount})` }}
+      </button>
     </div>
 
     <!-- Chat history modal -->
@@ -174,15 +183,24 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
-const props = defineProps({ client: Object, embedded: Boolean })
+const props = defineProps({
+  client: Object,
+  embedded: Boolean,
+  channel: { type: String, default: 'all' },
+  dateRange: { type: Object, default: () => ({ period: 'all', dateFrom: null, dateTo: null }) },
+})
 const api = useAdminApi()
 const sessions = ref([])
+const totalCount = ref(0)
+const nextOffset = ref(null)
+const loadingMore = ref(false)
 const loading = ref(false)
 const wsConnected = ref(false)
 const activeFilter = ref('all')
 const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
+const PAGE = 60
 
 const filters = [
   { label: 'All', value: 'all' },
@@ -205,17 +223,45 @@ const avgHeat = computed(() => {
   return Math.round(sessions.value.reduce((sum, s) => sum + (s.heat_score || 0), 0) / sessions.value.length)
 })
 
+function _baseParams() {
+  const params = { limit: PAGE }
+  if (props.channel && props.channel !== 'all') params.channel = props.channel
+  if (props.dateRange?.dateFrom) params.date_from = props.dateRange.dateFrom
+  if (props.dateRange?.dateTo) params.date_to = props.dateRange.dateTo
+  if (!params.date_from && !params.date_to && props.dateRange?.period && !['all', 'custom'].includes(props.dateRange.period)) {
+    params.period = props.dateRange.period
+  }
+  return params
+}
+
 async function loadData() {
   if (!props.client) return
   loading.value = true
   try {
-    const data = await api.getPortalSessions(props.client.id, { limit: 100 })
+    const data = await api.getPortalSessions(props.client.id, { ..._baseParams(), offset: 0 })
     const list = Array.isArray(data) ? data : (data?.results || [])
     sessions.value = list.sort((a, b) => (b.heat_score || 0) - (a.heat_score || 0))
+    totalCount.value = Array.isArray(data) ? list.length : (data?.count ?? list.length)
+    nextOffset.value = Array.isArray(data) ? null : (data?.next ?? null)
   } catch (e) {
     console.error(e)
   } finally {
     loading.value = false
+  }
+}
+
+async function loadMore() {
+  if (loadingMore.value || nextOffset.value == null || !props.client) return
+  loadingMore.value = true
+  try {
+    const data = await api.getPortalSessions(props.client.id, { ..._baseParams(), offset: nextOffset.value })
+    const list = Array.isArray(data) ? data : (data?.results || [])
+    const seen = new Set(sessions.value.map(s => s.session_id))
+    sessions.value.push(...list.filter(s => !seen.has(s.session_id)))
+    sessions.value.sort((a, b) => (b.heat_score || 0) - (a.heat_score || 0))
+    nextOffset.value = Array.isArray(data) ? null : (data?.next ?? null)
+  } catch {} finally {
+    loadingMore.value = false
   }
 }
 
@@ -266,6 +312,11 @@ function stateClass(state) {
   return map[state] || 'st-blue'
 }
 
+function channelShort(ch) {
+  const map = { whatsapp: 'WA', messenger: 'MSG', instagram: 'IG', telegram: 'TG', website: 'WEB' }
+  return map[ch] || 'WEB'
+}
+
 let ws = null
 let fallbackInterval = null
 
@@ -290,6 +341,7 @@ onUnmounted(() => {
 })
 
 watch(() => props.client, () => loadData())
+watch(() => [props.channel, props.dateRange], () => loadData(), { deep: true })
 </script>
 
 <style scoped>
@@ -417,7 +469,23 @@ watch(() => props.client, () => loadData())
 
 .session-footer { display: flex; justify-content: space-between; align-items: center; }
 .visitor-id { font-size: 11px; color: var(--cf-text-muted); font-family: monospace; }
+.footer-right { display: flex; align-items: center; gap: 7px; }
 .msg-count { font-size: 11px; color: var(--cf-text-muted); }
+.ch-tag { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 4px; letter-spacing: .05em; }
+.ch-tag.ch-website  { background: rgba(99,102,241,0.12); color: #a5b4fc; }
+.ch-tag.ch-whatsapp { background: rgba(37,211,102,0.14); color: #25d366; }
+.ch-tag.ch-messenger { background: rgba(0,132,255,0.14); color: #4aa8ff; }
+.ch-tag.ch-instagram { background: rgba(225,48,108,0.14); color: #f06595; }
+.ch-tag.ch-telegram { background: rgba(42,171,238,0.14); color: #2aabee; }
+
+.load-more-wrap { display: flex; justify-content: center; padding: 22px 0 4px; }
+.load-more-btn {
+  background: var(--cf-bg-surface); border: 1px solid var(--cf-border-default);
+  border-radius: 9px; padding: 9px 20px; font-size: 13px; font-weight: 600;
+  color: var(--cf-text-secondary); cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.load-more-btn:hover { border-color: #6366f1; color: #a5b4fc; }
+.load-more-btn:disabled { opacity: .5; }
 
 /* Loading / Empty */
 .loading-state, .empty-state {

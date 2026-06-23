@@ -150,6 +150,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import { timeAgo } from '../composables/useFormat'
 
 const props = defineProps({ client: Object, embedded: Boolean })
 const api = useAdminApi()
@@ -161,24 +162,46 @@ const selectedSession = ref(null)
 const sessionDetail = ref(null)
 const loadingSession = ref(false)
 
+// Full pipeline (QA #8): includes Qualified + Ready to Buy so leads the AI
+// promoted to those stages no longer vanish from the board.
 const columns = [
-  { key: 'NEW',       label: 'New',       headerClass: 'col-new' },
-  { key: 'ENGAGED',   label: 'Engaged',   headerClass: 'col-engaged' },
-  { key: 'HOT_LEAD',  label: 'Hot Lead',  headerClass: 'col-hot' },
-  { key: 'CONVERTED', label: 'Converted', headerClass: 'col-converted' },
-  { key: 'LOST',      label: 'Lost',      headerClass: 'col-lost' },
+  { key: 'NEW',          label: 'New',          headerClass: 'col-new' },
+  { key: 'ENGAGED',      label: 'Engaged',      headerClass: 'col-engaged' },
+  { key: 'QUALIFIED',    label: 'Qualified',    headerClass: 'col-qualified' },
+  { key: 'HOT_LEAD',     label: 'Hot Lead',     headerClass: 'col-hot' },
+  { key: 'READY_TO_BUY', label: 'Ready to Buy', headerClass: 'col-ready' },
+  { key: 'CONVERTED',    label: 'Converted',    headerClass: 'col-converted' },
+  { key: 'LOST',         label: 'Lost',         headerClass: 'col-lost' },
 ]
+const COLUMN_KEYS = columns.map(c => c.key)
+
+// Normalize so any unexpected/empty/None state still renders (as New) rather
+// than silently disappearing — the root cause of QA #8.
+function normalizeState(s) {
+  const st = s.kanban_state || 'NEW'
+  return COLUMN_KEYS.includes(st) ? st : 'NEW'
+}
 
 function columnSessions(key) {
-  return sessions.value.filter(s => (s.kanban_state || 'NEW') === key)
+  return sessions.value.filter(s => normalizeState(s) === key)
 }
 
 async function loadData() {
   if (!props.client) return
   loading.value = true
   try {
-    const data = await api.getPortalSessions(props.client.id, { limit: 200 })
-    sessions.value = Array.isArray(data) ? data : (data?.results || [])
+    // Load every session across pages so the board buckets the full pipeline.
+    const all = []
+    let offset = 0
+    for (let guard = 0; guard < 50; guard++) {
+      const data = await api.getPortalSessions(props.client.id, { limit: 200, offset })
+      const res = Array.isArray(data) ? data : (data?.results || [])
+      all.push(...res)
+      const next = Array.isArray(data) ? null : (data?.next ?? null)
+      if (next == null) break
+      offset = next
+    }
+    sessions.value = all
   } catch (e) {
     console.error(e)
   } finally {
@@ -244,15 +267,6 @@ function heatGradient(score) {
   return 'linear-gradient(90deg,#6366F1,#8B5CF6)'
 }
 
-function timeAgo(iso) {
-  if (!iso) return ''
-  const diff = Date.now() - new Date(iso).getTime()
-  const m = Math.floor(diff / 60000)
-  if (m < 1) return 'just now'
-  if (m < 60) return `${m}m ago`
-  return `${Math.floor(m / 60)}h ago`
-}
-
 onMounted(loadData)
 watch(() => props.client, loadData)
 </script>
@@ -300,7 +314,9 @@ watch(() => props.client, loadData)
 }
 .col-new       { background: rgba(100,116,139,0.12); }
 .col-engaged   { background: rgba(59,130,246,0.12); }
+.col-qualified { background: rgba(168,85,247,0.12); }
 .col-hot       { background: rgba(239,68,68,0.12); }
+.col-ready     { background: rgba(245,158,11,0.12); }
 .col-converted { background: rgba(34,197,94,0.12); }
 .col-lost      { background: rgba(100,116,139,0.08); }
 

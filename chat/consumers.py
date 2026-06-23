@@ -388,11 +388,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     # ── Handler for admin-injected messages during takeover ──────────────
     async def chat_message(self, event):
-        """Relay admin message to visitor WebSocket."""
+        """Relay admin message (and any media attachments) to visitor WebSocket."""
         await self.send(text_data=json.dumps({
             'type': 'ai_message',
             'message': event['message'],
             'source': event.get('source', 'ai'),
+            'attachments': event.get('attachments', []),
         }))
 
     def _get_client_ip(self):

@@ -321,9 +321,24 @@ export function useAdminApi() {
 
     releaseSession: (id) => apiFetch(`/api/admin/sessions/${id}/release/`, { method: 'POST', body: '{}' }),
 
-    sendMessage: (id, message) => apiFetch(`/api/admin/sessions/${id}/send/`, {
-      method: 'POST', body: JSON.stringify({ message }),
+    sendMessage: (id, message, attachments = []) => apiFetch(`/api/admin/sessions/${id}/send/`, {
+      method: 'POST', body: JSON.stringify({ message, attachments }),
     }),
+
+    // Upload a takeover media attachment (QA #3). multipart — no JSON header.
+    uploadAttachment: async (id, file, kind) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (kind) fd.append('kind', kind)
+      const t = localStorage.getItem('cf_access_token')
+      const res = await fetch(`${API_BASE}/api/admin/sessions/${id}/upload/`, {
+        method: 'POST',
+        headers: { ...(t ? { Authorization: `Bearer ${t}` } : {}) },
+        body: fd,
+      })
+      if (!res.ok) throw new Error('Upload failed')
+      return res.json()
+    },
 
     getSessionHistory: (id) => apiFetch(`/api/admin/sessions/${id}/history/`),
 
@@ -402,7 +417,18 @@ export function useAdminApi() {
       return apiFetch(`/api/admin/clients/${clientId}/sessions/${qs ? '?' + qs : ''}`)
     },
 
-    getPortalAnalytics: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/analytics/?period=${period}`),
+    // period: 'today'|'7d'|'30d'|'90d'|'all'|'custom'. For 'custom' pass {dateFrom, dateTo}.
+    getPortalAnalytics: (clientId, period = '30d', opts = {}) => {
+      const params = {}
+      if (opts.dateFrom || opts.dateTo) {
+        if (opts.dateFrom) params.date_from = opts.dateFrom
+        if (opts.dateTo) params.date_to = opts.dateTo
+      } else {
+        params.period = period
+      }
+      const qs = new URLSearchParams(params).toString()
+      return apiFetch(`/api/admin/clients/${clientId}/analytics/${qs ? '?' + qs : ''}`)
+    },
 
     // Issue 4 — product-link click attribution
     getClientLinkClicks: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/link-clicks/?period=${period}`),
