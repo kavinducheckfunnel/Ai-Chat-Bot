@@ -1639,8 +1639,15 @@ def upload_attachment(request, session_id):
         size=f.size,
         uploaded_by=request.user if request.user.is_authenticated else None,
     )
+    # Return an ABSOLUTE URL. The widget runs on the customer's own domain, so a
+    # relative /media/... path would resolve against THEIR site (404 / broken
+    # image). Prefer BACKEND_PUBLIC_URL (https://growmiq.io) so the media always
+    # loads cross-origin, and Meta can fetch it too.
+    from django.conf import settings as dj_settings
+    base = (getattr(dj_settings, 'BACKEND_PUBLIC_URL', '') or '').rstrip('/')
+    abs_url = (base + att.file.url) if base else request.build_absolute_uri(att.file.url)
     return Response({
-        'url': att.file.url,
+        'url': abs_url,
         'kind': att.kind,
         'name': att.name,
         'mime': att.mime,
