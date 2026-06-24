@@ -61,6 +61,7 @@ PLAN_SPECS = [
         # channels
         'allow_whatsapp': False,
         'allow_messenger': False,
+        'allow_instagram': False,
         'allow_telegram': True,                   # Telegram optional on all plans
         # AI / widget
         'allow_byok': True,                       # ✓ Optional
@@ -99,6 +100,7 @@ PLAN_SPECS = [
         'sla_response_hours': 48,
         'allow_whatsapp': True,
         'allow_messenger': True,
+        'allow_instagram': True,
         'allow_telegram': True,
         'allow_byok': True,                       # ✓ Optional
         'allow_voice_input': True,
@@ -138,6 +140,7 @@ PLAN_SPECS = [
         'sla_response_hours': 24,                  # Priority
         'allow_whatsapp': True,
         'allow_messenger': True,
+        'allow_instagram': True,
         'allow_telegram': True,
         'allow_byok': True,
         'allow_voice_input': True,
@@ -172,6 +175,7 @@ PLAN_SPECS = [
         'sla_response_hours': 4,                   # Dedicated CSM
         'allow_whatsapp': True,
         'allow_messenger': True,
+        'allow_instagram': True,
         'allow_telegram': True,
         'allow_byok': True,
         'allow_voice_input': True,

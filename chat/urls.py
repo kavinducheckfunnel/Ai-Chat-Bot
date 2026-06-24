@@ -15,5 +15,6 @@ urlpatterns = [
     # Omnichannel webhooks (called by Meta's servers / Telegram)
     path('webhooks/whatsapp/<uuid:client_id>/', views.whatsapp_webhook, name='whatsapp_webhook'),
     path('webhooks/messenger/<uuid:client_id>/', views.messenger_webhook, name='messenger_webhook'),
+    path('webhooks/instagram/<uuid:client_id>/', views.instagram_webhook, name='instagram_webhook'),
     path('webhooks/telegram/<uuid:client_id>/', views.telegram_webhook, name='telegram_webhook'),
 ]

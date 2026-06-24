@@ -1599,6 +1599,15 @@ def session_send_message(request, session_id):
                 _send_messenger_media(client.messenger_page_access_token, session.visitor_id,
                                       _abs(att.get('url')), att.get('kind'))
 
+    elif client and channel == 'instagram':
+        if client.instagram_access_token:
+            from chat.views import _send_instagram_reply, _send_instagram_media
+            if message:
+                _send_instagram_reply(client.instagram_access_token, session.visitor_id, message)
+            for att in attachments:
+                _send_instagram_media(client.instagram_access_token, session.visitor_id,
+                                      _abs(att.get('url')), att.get('kind'))
+
     elif client and channel == 'telegram':
         if client.telegram_bot_token:
             from chat.views import _send_telegram_reply
@@ -2876,6 +2885,7 @@ def _plan_to_dict(p):
         'allow_whatsapp': p.allow_whatsapp,
         'allow_telegram': p.allow_telegram,
         'allow_messenger': p.allow_messenger,
+        'allow_instagram': p.allow_instagram,
         # AI & Knowledge
         'allow_byok': p.allow_byok,
         # Integrations
@@ -2918,7 +2928,7 @@ _PLAN_EDITABLE_FIELDS = [
     'max_images_per_month', 'max_voice_per_month', 'max_knowledge_pages',
     'max_canned_responses', 'max_dashboard_metrics', 'max_social_channels',
     'data_retention_days', 'sla_response_hours',
-    'allow_whatsapp', 'allow_telegram', 'allow_messenger', 'allow_byok',
+    'allow_whatsapp', 'allow_telegram', 'allow_messenger', 'allow_instagram', 'allow_byok',
     'allow_hubspot', 'allow_slack', 'allow_webhooks', 'allow_god_view',
     'allow_canned_responses', 'allow_conversation_tags', 'allow_csv_export',
     'allow_voice_input', 'allow_image_input', 'allow_fomo_triggers',
@@ -3826,7 +3836,7 @@ def platform_feature_flags(request):
         return Response({'plan': None, 'features': {}})
 
     feature_fields = [
-        'allow_whatsapp', 'allow_telegram', 'allow_messenger',
+        'allow_whatsapp', 'allow_telegram', 'allow_messenger', 'allow_instagram',
         'allow_byok', 'max_knowledge_pages', 'max_ai_tokens_per_month',
         'allow_hubspot', 'allow_slack', 'allow_webhooks',
         'allow_god_view', 'allow_canned_responses', 'max_canned_responses',

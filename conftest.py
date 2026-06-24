@@ -230,6 +230,21 @@ def messenger_client(db, tenant_user):
 
 
 @pytest.fixture
+def instagram_client(db, tenant_user):
+    """Client configured for Instagram Direct."""
+    c = Client.objects.create(
+        name='Instagram Store',
+        platform='CUSTOM',
+        instagram_business_account_id='17841400000000000',
+        instagram_access_token='ig_token_abc',
+        instagram_verify_token='ig_verify_token',
+        instagram_enabled=True,
+    )
+    tenant_user.tenant_profile.clients.add(c)
+    return c
+
+
+@pytest.fixture
 def telegram_client(db, tenant_user):
     """Client configured for Telegram."""
     c = Client.objects.create(

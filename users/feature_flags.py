@@ -16,6 +16,7 @@ FEATURE_LABELS = {
     'allow_whatsapp':          ('WhatsApp Business',        'Starter'),
     'allow_telegram':          ('Telegram Bot',             'Growth'),
     'allow_messenger':         ('Facebook Messenger',       'Growth'),
+    'allow_instagram':         ('Instagram Direct',         'Growth'),
     'allow_byok':              ('Custom AI (BYOK)',         'Growth'),
     'allow_hubspot':           ('HubSpot CRM',             'Growth'),
     'allow_slack':             ('Slack Notifications',      'Starter'),

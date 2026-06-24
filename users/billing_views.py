@@ -57,6 +57,7 @@ def public_plans(request):
             'allow_whatsapp': p.allow_whatsapp,
             'allow_telegram': p.allow_telegram,
             'allow_messenger': p.allow_messenger,
+            'allow_instagram': p.allow_instagram,
             'allow_byok': p.allow_byok,
             'allow_hubspot': p.allow_hubspot,
             'allow_voice_input': p.allow_voice_input,

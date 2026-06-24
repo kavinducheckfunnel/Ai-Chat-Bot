@@ -173,6 +173,24 @@ class TestSessionSendMessage:
         }, format='json')
         assert resp.status_code == 401
 
+    @patch('chat.views._send_instagram_reply')
+    @patch('asgiref.sync.async_to_sync')
+    def test_takeover_send_routes_to_instagram(self, mock_async, mock_ig, tenant_client, instagram_client):
+        """A takeover reply on an Instagram session must be delivered over Instagram."""
+        session = ChatSession.objects.create(
+            client=instagram_client, visitor_id='igsid_take', channel='instagram',
+        )
+        resp = tenant_client.post(send_url(session.session_id), {
+            'message': 'Reply from agent',
+        }, format='json')
+        assert resp.status_code == 200
+        assert resp.json()['channel'] == 'instagram'
+        mock_ig.assert_called_once()
+        args = mock_ig.call_args[0]
+        assert args[0] == instagram_client.instagram_access_token
+        assert args[1] == 'igsid_take'
+        assert args[2] == 'Reply from agent'
+
 
 # ─── Session Tags ─────────────────────────────────────────────────────────────
 

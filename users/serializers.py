@@ -27,6 +27,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'ai_provider', 'ai_api_key', 'ai_model',
             'whatsapp_phone_number_id', 'whatsapp_access_token', 'whatsapp_verify_token', 'whatsapp_enabled',
             'messenger_page_id', 'messenger_page_access_token', 'messenger_verify_token', 'messenger_enabled',
+            'instagram_business_account_id', 'instagram_access_token', 'instagram_verify_token', 'instagram_enabled',
             'hubspot_api_key',
             'telegram_bot_token', 'telegram_enabled',
             'slack_webhook_url',

@@ -708,7 +708,7 @@ const overrideModal = ref({ open:false, tenant:null, items:[], loading:false, sa
 
 const allFeatures = [
   {key:'allow_whatsapp',label:'WhatsApp'},{key:'allow_telegram',label:'Telegram'},
-  {key:'allow_messenger',label:'Messenger'},{key:'allow_byok',label:'Custom AI (BYOK)'},
+  {key:'allow_messenger',label:'Messenger'},{key:'allow_instagram',label:'Instagram'},{key:'allow_byok',label:'Custom AI (BYOK)'},
   {key:'allow_hubspot',label:'HubSpot CRM'},{key:'allow_slack',label:'Slack Notifications'},
   {key:'allow_webhooks',label:'Outbound Webhooks'},{key:'allow_god_view',label:'God View / Takeover'},
   {key:'allow_canned_responses',label:'Canned Responses'},{key:'allow_conversation_tags',label:'Conversation Tags'},

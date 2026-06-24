@@ -947,6 +947,105 @@ def messenger_webhook(request, client_id):
     return HttpResponse('OK')
 
 
+# ─── Instagram Direct webhook ─────────────────────────────────────────────────
+# Instagram DMs ride the same Meta Graph "messaging" platform as Messenger:
+# same webhook envelope (entry[].messaging[]), same /me/messages send endpoint
+# (with a Page/IG access token), same page-scoped recipient id (IGSID).
+
+def _send_instagram_reply(access_token, recipient_id, text):
+    try:
+        resp = http_requests.post(
+            'https://graph.facebook.com/v20.0/me/messages',
+            params={'access_token': access_token},
+            json={
+                'recipient': {'id': recipient_id},
+                'message': {'text': text},
+            },
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            logger.error(f'[instagram_reply] Graph API error {resp.status_code}: {resp.text}')
+        else:
+            logger.info(f'[instagram_reply] Sent OK to {recipient_id}')
+    except Exception as e:
+        logger.error(f'[instagram_reply] Failed: {e}')
+
+
+def _send_instagram_media(access_token, recipient_id, media_url, kind):
+    """Send a media attachment over Instagram Direct by URL (takeover media)."""
+    if not media_url:
+        return
+    type_map = {'image': 'image', 'audio': 'audio', 'file': 'file'}
+    mtype = type_map.get(kind, 'file')
+    try:
+        resp = http_requests.post(
+            'https://graph.facebook.com/v20.0/me/messages',
+            params={'access_token': access_token},
+            json={
+                'recipient': {'id': recipient_id},
+                'message': {'attachment': {'type': mtype, 'payload': {'url': media_url, 'is_reusable': False}}},
+            },
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            logger.error(f'[instagram_media] Graph API error {resp.status_code}: {resp.text}')
+    except Exception as e:
+        logger.error(f'[instagram_media] Failed: {e}')
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([AllowAny])
+def instagram_webhook(request, client_id):
+    try:
+        client = Client.objects.get(pk=client_id)
+    except (Client.DoesNotExist, Exception):
+        return HttpResponse('Not found', status=404)
+
+    # ── Webhook verification (GET) ────────────────────────────────────────
+    if request.method == 'GET':
+        mode = request.GET.get('hub.mode')
+        token = request.GET.get('hub.verify_token')
+        challenge = request.GET.get('hub.challenge')
+        if mode == 'subscribe' and token == client.instagram_verify_token:
+            return HttpResponse(challenge, content_type='text/plain')
+        return HttpResponse('Forbidden', status=403)
+
+    # ── Incoming message (POST) ───────────────────────────────────────────
+    data = request.data
+    try:
+        entry = data['entry'][0]
+        messaging = entry['messaging'][0]
+        msg = messaging.get('message', {})
+        # Ignore echoes of our own outbound messages (prevents reply loops),
+        # reactions, read receipts, and non-text payloads (stickers/media).
+        if msg.get('is_echo'):
+            return HttpResponse('OK')
+        sender_igsid = messaging['sender']['id']
+        text = msg.get('text')
+        if not text:
+            return HttpResponse('OK')
+    except (KeyError, IndexError):
+        return HttpResponse('OK')
+
+    if not client.instagram_enabled or not client.instagram_access_token:
+        return HttpResponse('Channel not configured', status=400)
+
+    # Route through AI
+    session = _get_or_create_channel_session(client, sender_igsid, 'instagram')
+    tenant = _get_tenant_for_client(client)
+    if not _check_and_increment_message(tenant):
+        return HttpResponse('OK')  # quota exceeded — silently skip
+    try:
+        result = generate_ai_response(session, text, {})
+        reply_text = result.get('reply_text', 'Sorry, I could not process your request.')
+    except Exception as e:
+        logger.error(f'[instagram_webhook] AI error: {e}')
+        reply_text = 'Sorry, something went wrong on my end.'
+
+    _send_instagram_reply(client.instagram_access_token, sender_igsid, reply_text)
+    return HttpResponse('OK')
+
+
 # ─── Telegram webhook ─────────────────────────────────────────────────────────
 
 def _send_telegram_reply(bot_token, chat_id, text):

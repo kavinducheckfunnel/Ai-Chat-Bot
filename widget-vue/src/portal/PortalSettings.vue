@@ -697,6 +697,62 @@
     </div>
     </div><!-- end gate-wrap -->
 
+    <!-- Instagram Direct -->
+    <div class="gate-wrap">
+      <div v-if="features.allow_instagram === false" class="gate-overlay">
+        <div class="gate-lock">🔒</div>
+        <div class="gate-msg">Instagram Direct requires the <strong>Growth</strong> plan or higher.</div>
+        <a href="/portal/billing" class="gate-upgrade-btn">Upgrade to Growth →</a>
+      </div>
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(225,48,108,0.12)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#E1306C" stroke="none"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">Instagram Direct</h2>
+            <p class="section-sub">Connect your Instagram professional account so the AI handles DMs. Conversations sync to the same inbox as your other channels.</p>
+          </div>
+          <div class="status-badge" :class="intForm.instagram_enabled ? 'active' : 'inactive'">{{ intForm.instagram_enabled ? 'Active' : 'Inactive' }}</div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field" style="grid-column:1/-1">
+          <label>Webhook URL (paste this in Meta → Webhooks, field <code>instagram</code>)</label>
+          <div class="code-block" style="padding:10px 14px">
+            <code style="font-family:monospace;font-size:12px;color:#a5b4fc">{{ instagramWebhookUrl }}</code>
+          </div>
+        </div>
+        <div class="field">
+          <label>Instagram Account ID</label>
+          <input class="input" type="text" v-model="intForm.instagram_business_account_id" placeholder="17841400000000000" />
+        </div>
+        <div class="field">
+          <label>Verify Token (you choose)</label>
+          <input class="input" type="text" v-model="intForm.instagram_verify_token" placeholder="my_secure_verify_token" />
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Access Token (Page / Instagram token)</label>
+          <input class="input" type="password" v-model="intForm.instagram_access_token" placeholder="EAAxxxxxxxxxxxxxxxx" autocomplete="off" />
+          <span class="field-hint">Use a Page access token with <strong>instagram_basic</strong>, <strong>instagram_manage_messages</strong> and <strong>pages_messaging</strong> permissions, linked to your Instagram professional account.</span>
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Enable Instagram</label>
+          <div class="toggle-row">
+            <button class="toggle-btn" :class="{ on: intForm.instagram_enabled }" @click="intForm.instagram_enabled = !intForm.instagram_enabled">
+              <span class="toggle-knob"></span>
+            </button>
+            <span class="toggle-lbl">{{ intForm.instagram_enabled ? 'Enabled — AI will reply to Instagram DMs' : 'Disabled' }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="save-row">
+        <button class="btn-save" @click="saveIntegrations" :disabled="intSaving">{{ intSaving ? 'Saving…' : intSaved ? '✓ Saved' : 'Save Instagram settings' }}</button>
+      </div>
+    </div>
+    </div><!-- end gate-wrap -->
+
     <!-- HubSpot CRM -->
     <div class="gate-wrap">
       <div v-if="features.allow_hubspot === false" class="gate-overlay">
@@ -923,6 +979,10 @@ const intForm = ref({
   messenger_page_access_token: '',
   messenger_verify_token: '',
   messenger_enabled: false,
+  instagram_business_account_id: '',
+  instagram_access_token: '',
+  instagram_verify_token: '',
+  instagram_enabled: false,
   hubspot_api_key: '',
   telegram_bot_token: '',
   telegram_enabled: false,
@@ -974,6 +1034,9 @@ const whatsappWebhookUrl = computed(() =>
 )
 const messengerWebhookUrl = computed(() =>
   props.client ? `${backendUrl}/api/chat/webhooks/messenger/${props.client.id}/` : ''
+)
+const instagramWebhookUrl = computed(() =>
+  props.client ? `${backendUrl}/api/chat/webhooks/instagram/${props.client.id}/` : ''
 )
 const telegramWebhookUrl = computed(() =>
   props.client ? `${backendUrl}/api/chat/webhooks/telegram/${props.client.id}/` : ''
@@ -1077,6 +1140,10 @@ watch(() => props.client, (c) => {
   intForm.value.messenger_page_access_token = c.messenger_page_access_token || ''
   intForm.value.messenger_verify_token = c.messenger_verify_token || ''
   intForm.value.messenger_enabled = c.messenger_enabled || false
+  intForm.value.instagram_business_account_id = c.instagram_business_account_id || ''
+  intForm.value.instagram_access_token = c.instagram_access_token || ''
+  intForm.value.instagram_verify_token = c.instagram_verify_token || ''
+  intForm.value.instagram_enabled = c.instagram_enabled || false
   intForm.value.hubspot_api_key = c.hubspot_api_key || ''
   intForm.value.telegram_bot_token = c.telegram_bot_token || ''
   intForm.value.telegram_enabled = c.telegram_enabled || false

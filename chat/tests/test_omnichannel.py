@@ -23,6 +23,10 @@ def msg_url(client_id):
     return f'/api/chat/webhooks/messenger/{client_id}/'
 
 
+def ig_url(client_id):
+    return f'/api/chat/webhooks/instagram/{client_id}/'
+
+
 def tg_url(client_id):
     return f'/api/chat/webhooks/telegram/{client_id}/'
 
@@ -184,6 +188,98 @@ class TestMessengerWebhook:
         }
         resp = anon_client.post(msg_url(messenger_client.id), payload, format='json')
         assert resp.status_code == 200
+
+
+# ─── Instagram ────────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+class TestInstagramWebhook:
+    def test_verification_valid(self, anon_client, instagram_client):
+        resp = anon_client.get(ig_url(instagram_client.id), {
+            'hub.mode': 'subscribe',
+            'hub.verify_token': instagram_client.instagram_verify_token,
+            'hub.challenge': 'IG_CHALLENGE',
+        })
+        assert resp.status_code == 200
+        assert b'IG_CHALLENGE' in resp.content
+
+    def test_verification_wrong_token(self, anon_client, instagram_client):
+        resp = anon_client.get(ig_url(instagram_client.id), {
+            'hub.mode': 'subscribe',
+            'hub.verify_token': 'wrong',
+            'hub.challenge': 'CHALLENGE',
+        })
+        assert resp.status_code == 403
+
+    def test_verification_unknown_client(self, anon_client):
+        resp = anon_client.get(ig_url(uuid.uuid4()), {
+            'hub.mode': 'subscribe', 'hub.verify_token': 'x', 'hub.challenge': 'C',
+        })
+        assert resp.status_code == 404
+
+    @patch('chat.views._send_instagram_reply')
+    @patch('chat.views.generate_ai_response', return_value=AI_MOCK)
+    def test_incoming_text(self, mock_ai, mock_send, anon_client, instagram_client):
+        payload = {
+            'object': 'instagram',
+            'entry': [{
+                'messaging': [{
+                    'sender': {'id': 'igsid_abc123'},
+                    'message': {'text': 'Hello Instagram!'},
+                }]
+            }]
+        }
+        resp = anon_client.post(ig_url(instagram_client.id), payload, format='json')
+        assert resp.status_code == 200
+        mock_ai.assert_called_once()
+        mock_send.assert_called_once()
+
+        session = ChatSession.objects.filter(
+            client=instagram_client, visitor_id='igsid_abc123', channel='instagram'
+        ).first()
+        assert session is not None
+
+    @patch('chat.views._send_instagram_reply')
+    @patch('chat.views.generate_ai_response', return_value=AI_MOCK)
+    def test_echo_message_ignored(self, mock_ai, mock_send, anon_client, instagram_client):
+        """Instagram echoes our own outbound messages — must not loop back into the AI."""
+        payload = {
+            'object': 'instagram',
+            'entry': [{
+                'messaging': [{
+                    'sender': {'id': 'igsid_self'},
+                    'message': {'is_echo': True, 'text': 'Hi from AI!'},
+                }]
+            }]
+        }
+        resp = anon_client.post(ig_url(instagram_client.id), payload, format='json')
+        assert resp.status_code == 200
+        mock_ai.assert_not_called()
+        mock_send.assert_not_called()
+
+    def test_attachment_message_ignored(self, anon_client, instagram_client):
+        payload = {
+            'object': 'instagram',
+            'entry': [{
+                'messaging': [{
+                    'sender': {'id': 'igsid_sticker'},
+                    'message': {},  # no 'text' key (story reply / media)
+                }]
+            }]
+        }
+        resp = anon_client.post(ig_url(instagram_client.id), payload, format='json')
+        assert resp.status_code == 200
+
+    @patch('chat.views._send_instagram_reply')
+    @patch('chat.views.generate_ai_response', return_value=AI_MOCK)
+    def test_session_reuse_within_24h(self, mock_ai, mock_send, anon_client, instagram_client):
+        payload = {
+            'object': 'instagram',
+            'entry': [{'messaging': [{'sender': {'id': 'igsid_dup'}, 'message': {'text': 'hi'}}]}],
+        }
+        anon_client.post(ig_url(instagram_client.id), payload, format='json')
+        anon_client.post(ig_url(instagram_client.id), payload, format='json')
+        assert ChatSession.objects.filter(client=instagram_client, visitor_id='igsid_dup').count() == 1
 
 
 # ─── Telegram ─────────────────────────────────────────────────────────────────

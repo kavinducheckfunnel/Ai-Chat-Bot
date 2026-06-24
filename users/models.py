@@ -14,6 +14,7 @@ class Plan(models.Model):
     allow_whatsapp = models.BooleanField(default=False)
     allow_telegram = models.BooleanField(default=False)
     allow_messenger = models.BooleanField(default=False)
+    allow_instagram = models.BooleanField(default=False)
 
     # ── AI & Knowledge ────────────────────────────────────────────────────────
     allow_byok = models.BooleanField(default=False)
@@ -195,6 +196,12 @@ class Client(models.Model):
     messenger_page_access_token = models.CharField(max_length=500, blank=True, null=True)
     messenger_verify_token = models.CharField(max_length=100, blank=True, null=True)
     messenger_enabled = models.BooleanField(default=False)
+
+    # ── Instagram Direct (via Meta Graph API) ─────────────────────────────────
+    instagram_business_account_id = models.CharField(max_length=100, blank=True, null=True)
+    instagram_access_token = models.CharField(max_length=500, blank=True, null=True)
+    instagram_verify_token = models.CharField(max_length=100, blank=True, null=True)
+    instagram_enabled = models.BooleanField(default=False)
 
     # ── Shopify Admin API (order tracking — OAuth offline token) ──────────────
     shopify_shop_domain = models.CharField(max_length=255, blank=True, default='')

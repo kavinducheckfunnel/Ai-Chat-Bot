@@ -227,6 +227,23 @@ const allCards = computed(() => {
       settingsAnchor: 'messenger',
     },
     {
+      key: 'instagram', category: 'channels', icon: '📷', iconBg: 'rgba(225,48,108,0.12)',
+      name: 'Instagram Direct', tagline: 'Turn DMs into qualified leads, 24/7',
+      description: 'Connect your Instagram professional account so DMs route to the AI. Same sales-trained behavior as the website widget — qualifies leads, captures contact info, escalates when needed. Uses the Meta Graph API (same setup as Messenger).',
+      bestFor: 'Brands with an engaged Instagram following — fashion, beauty, fitness, lifestyle, and creators who get high DM volume from posts and ads.',
+      steps: [
+        'Have an Instagram professional account linked to a Facebook Page',
+        'In Meta Developer Portal, add the Instagram product to your app',
+        'In /portal/settings → Instagram, paste your account ID + access token',
+        'Set your verify token + copy our webhook URL into Meta (field: instagram)',
+        'Toggle "Enable Instagram" and save',
+      ],
+      enabled: !!c.instagram_enabled,
+      requiredPlan: 'Growth',
+      locked: !planAllows('allow_instagram'),
+      settingsAnchor: 'instagram',
+    },
+    {
       key: 'shopify', category: 'ecommerce', icon: '🛍️', iconBg: 'rgba(122,194,82,0.12)',
       name: 'Shopify Webhooks', tagline: 'Real-time product + order sync',
       description: 'Webhook integration pulls in product updates so the AI\'s knowledge base stays fresh without re-scraping. Order data flows in for post-purchase support flows.',
@@ -330,6 +347,7 @@ async function loadFeatures() {
       allow_whatsapp:  !!plan.allow_whatsapp || !!plan.max_social_channels,
       allow_telegram:  !!plan.allow_telegram || !!plan.max_social_channels,
       allow_messenger: !!plan.allow_messenger || !!plan.max_social_channels,
+      allow_instagram: !!plan.allow_instagram || !!plan.max_social_channels,
       allow_hubspot:   !!plan.allow_hubspot,
       allow_slack:     true,   // available on all paid plans
       allow_webhooks:  !!plan.allow_webhooks,
