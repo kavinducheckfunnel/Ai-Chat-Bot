@@ -1,7 +1,6 @@
 <template>
   <div class="conv-page">
-    <!-- Unified header: one title + a view switch (replaces the old separate
-         "All chats" and "Live View" nav items). -->
+    <!-- Row 1: title + view switch (List / Live grid) -->
     <div class="conv-header">
       <div class="conv-titles">
         <h1 class="conv-title">Conversations</h1>
@@ -19,15 +18,65 @@
       </div>
     </div>
 
-    <!-- Filter bar: channel chips (QA #1) + global date range (QA #10). Shared
-         across both the List and Live grid views below. -->
-    <div class="conv-filters">
-      <div class="channel-chips" role="tablist" aria-label="Channel">
-        <button v-for="c in channels" :key="c.value"
-                :class="['chip', 'chip-' + c.value, { active: channel === c.value }]"
-                @click="channel = c.value" role="tab" :aria-selected="channel === c.value">
-          <span class="chip-ico" v-html="c.icon"></span>{{ c.label }}
+    <!-- Row 2: live status (mute + Live) on the left, Filters on the right. -->
+    <div class="conv-actionbar">
+      <div class="ab-left">
+        <button class="sound-btn" @click="toggleMute" :title="muted ? 'Unmute notifications' : 'Mute notifications'">
+          <svg v-if="!muted" width="16" height="16" fill="none" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <svg v-else width="16" height="16" fill="none" viewBox="0 0 24 24">
+            <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+            <line x1="23" y1="9" x2="17" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            <line x1="17" y1="9" x2="23" y2="15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
         </button>
+        <div class="live-badge"><span class="live-dot"></span> Live</div>
+      </div>
+
+      <div class="ab-right">
+        <button class="filters-btn" :class="{ on: activeFilters > 0 }" @click="filtersOpen = !filtersOpen">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Filters
+          <span v-if="activeFilters > 0" class="filters-count">{{ activeFilters }}</span>
+        </button>
+
+        <!-- Filters popover -->
+        <div v-if="filtersOpen" class="filters-backdrop" @click="filtersOpen = false"></div>
+        <div v-if="filtersOpen" class="filters-pop">
+          <div class="fp-group">
+            <div class="fp-label">Sort by</div>
+            <div class="fp-opts">
+              <button :class="{ on: sortBy === 'recent' }" @click="sortBy = 'recent'">Most recent</button>
+              <button :class="{ on: sortBy === 'score' }" @click="sortBy = 'score'">Highest score</button>
+            </div>
+          </div>
+          <div class="fp-group">
+            <div class="fp-label">Minimum score</div>
+            <div class="fp-opts">
+              <button v-for="opt in scoreOpts" :key="opt.v" :class="{ on: minScore === opt.v }" @click="minScore = opt.v">{{ opt.l }}</button>
+            </div>
+          </div>
+          <div class="fp-footer">
+            <button class="fp-reset" @click="resetFilters">Reset</button>
+            <button class="fp-done" @click="filtersOpen = false">Done</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3: channel filter card (chips + date range). Shared across views. -->
+    <div class="conv-channels-card">
+      <div class="cc-left">
+        <span class="cc-label">Channels:</span>
+        <div class="channel-chips" role="tablist" aria-label="Channel">
+          <button v-for="c in channels" :key="c.value"
+                  :class="['chip', 'chip-' + c.value, { active: channel === c.value }]"
+                  @click="channel = c.value" role="tab" :aria-selected="channel === c.value">
+            <span class="chip-ico" v-html="c.icon"></span>{{ c.label }}
+          </button>
+        </div>
       </div>
       <PortalDateFilter v-model="datePeriod" @change="onDateChange" />
     </div>
@@ -35,14 +84,15 @@
     <!-- Body fills remaining height; the Inbox (list) manages its own internal
          3-panel scroll, the Live grid scrolls within the body. -->
     <div class="conv-body">
-      <PortalInbox v-if="view === 'list'" :client="client" :channel="channel" :date-range="dateRange" embedded />
+      <PortalInbox v-if="view === 'list'" :client="client" :channel="channel" :date-range="dateRange"
+                   :sort="sortBy" :min-score="minScore" embedded />
       <PortalLiveView v-else :client="client" :channel="channel" :date-range="dateRange" embedded />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import PortalInbox from './PortalInbox.vue'
 import PortalLiveView from './PortalLiveView.vue'
@@ -54,6 +104,23 @@ const view = ref('list')
 const channel = ref('all')
 const datePeriod = ref('all')
 const dateRange = ref({ period: 'all', dateFrom: null, dateTo: null })
+
+// ── Notification mute (shared with the inbox via localStorage) ────────────────
+const muted = ref(localStorage.getItem('cf_inbox_muted') === '1')
+function toggleMute() {
+  muted.value = !muted.value
+  localStorage.setItem('cf_inbox_muted', muted.value ? '1' : '0')
+}
+
+// ── Filters popover (sort + min score, applied client-side in the inbox) ──────
+const filtersOpen = ref(false)
+const sortBy = ref('recent')
+const minScore = ref(0)
+const scoreOpts = [
+  { v: 0, l: 'Any' }, { v: 25, l: '25+' }, { v: 50, l: '50+' }, { v: 75, l: '75+' },
+]
+const activeFilters = computed(() => (sortBy.value !== 'recent' ? 1 : 0) + (minScore.value > 0 ? 1 : 0))
+function resetFilters() { sortBy.value = 'recent'; minScore.value = 0 }
 
 const channels = [
   { value: 'all', label: 'All Channels', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.7"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18" stroke="currentColor" stroke-width="1.4"/></svg>' },
@@ -121,18 +188,92 @@ onMounted(() => {
 
 .conv-body { flex: 1; min-height: 0; overflow-y: auto; }
 
-/* ── Filter bar ─────────────────────────────────────────────────────────── */
-.conv-filters {
+/* ── Row 2: action bar (mute + Live · Filters) ──────────────────────────── */
+.conv-actionbar {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding: 0 32px 12px;
+}
+.ab-left { display: flex; align-items: center; gap: 10px; }
+.ab-right { position: relative; }
+
+.sound-btn {
+  width: 34px; height: 34px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--cf-bg-surface); border: 1px solid var(--cf-border-default);
+  border-radius: 9px; color: var(--cf-text-muted); cursor: pointer;
+  transition: all .15s;
+}
+.sound-btn:hover { color: var(--cf-text-secondary); border-color: #6366f1; }
+
+.live-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; color: #22c55e;
+  background: rgba(34,197,94,0.08); padding: 6px 12px;
+  border-radius: 20px; border: 1px solid rgba(34,197,94,0.22);
+}
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: #22c55e; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+.filters-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--cf-bg-surface); border: 1px solid var(--cf-border-default);
+  border-radius: 9px; padding: 8px 14px; font-size: 13px; font-weight: 600;
+  color: var(--cf-text-secondary); cursor: pointer; font-family: inherit; transition: all .15s;
+}
+.filters-btn:hover { border-color: #6366f1; color: var(--cf-text-primary); }
+.filters-btn.on { border-color: #6366f1; color: #a5b4fc; background: rgba(99,102,241,0.12); }
+.filters-count {
+  background: #6366f1; color: #fff; font-size: 10px; font-weight: 700;
+  min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+
+.filters-backdrop { position: fixed; inset: 0; z-index: 40; }
+.filters-pop {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 41;
+  width: 248px; padding: 14px;
+  background: var(--cf-bg-surface, #0f172a);
+  border: 1px solid var(--cf-border-default); border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.fp-group { display: flex; flex-direction: column; gap: 8px; }
+.fp-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--cf-text-muted); }
+.fp-opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.fp-opts button {
+  background: var(--cf-bg-input, rgba(148,163,184,0.08)); border: 1px solid var(--cf-border-default);
+  color: var(--cf-text-secondary); font-size: 12.5px; font-weight: 600;
+  padding: 6px 12px; border-radius: 8px; cursor: pointer; font-family: inherit; transition: all .12s;
+}
+.fp-opts button:hover { border-color: #6366f1; }
+.fp-opts button.on { background: #6366f1; border-color: #6366f1; color: #fff; }
+.fp-footer { display: flex; justify-content: space-between; align-items: center; padding-top: 4px; }
+.fp-reset { background: none; border: none; color: var(--cf-text-muted); font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.fp-reset:hover { color: var(--cf-text-secondary); }
+.fp-done {
+  background: #6366f1; border: none; color: #fff; font-size: 12.5px; font-weight: 600;
+  padding: 7px 16px; border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+
+/* ── Row 3: channels card ───────────────────────────────────────────────── */
+.conv-channels-card {
   flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between;
   gap: 14px; flex-wrap: wrap;
-  padding: 0 32px 14px;
+  margin: 0 32px 14px;
+  padding: 10px 14px;
+  background: var(--cf-bg-surface);
+  border: 1px solid var(--cf-border-default);
+  border-radius: 14px;
 }
+.cc-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+.cc-label { font-size: 13px; font-weight: 600; color: var(--cf-text-muted); flex-shrink: 0; }
 .channel-chips { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 7px 14px; border-radius: 22px;
-  background: var(--cf-bg-surface); border: 1px solid var(--cf-border-default);
+  background: var(--cf-bg-input, rgba(148,163,184,0.06)); border: 1px solid var(--cf-border-default);
   color: var(--cf-text-secondary); font-size: 12.5px; font-weight: 600;
   cursor: pointer; transition: all .15s; font-family: inherit; white-space: nowrap;
 }
@@ -146,7 +287,8 @@ onMounted(() => {
 
 @media (max-width: 600px) {
   .conv-header { padding: 18px 16px 12px; }
-  .conv-filters { padding: 0 16px 12px; }
+  .conv-actionbar { padding: 0 16px 10px; }
+  .conv-channels-card { margin: 0 16px 12px; }
   .view-toggle button { padding: 7px 12px; }
 }
 </style>

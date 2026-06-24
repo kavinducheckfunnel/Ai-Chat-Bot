@@ -1,7 +1,7 @@
 <template>
-  <div class="inbox-page">
-    <div class="page-header">
-      <div v-if="!embedded">
+  <div class="inbox-page" :class="{ embedded }">
+    <div class="page-header" v-if="!embedded">
+      <div>
         <h1 class="page-title">Inbox</h1>
         <p class="page-sub">Real-time conversations from your website</p>
       </div>
@@ -88,7 +88,7 @@
               <span class="tag" :class="kanbanClass(s.kanban_state)">{{ s.kanban_state }}</span>
               <span class="channel-badge" :class="'ch-' + (s.channel || 'website')">{{ channelLabel(s.channel) }}</span>
               <span v-if="s.takeover_active" class="takeover-dot" title="You are controlling this chat">⚡</span>
-              <span class="heat-bar" :style="{ background: heatColor(s.heat_score), width: (s.heat_score / 100 * 60 + 20) + 'px' }"></span>
+              <span class="score-pill" :class="scoreClass(s.heat_score)">Score {{ Math.round(s.heat_score || 0) }}%</span>
             </div>
           </div>
         </button>
@@ -110,7 +110,7 @@
             <div class="chat-avatar" :style="{ background: heatColor(selected.heat_score) }">{{ initials(selected) }}</div>
             <div>
               <p class="chat-name">{{ selected.lead_email || 'Visitor #' + selected.session_id.slice(0,6) }}</p>
-              <p class="chat-sub">{{ selected.conversation_state }} · Heat {{ Math.round(selected.heat_score || 0) }}%</p>
+              <p class="chat-sub">{{ selected.conversation_state }} • Score {{ Math.round(selected.heat_score || 0) }}%</p>
             </div>
           </div>
           <div class="header-right-actions">
@@ -126,7 +126,10 @@
                 {{ takingOver ? '…' : 'Take Over' }}
               </button>
             </template>
-            <span class="kanban-badge" :class="kanbanClass(selected.kanban_state)">{{ selected.kanban_state }}</span>
+            <!-- Collapse / expand the visitor details panel (desktop) -->
+            <button class="panel-toggle-btn" :class="{ collapsed: !visitorPanelOpen }" @click="visitorPanelOpen = !visitorPanelOpen" :title="visitorPanelOpen ? 'Hide details' : 'Show details'">
+              <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
             <!-- Mobile info button -->
             <button class="mobile-info-btn" @click="mobileView = 'details'" aria-label="Visitor details">
               <svg width="18" height="18" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -206,7 +209,7 @@
       </div>
 
       <!-- ── Visitor details panel ───────────────────────────────────── -->
-      <div class="visitor-panel" :class="{ 'mobile-hidden': mobileView !== 'details' }" v-if="selected">
+      <div class="visitor-panel" :class="{ 'mobile-hidden': mobileView !== 'details', 'desktop-hidden': !visitorPanelOpen }" v-if="selected">
         <!-- Mobile back button -->
         <div class="vp-mobile-back">
           <button class="mobile-back-btn" @click="mobileView = 'chat'">
@@ -334,7 +337,7 @@
               </div>
             </div>
             <div class="heat-composite">
-              <span class="ema-label">Overall heat</span>
+              <span class="ema-label">Overall score</span>
               <span class="heat-chip" :style="{ background: heatColor(selected.heat_score) }">
                 {{ Math.round(selected.heat_score || 0) }}%
               </span>
@@ -478,6 +481,9 @@ const props = defineProps({
   // Shared filters owned by the Conversations wrapper (QA #1, #10).
   channel: { type: String, default: 'all' },
   dateRange: { type: Object, default: () => ({ period: 'all', dateFrom: null, dateTo: null }) },
+  // Refinements from the wrapper's Filters popover (applied client-side).
+  sort: { type: String, default: 'recent' },
+  minScore: { type: Number, default: 0 },
 })
 const api = useAdminApi()
 
@@ -488,6 +494,7 @@ const loadingMore = ref(false)
 const loading = ref(true)
 const activeTab = ref('all')
 const selectedId = ref(null)
+const visitorPanelOpen = ref(true)
 const messagesEl = ref(null)
 const listEl = ref(null)
 let ws = null
@@ -679,7 +686,9 @@ function toggleMute() {
 }
 
 function playNotificationSound() {
-  if (muted.value) return
+  // Read the shared flag live so the wrapper's mute button (which writes the
+  // same localStorage key) takes effect without prop wiring.
+  if (localStorage.getItem('cf_inbox_muted') === '1') return
   try {
     const AudioCtx = window.AudioContext || window['webkitAudioContext']
     const ctx = new AudioCtx()
@@ -711,9 +720,13 @@ const chatHistory = computed(() => {
 const hotCount = computed(() => sessions.value.filter(s => s.kanban_state === 'HOT_LEAD').length)
 
 const filteredSessions = computed(() => {
-  if (activeTab.value === 'ai') return sessions.value.filter(s => !s.takeover_active)
-  if (activeTab.value === 'hot') return sessions.value.filter(s => s.kanban_state === 'HOT_LEAD' || s.heat_score > 65)
-  return sessions.value
+  let list = sessions.value
+  if (activeTab.value === 'ai') list = list.filter(s => !s.takeover_active)
+  else if (activeTab.value === 'hot') list = list.filter(s => s.kanban_state === 'HOT_LEAD' || s.heat_score > 65)
+  // Filters popover (wrapper) — min score + sort, applied to the loaded set.
+  if (props.minScore > 0) list = list.filter(s => (s.heat_score || 0) >= props.minScore)
+  if (props.sort === 'score') list = [...list].sort((a, b) => (b.heat_score || 0) - (a.heat_score || 0))
+  return list
 })
 
 // ── Date-range filter (driven by ?from=YYYY-MM-DD&to=YYYY-MM-DD) ──────────
@@ -822,6 +835,13 @@ function heatColor(score) {
   if (score > 70) return '#ef4444'
   if (score > 40) return '#f59e0b'
   return '#6366f1'
+}
+
+function scoreClass(score) {
+  const s = score || 0
+  if (s >= 75) return 'score-high'
+  if (s >= 40) return 'score-mid'
+  return 'score-low'
 }
 
 function kanbanClass(state) {
@@ -1134,6 +1154,9 @@ watch(selected, (s) => {
   padding: 28px 32px 0;
   font-family: 'Inter', -apple-system, sans-serif;
 }
+/* Embedded under the Conversations wrapper, which already renders the title,
+   mute/Live and channel chrome — so the inbox starts straight at the tabs. */
+.inbox-page.embedded { padding: 0 32px 0; }
 
 .page-header {
   display: flex;
@@ -1222,9 +1245,9 @@ watch(selected, (s) => {
 
 /* ── Session list ────────────────────────────────────────────────────── */
 .session-list {
-  width: 280px; min-width: 280px;
+  width: 300px; min-width: 300px;
   border-right: 1px solid var(--cf-border-subtle);
-  overflow-y: auto; padding: 8px 0;
+  overflow-y: auto; padding: 4px 0;
 }
 
 .loading-state { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -1243,12 +1266,12 @@ watch(selected, (s) => {
 
 .session-row {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 12px 14px; background: none; border: none;
+  padding: 9px 14px; background: none; border: none;
   width: 100%; text-align: left; cursor: pointer; transition: background 0.12s;
   border-bottom: 1px solid var(--cf-border-subtle);
 }
 .session-row:hover { background: var(--cf-bg-surface); }
-.session-row.active { background: rgba(99,102,241,0.08); }
+.session-row.active { background: rgba(99,102,241,0.08); box-shadow: inset 3px 0 0 #6366f1; }
 
 .session-avatar-wrap {
   position: relative; flex-shrink: 0; width: 34px; height: 34px;
@@ -1270,19 +1293,27 @@ watch(selected, (s) => {
 .presence-away    { background: #f59e0b; }
 .presence-offline { background: #475569; }
 
-.session-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.session-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .session-top-row { display: flex; justify-content: space-between; align-items: baseline; }
-.session-name { font-size: 13px; font-weight: 600; color: var(--cf-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+.session-name { font-size: 13px; font-weight: 600; color: var(--cf-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
 .session-time { font-size: 10px; color: var(--cf-text-muted); flex-shrink: 0; }
 .session-preview { font-size: 12px; color: var(--cf-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.session-tags { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.session-tags { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
 
 .tag { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
 .tag-hot { background: rgba(239,68,68,0.12); color: #ef4444; }
 .tag-converted { background: rgba(34,197,94,0.12); color: #22c55e; }
 .tag-engaged { background: rgba(99,102,241,0.12); color: #a5b4fc; }
 .tag-new { background: rgba(71,85,105,0.3); color: var(--cf-text-muted); }
-.heat-bar { height: 3px; border-radius: 2px; opacity: 0.6; }
+/* Score pill (replaces the old thin heat bar) — color-coded by score. */
+.score-pill {
+  margin-left: auto; flex-shrink: 0;
+  font-size: 9.5px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+  letter-spacing: 0.02em; white-space: nowrap;
+}
+.score-pill.score-low  { background: rgba(99,102,241,0.14); color: #a5b4fc; }
+.score-pill.score-mid  { background: rgba(245,158,11,0.14); color: #f59e0b; }
+.score-pill.score-high { background: rgba(34,197,94,0.15); color: #22c55e; }
 .channel-badge { font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
 .ch-website  { background: rgba(99,102,241,0.1); color: #a5b4fc; }
 .ch-whatsapp { background: rgba(37,211,102,0.12); color: #25d366; }
@@ -1328,6 +1359,19 @@ watch(selected, (s) => {
   text-transform: uppercase; letter-spacing: 0.06em;
 }
 
+/* Collapse/expand the visitor details panel (desktop). */
+.panel-toggle-btn {
+  width: 32px; height: 32px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--cf-bg-input, rgba(148,163,184,0.08));
+  border: 1px solid var(--cf-border-default); border-radius: 8px;
+  color: var(--cf-text-muted); cursor: pointer; transition: all .15s;
+}
+.panel-toggle-btn:hover { color: var(--cf-text-secondary); border-color: #6366f1; }
+.panel-toggle-btn svg { transition: transform .2s; }
+.panel-toggle-btn.collapsed svg { transform: rotate(180deg); }
+@media (max-width: 768px) { .panel-toggle-btn { display: none; } }
+
 .messages {
   flex: 1; overflow-y: auto; padding: 20px;
   display: flex; flex-direction: column; gap: 10px;
@@ -1356,6 +1400,10 @@ watch(selected, (s) => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+}
+/* Hidden on desktop when the chat-header chevron collapses it. */
+@media (min-width: 769px) {
+  .visitor-panel.desktop-hidden { display: none; }
 }
 
 .visitor-panel-empty {
