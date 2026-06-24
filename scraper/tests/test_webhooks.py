@@ -48,28 +48,48 @@ WORDPRESS_PAYLOAD = {
 
 # ─── Shopify Webhook ──────────────────────────────────────────────────────────
 
+def _shopify_sig(secret, body_bytes):
+    """Shopify sends the HMAC base64-encoded (not hex)."""
+    import hmac as hmac_lib, hashlib, base64
+    return base64.b64encode(hmac_lib.new(secret.encode(), body_bytes, hashlib.sha256).digest()).decode()
+
+
+def _post_signed(anon_client, url, payload, secret):
+    import json
+    body = json.dumps(payload).encode()
+    return anon_client.post(url, data=body, content_type='application/json',
+                            HTTP_X_SHOPIFY_HMAC_SHA256=_shopify_sig(secret, body))
+
+
 @pytest.mark.django_db
 class TestShopifyWebhook:
+    SECRET = 'shpss_secret'
+
     @patch('scraper.tasks.re_embed_product.delay')
     def test_shopify_valid_payload(self, mock_task, anon_client, client_obj):
         client_obj.domain_url = 'https://teststore.myshopify.com'
+        client_obj.webhook_secret = self.SECRET
         client_obj.save()
-        resp = anon_client.post(shopify_url(client_obj.id), SHOPIFY_PAYLOAD, format='json')
+        resp = _post_signed(anon_client, shopify_url(client_obj.id), SHOPIFY_PAYLOAD, self.SECRET)
         assert resp.status_code == 202
         assert resp.json()['status'] == 'queued'
         mock_task.assert_called_once()
 
     @patch('scraper.tasks.re_embed_product.delay')
     def test_shopify_missing_title(self, mock_task, anon_client, client_obj):
+        client_obj.webhook_secret = self.SECRET
+        client_obj.save()
         payload = {**SHOPIFY_PAYLOAD, 'title': ''}
-        resp = anon_client.post(shopify_url(client_obj.id), payload, format='json')
+        resp = _post_signed(anon_client, shopify_url(client_obj.id), payload, self.SECRET)
         assert resp.status_code == 400
         mock_task.assert_not_called()
 
     @patch('scraper.tasks.re_embed_product.delay')
     def test_shopify_missing_id(self, mock_task, anon_client, client_obj):
+        client_obj.webhook_secret = self.SECRET
+        client_obj.save()
         payload = {k: v for k, v in SHOPIFY_PAYLOAD.items() if k != 'id'}
-        resp = anon_client.post(shopify_url(client_obj.id), payload, format='json')
+        resp = _post_signed(anon_client, shopify_url(client_obj.id), payload, self.SECRET)
         assert resp.status_code == 400
 
     def test_shopify_unknown_client(self, anon_client):
@@ -78,37 +98,29 @@ class TestShopifyWebhook:
 
     @patch('scraper.tasks.re_embed_product.delay')
     def test_shopify_hmac_verification_pass(self, mock_task, anon_client, client_obj):
-        import hmac as hmac_lib
-        import hashlib
-        import json
-        client_obj.webhook_secret = 'shpss_secret'
+        client_obj.webhook_secret = self.SECRET
         client_obj.domain_url = 'https://teststore.myshopify.com'
         client_obj.save()
-
-        body = json.dumps(SHOPIFY_PAYLOAD).encode()
-        sig = hmac_lib.new(
-            'shpss_secret'.encode(), body, hashlib.sha256
-        ).hexdigest()
-
-        resp = anon_client.post(
-            shopify_url(client_obj.id),
-            data=body,
-            content_type='application/json',
-            HTTP_X_SHOPIFY_HMAC_SHA256=sig,
-        )
+        resp = _post_signed(anon_client, shopify_url(client_obj.id), SHOPIFY_PAYLOAD, self.SECRET)
         assert resp.status_code == 202
 
     @patch('scraper.tasks.re_embed_product.delay')
     def test_shopify_hmac_verification_fail(self, mock_task, anon_client, client_obj):
-        client_obj.webhook_secret = 'shpss_secret'
+        client_obj.webhook_secret = self.SECRET
         client_obj.save()
-
         resp = anon_client.post(
-            shopify_url(client_obj.id),
-            data=SHOPIFY_PAYLOAD,
-            format='json',
+            shopify_url(client_obj.id), data=SHOPIFY_PAYLOAD, format='json',
             HTTP_X_SHOPIFY_HMAC_SHA256='badsig',
         )
+        assert resp.status_code == 401
+        mock_task.assert_not_called()
+
+    @patch('scraper.tasks.re_embed_product.delay')
+    def test_shopify_rejects_when_no_secret(self, mock_task, anon_client, client_obj):
+        # Security: an unauthenticated webhook can poison the KB → require a secret.
+        client_obj.webhook_secret = ''
+        client_obj.save()
+        resp = anon_client.post(shopify_url(client_obj.id), SHOPIFY_PAYLOAD, format='json')
         assert resp.status_code == 401
         mock_task.assert_not_called()
 

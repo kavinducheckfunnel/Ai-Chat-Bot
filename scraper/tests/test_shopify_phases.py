@@ -161,14 +161,22 @@ class TestInventoryWebhookBranch:
     def _url(self, client_id):
         return f'/api/scraper/webhooks/shopify/{client_id}/'
 
+    SECRET = 'shpss_secret'
+
+    def _signed(self, anon_client, client_obj, payload):
+        import json, hmac, hashlib, base64
+        client_obj.webhook_secret = self.SECRET
+        client_obj.save()
+        body = json.dumps(payload).encode()
+        sig = base64.b64encode(hmac.new(self.SECRET.encode(), body, hashlib.sha256).digest()).decode()
+        return anon_client.post(
+            self._url(client_obj.id), data=body, content_type='application/json',
+            HTTP_X_SHOPIFY_TOPIC='inventory_levels/update', HTTP_X_SHOPIFY_HMAC_SHA256=sig,
+        )
+
     @patch('scraper.tasks.update_inventory_for_variant.delay')
     def test_inventory_topic_routes_to_inventory_task(self, mock_task, anon_client, client_obj):
-        payload = {'inventory_item_id': 999, 'available': 5, 'location_id': 1}
-        resp = anon_client.post(
-            self._url(client_obj.id), payload,
-            format='json',
-            **{'HTTP_X_SHOPIFY_TOPIC': 'inventory_levels/update'},
-        )
+        resp = self._signed(anon_client, client_obj, {'inventory_item_id': 999, 'available': 5, 'location_id': 1})
         assert resp.status_code == 202
         assert resp.json()['status'] == 'inventory queued'
         mock_task.assert_called_once()
@@ -177,11 +185,7 @@ class TestInventoryWebhookBranch:
         assert args[2] == 5               # available
 
     def test_inventory_missing_fields_returns_400(self, anon_client, client_obj):
-        resp = anon_client.post(
-            self._url(client_obj.id), {'available': 5},
-            format='json',
-            **{'HTTP_X_SHOPIFY_TOPIC': 'inventory_levels/update'},
-        )
+        resp = self._signed(anon_client, client_obj, {'available': 5})
         assert resp.status_code == 400
 
 

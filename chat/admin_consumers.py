@@ -153,6 +153,14 @@ class GodViewConsumer(AsyncWebsocketConsumer):
             return
 
         self.session_id = self.scope['url_route']['kwargs']['session_id']
+
+        # Tenant isolation (IDOR): the session's client must be one this user can
+        # access. Without this, any tenant_admin could read/inject into ANY
+        # tenant's live conversation.
+        if not await self._can_access_session(user, self.session_id):
+            await self.close(code=4003)
+            return
+
         self.group_name = f"chat_{self.session_id}"
         self.admin_group = f"admin_{self.session_id}"
 
@@ -216,6 +224,18 @@ class GodViewConsumer(AsyncWebsocketConsumer):
             return user.profile.role
         except Exception:
             return None
+
+    @database_sync_to_async
+    def _can_access_session(self, user, session_id):
+        from chat.models import ChatSession
+        from users.permissions import get_accessible_clients
+        try:
+            s = ChatSession.objects.only('client_id').get(session_id=session_id)
+        except ChatSession.DoesNotExist:
+            return False
+        if s.client_id is None:
+            return False
+        return get_accessible_clients(user).filter(pk=s.client_id).exists()
 
     @database_sync_to_async
     def _get_chat_history(self, session_id):

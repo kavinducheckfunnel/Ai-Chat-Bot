@@ -184,6 +184,21 @@ class TestTakeoverMedia:
         last = chat_session.chat_history[-1]
         assert last['attachments'][0]['kind'] == 'image'
 
+    def test_takeover_send_upload_are_tenant_scoped(self, tenant_client2, chat_session):
+        """A different tenant must NOT be able to take over / send / upload to
+        another tenant's session (IDOR). chat_session belongs to client_obj
+        (tenant 1); tenant_client2 is a different tenant."""
+        sid = chat_session.session_id
+        assert tenant_client2.post(f'/api/admin/sessions/{sid}/takeover/', {}, format='json').status_code in (403, 404)
+        assert tenant_client2.post(f'/api/admin/sessions/{sid}/release/', {}, format='json').status_code in (403, 404)
+        assert tenant_client2.post(f'/api/admin/sessions/{sid}/send/', {'message': 'hi'}, format='json').status_code in (403, 404)
+
+    def test_upload_rejects_disallowed_mime(self, tenant_client, chat_session):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        html = SimpleUploadedFile('x.html', b'<script>alert(1)</script>', content_type='text/html')
+        resp = tenant_client.post(f'/api/admin/sessions/{chat_session.session_id}/upload/', {'file': html}, format='multipart')
+        assert resp.status_code == 400  # HTML blocked (stored-XSS)
+
     def test_widget_history_restore_includes_attachments(self, anon_client, chat_session):
         """The visitor widget restores history via /api/chat/session/<id>/messages/.
         Attachment-only and attachment-bearing messages must survive restore (QA #3)."""

@@ -162,7 +162,9 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+# Auth is JWT Bearer (not cookies); credentialed CORS is unnecessary and unsafe
+# combined with allow-all-origins.
+CORS_ALLOW_CREDENTIALS = False
 
 # Use Redis as the default cache backend so DRF throttle counters are shared
 # across all Daphne/Gunicorn workers (DB 1 to avoid collisions with Celery on DB 0)

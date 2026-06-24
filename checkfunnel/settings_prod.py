@@ -76,8 +76,18 @@ LOGGING = {
 # ── CORS (production) ─────────────────────────────────────────────────────────
 # The widget is embedded via <script> on any customer website, so all origins
 # must be allowed for the widget-facing API paths (/api/chat/, /api/analytics/).
-# Admin API security relies on JWT auth, not CORS, so this is safe.
+# Admin API security relies on JWT (Bearer) auth, not cookies, so this is safe.
 CORS_ALLOW_ALL_ORIGINS = True
+# NEVER combine allow-all-origins with credentials (browsers reject it and it's
+# a CSRF/credential-leak footgun). Auth is Bearer-token, so credentialed CORS
+# is not needed — force it off (base settings had it True).
+CORS_ALLOW_CREDENTIALS = False
+
+# ── DB connection reuse (perf) ────────────────────────────────────────────────
+# Default CONN_MAX_AGE=0 opened a fresh Postgres connection per request/sync-DB
+# call — costly under Daphne thread-pool + Celery concurrency. Persist for 60s.
+DATABASES['default']['CONN_MAX_AGE'] = int(os.environ.get('DB_CONN_MAX_AGE', '60'))  # noqa: F405
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True  # noqa: F405
 
 # ── CSRF trusted origins ─────────────────────────────────────────────────────
 CSRF_TRUSTED_ORIGINS = os.environ.get(

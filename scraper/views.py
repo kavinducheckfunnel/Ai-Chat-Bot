@@ -80,17 +80,20 @@ def shopify_webhook(request, client_id):
     """Receives Shopify products/update or products/create webhook."""
     client = get_object_or_404(Client, id=client_id)
 
-    # Optional HMAC verification using webhook_secret
+    # HMAC verification using webhook_secret. Shopify sends the HMAC base64-
+    # encoded (NOT hex) — comparing hexdigest() silently rejected every signed
+    # webhook. Require a secret: an unauthenticated webhook can poison/purge the
+    # tenant's knowledge base, so refuse if none is configured.
+    import base64
     secret = client.webhook_secret
-    if secret:
-        shopify_hmac = request.headers.get('X-Shopify-Hmac-Sha256', '')
-        digest = hmac.new(
-            secret.encode('utf-8'),
-            request.body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(digest, shopify_hmac):
-            return Response({'status': 'unauthorized'}, status=401)
+    if not secret:
+        return Response({'status': 'webhook secret not configured'}, status=401)
+    shopify_hmac = request.headers.get('X-Shopify-Hmac-Sha256', '')
+    digest = base64.b64encode(
+        hmac.new(secret.encode('utf-8'), request.body, hashlib.sha256).digest()
+    ).decode()
+    if not hmac.compare_digest(digest, shopify_hmac):
+        return Response({'status': 'unauthorized'}, status=401)
 
     data = request.data
     topic = request.headers.get('X-Shopify-Topic', '')

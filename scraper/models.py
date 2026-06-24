@@ -1,5 +1,5 @@
 from django.db import models
-from pgvector.django import VectorField
+from pgvector.django import VectorField, HnswIndex
 from users.models import Client
 
 class DocumentChunk(models.Model):
@@ -11,6 +11,21 @@ class DocumentChunk(models.Model):
     product_id = models.CharField(max_length=100, null=True, blank=True)
     metadata = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            # ANN index for RAG: without it every chat turn does a full
+            # sequential scan computing cosine distance for every chunk. HNSW
+            # gives sub-linear nearest-neighbour lookups (cosine opclass).
+            HnswIndex(
+                name='docchunk_embedding_hnsw',
+                fields=['embedding'],
+                m=16,
+                ef_construction=64,
+                opclasses=['vector_cosine_ops'],
+            ),
+            models.Index(fields=['client'], name='docchunk_client_idx'),
+        ]
 
     def __str__(self):
         return f"Chunk {self.id} from {self.source_url}"

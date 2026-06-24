@@ -1462,6 +1462,24 @@ def session_detail(request, session_id):
 
 # ─── God View — Takeover ─────────────────────────────────────────────────────
 
+def _scoped_session(request, session_id, select_related=None):
+    """Fetch a ChatSession ONLY if it belongs to a client the requester can
+    access. Returns None otherwise (caller returns 404). Prevents cross-tenant
+    IDOR on session-level admin actions. Sessions with no client are treated as
+    inaccessible."""
+    accessible = get_accessible_clients(request.user)
+    qs = ChatSession.objects.all()
+    if select_related:
+        qs = qs.select_related(*select_related)
+    try:
+        session = qs.get(session_id=session_id)
+    except ChatSession.DoesNotExist:
+        return None
+    if session.client_id is None or not accessible.filter(pk=session.client_id).exists():
+        return None
+    return session
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def session_takeover(request, session_id):
@@ -1470,9 +1488,8 @@ def session_takeover(request, session_id):
     if not has_feature(request.user, 'allow_god_view'):
         return gate_feature('allow_god_view')
 
-    try:
-        session = ChatSession.objects.get(session_id=session_id)
-    except ChatSession.DoesNotExist:
+    session = _scoped_session(request, session_id)
+    if session is None:
         return Response({'detail': 'Not found.'}, status=404)
 
     session.takeover_active = True
@@ -1485,9 +1502,8 @@ def session_takeover(request, session_id):
 @permission_classes([IsAuthenticated])
 def session_release(request, session_id):
     """Release a session back to AI."""
-    try:
-        session = ChatSession.objects.get(session_id=session_id)
-    except ChatSession.DoesNotExist:
+    session = _scoped_session(request, session_id)
+    if session is None:
         return Response({'detail': 'Not found.'}, status=404)
 
     session.takeover_active = False
@@ -1506,9 +1522,8 @@ def session_send_message(request, session_id):
     {url, kind, name, mime, size} (already uploaded via upload_attachment).
     Either `message` or `attachments` (or both) must be present.
     """
-    try:
-        session = ChatSession.objects.select_related('client').get(session_id=session_id)
-    except ChatSession.DoesNotExist:
+    session = _scoped_session(request, session_id, select_related=['client'])
+    if session is None:
         return Response({'detail': 'Not found.'}, status=404)
 
     message = request.data.get('message', '').strip()
@@ -1606,9 +1621,9 @@ def upload_attachment(request, session_id):
     then pass to session_send_message's `attachments`.
     """
     from chat.models import ChatAttachment
-    try:
-        session = ChatSession.objects.select_related('client').get(session_id=session_id)
-    except ChatSession.DoesNotExist:
+    # Tenant scoping (IDOR): only allow uploads to a session the requester owns.
+    session = _scoped_session(request, session_id, select_related=['client'])
+    if session is None:
         return Response({'detail': 'Not found.'}, status=404)
 
     f = request.FILES.get('file')
@@ -1620,11 +1635,26 @@ def upload_attachment(request, session_id):
         return Response({'detail': 'File too large (max 25 MB).'}, status=400)
 
     mime = getattr(f, 'content_type', '') or ''
+    # MIME allowlist — block active content (HTML/SVG/JS) that would execute
+    # same-origin when rendered in the widget/portal (stored-XSS). Voice notes,
+    # images and common docs only.
+    ALLOWED_MIME = {
+        'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+        'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav', 'audio/x-m4a',
+        'application/pdf', 'text/plain',
+        'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'application/zip',
+    }
+    base_mime = mime.split(';')[0].strip().lower()
+    if base_mime not in ALLOWED_MIME:
+        return Response({'detail': f'File type not allowed: {base_mime or "unknown"}'}, status=400)
+
     kind = request.data.get('kind') or ''
     if not kind:
-        if mime.startswith('image/'):
+        if base_mime.startswith('image/'):
             kind = 'image'
-        elif mime.startswith('audio/'):
+        elif base_mime.startswith('audio/'):
             kind = 'audio'
         else:
             kind = 'file'

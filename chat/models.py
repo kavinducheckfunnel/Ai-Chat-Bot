@@ -220,6 +220,17 @@ class ChatSession(models.Model):
     # bumps it on unrelated saves (heat score, state machine, nudge flags).
     last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
+    class Meta:
+        # Composite indexes for the hot list/analytics query paths, which all
+        # filter by client and sort/filter by recency or stage. Without these,
+        # Postgres index-scans on client then sorts in memory.
+        indexes = [
+            models.Index(fields=['client', '-last_message_at'], name='cs_client_lastmsg_idx'),
+            models.Index(fields=['client', '-created_at'], name='cs_client_created_idx'),
+            models.Index(fields=['client', 'kanban_state'], name='cs_client_kanban_idx'),
+            models.Index(fields=['client', 'conversation_state'], name='cs_client_state_idx'),
+        ]
+
     def __str__(self):
         return str(self.session_id)
 
