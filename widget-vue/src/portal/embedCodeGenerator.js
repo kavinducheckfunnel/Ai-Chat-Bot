@@ -378,6 +378,121 @@ export function generateEmbedCode(id, url, color, botName, format) {
   }
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   WIDGET STYLE SWITCHING — Style 1 (classic) vs Style 2 (assistant card)
+   Style-2-only elements carry .cf-lux / dedicated classes; in Classic the
+   wrappers collapse (display:contents) so the widget looks exactly as before.
+   ════════════════════════════════════════════════════════════════════ */
+#cf-tools, #cf-inrow { display: contents; }
+.cf-lux { display: none; }
+#cf-av .cf-av-bot { display: none; }
+#cf-av .cf-av-ic { display: inline; }
+.cf-hs .cf-hs-l { display: none; }
+#cf-pill .cf-pi-robot { display: none; }
+.cf-av-bot svg, .cf-pi-robot svg { width: 100%; height: 100%; }
+
+/* ── Style 2: Assistant Card ─────────────────────────────────────────── */
+#cf-w[data-cf-style="assistant"] #cf-av .cf-av-ic { display: none; }
+#cf-w[data-cf-style="assistant"] #cf-av .cf-av-bot { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; color: #fff; }
+#cf-w[data-cf-style="assistant"] .cf-hs .cf-hs-c { display: none; }
+#cf-w[data-cf-style="assistant"] .cf-hs .cf-hs-l { display: inline; }
+
+/* Launcher → gradient robot circle */
+#cf-w[data-cf-style="assistant"] #cf-pill {
+  min-width: 0; width: 64px; height: 64px; padding: 0; border-radius: 50%;
+  align-items: center; justify-content: center;
+  background: var(--cf-accent);
+  background: linear-gradient(140deg, color-mix(in srgb, var(--cf-accent) 76%, #ffffff), color-mix(in srgb, var(--cf-accent) 82%, #000000));
+  border: 3px solid rgba(255,255,255,0.92);
+  box-shadow: 0 12px 34px rgba(0,0,0,0.32);
+}
+#cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-icon,
+#cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-txt,
+#cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-send { display: none; }
+#cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-robot { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; color: #fff; }
+#cf-w[data-cf-style="assistant"] #cf-badge { top: -3px; right: -3px; border: 2px solid #fff; }
+
+/* Suggestion card with sparkle + tail */
+#cf-w[data-cf-style="assistant"] #cf-note {
+  max-width: 300px; padding: 16px 30px 16px 16px; border-radius: 20px; border-bottom-right-radius: 6px;
+  background: var(--cf-bg-elev); color: var(--cf-text); border: 1px solid var(--cf-border-soft);
+  box-shadow: 0 18px 48px rgba(0,0,0,0.22); font-size: 15px; line-height: 1.5; font-weight: 600;
+}
+#cf-w[data-cf-style="assistant"] #cf-note::after {
+  content: ''; position: absolute; bottom: -8px; right: 24px; width: 16px; height: 16px;
+  background: var(--cf-bg-elev); border-right: 1px solid var(--cf-border-soft); border-bottom: 1px solid var(--cf-border-soft);
+  transform: rotate(45deg);
+}
+#cf-w[data-cf-style="assistant"] .cf-note-spark { display: inline-flex; vertical-align: -3px; width: 18px; height: 18px; margin-right: 6px; color: var(--cf-accent); }
+#cf-w[data-cf-style="assistant"] .cf-note-spark svg { width: 18px; height: 18px; }
+#cf-w[data-cf-style="assistant"] #cf-note-x { top: 8px; right: 9px; }
+
+/* Window + header */
+#cf-w[data-cf-style="assistant"] #cf-win { border-radius: 22px; }
+#cf-w[data-cf-style="assistant"] #cf-head {
+  background: color-mix(in srgb, var(--cf-accent) 8%, var(--cf-bg-elev)); padding: 15px 16px;
+}
+#cf-w[data-cf-style="assistant"] .cf-av {
+  width: 42px; height: 42px;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--cf-accent) 76%, #ffffff), color-mix(in srgb, var(--cf-accent) 82%, #000000));
+}
+#cf-w[data-cf-style="assistant"] .cf-hn { font-size: 15px; font-weight: 700; }
+#cf-w[data-cf-style="assistant"] #cf-xb { background: var(--cf-bg); border: 1px solid var(--cf-border-soft); }
+
+/* Messages — labels above soft cards */
+#cf-w[data-cf-style="assistant"] #cf-msgs { padding: 18px 16px; gap: 14px; }
+#cf-w[data-cf-style="assistant"] .cf-ai, #cf-w[data-cf-style="assistant"] .cf-me { max-width: 90%; border-radius: 16px; }
+#cf-w[data-cf-style="assistant"] .cf-ai {
+  background: color-mix(in srgb, var(--cf-text) 6%, var(--cf-bg));
+  border: 1px solid var(--cf-border-soft); box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+/* Light theme needs a stronger edge or the soft card vanishes against the window. */
+#cf-w[data-cf-style="assistant"][data-cf-theme="light"] .cf-ai { border-color: var(--cf-border); }
+#cf-w[data-cf-style="assistant"] .cf-ai::before {
+  content: 'ASSISTANT'; display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.09em;
+  color: var(--cf-text-muted); margin-bottom: 5px;
+}
+#cf-w[data-cf-style="assistant"] .cf-me::before {
+  content: 'YOU'; display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.09em;
+  color: rgba(255,255,255,0.82); margin-bottom: 5px;
+}
+
+/* Footer — tool row + input row */
+#cf-w[data-cf-style="assistant"] #cf-foot { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 14px; }
+#cf-w[data-cf-style="assistant"] #cf-tools { display: flex; align-items: center; gap: 10px; }
+#cf-w[data-cf-style="assistant"] #cf-inrow { display: flex; align-items: center; gap: 10px; }
+#cf-w[data-cf-style="assistant"] .cf-emojiwrap { display: block; position: relative; }
+#cf-w[data-cf-style="assistant"] .cf-mb {
+  width: 40px; height: 40px; border-radius: 12px; flex: none;
+  background: color-mix(in srgb, var(--cf-accent) 10%, var(--cf-bg)); color: var(--cf-accent);
+  border: 1px solid color-mix(in srgb, var(--cf-accent) 20%, transparent);
+}
+#cf-w[data-cf-style="assistant"] #cf-vb {
+  margin-left: auto; color: #fff; border: none;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--cf-accent) 76%, #ffffff), color-mix(in srgb, var(--cf-accent) 82%, #000000));
+  border-radius: 50%;
+}
+#cf-w[data-cf-style="assistant"] #cf-inp {
+  flex: 1; border-radius: 24px; padding: 12px 16px;
+  border: 1.5px solid color-mix(in srgb, var(--cf-accent) 28%, var(--cf-border)); background: var(--cf-bg);
+}
+#cf-w[data-cf-style="assistant"] #cf-sb {
+  width: 46px; height: 46px; border-radius: 50%; flex: none; opacity: 1;
+  background: linear-gradient(140deg, color-mix(in srgb, var(--cf-accent) 76%, #ffffff), color-mix(in srgb, var(--cf-accent) 82%, #000000));
+}
+#cf-w[data-cf-style="assistant"] #cf-sb:disabled { opacity: 0.55; }
+/* Emoji picker */
+#cf-w[data-cf-style="assistant"] .cf-emojipick {
+  position: absolute; bottom: 50px; left: 0; z-index: 6; width: 224px; padding: 8px;
+  background: var(--cf-bg-elev); border: 1px solid var(--cf-border-soft); border-radius: 14px;
+  box-shadow: 0 14px 36px rgba(0,0,0,0.3); display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px;
+}
+#cf-w[data-cf-style="assistant"] .cf-emojipick[hidden] { display: none; }
+#cf-w[data-cf-style="assistant"] .cf-emojipick button {
+  background: none; border: none; font-size: 18px; cursor: pointer; padding: 5px; border-radius: 8px; line-height: 1;
+}
+#cf-w[data-cf-style="assistant"] .cf-emojipick button:hover { background: color-mix(in srgb, var(--cf-accent) 14%, transparent); }
+
 /* Notched iOS — add safe-area cushioning even on larger viewports so
    the floating pill never collides with the home indicator. */
 @supports (padding: env(safe-area-inset-bottom)) {
@@ -388,8 +503,8 @@ export function generateEmbedCode(id, url, color, botName, format) {
   const html = `<div id="cf-w" data-cf-theme="dark">
 <div id="cf-win" role="dialog" aria-label="Chat with ${name}">
 <div id="cf-head">
-<div class="cf-av" id="cf-av">&#9889;</div>
-<div class="cf-hi"><div class="cf-hn" id="cf-hn">${name}</div><div class="cf-hs"><span class="cf-dot"></span>Online</div></div>
+<div class="cf-av" id="cf-av"><span class="cf-av-ic">&#9889;</span><span class="cf-av-bot"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M32 13v7"/><rect x="16" y="20" width="32" height="27" rx="9"/><circle cx="26" cy="34" r="3.6"/><circle cx="38" cy="34" r="3.6"/><path d="M28 42h8"/></svg></span></div>
+<div class="cf-hi"><div class="cf-hn" id="cf-hn">${name}</div><div class="cf-hs"><span class="cf-dot"></span><span class="cf-hs-c">Online</span><span class="cf-hs-l">Online now</span></div></div>
 <button id="cf-xb" aria-label="Close">&#10005;</button>
 </div>
 <div id="cf-msgs"><div class="cf-ai">&#128075; Hi! How can I help you today?</div></div>
@@ -412,24 +527,40 @@ export function generateEmbedCode(id, url, color, botName, format) {
 </div>
 <div id="cf-foot">
 <input id="cf-fi" type="file" accept="image/*" style="display:none">
+<div id="cf-tools">
 <button class="cf-mb" id="cf-ib" style="display:none" title="Attach image">
 <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
 </button>
+<button class="cf-mb cf-lux" id="cf-mediab" type="button" style="display:none" title="Attach image">
+<svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="m8.5 12.5 5.8-5.8a3 3 0 014.2 4.2l-7.1 7.1a4.4 4.4 0 01-6.2-6.2l7.5-7.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</button>
+<div class="cf-emojiwrap cf-lux">
+<button class="cf-mb" id="cf-emoji" type="button" title="Emoji">
+<svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M9 10h.01M15 10h.01"/><path d="M8.5 14a4.5 4.5 0 007 0"/></svg>
+</button>
+<div class="cf-emojipick" id="cf-emojipick" hidden>
+<button type="button">&#128522;</button><button type="button">&#128525;</button><button type="button">&#128293;</button><button type="button">&#10024;</button><button type="button">&#128077;</button><button type="button">&#128156;</button><button type="button">&#128091;</button><button type="button">&#8986;</button><button type="button">&#128095;</button><button type="button">&#127873;</button><button type="button">&#128172;</button><button type="button">&#9989;</button>
+</div>
+</div>
 <button class="cf-mb" id="cf-vb" style="display:none" title="Voice input">
 <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4M8 23h8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
 </button>
+</div>
+<div id="cf-inrow">
 <input id="cf-inp" type="text" placeholder="Type a message&#8230;" autocomplete="off">
 <button id="cf-sb" aria-label="Send" disabled>
 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2" fill="white" stroke="none"/></svg>
 </button>
 </div>
+</div>
 <div id="cf-pby">Powered by <a href="https://checkfunnels.com" target="_blank" rel="noopener">Checkfunnels</a></div>
 </div>
-<div id="cf-note"><span id="cf-note-tx"></span><button id="cf-note-x" aria-label="Dismiss">&#10005;</button></div>
+<div id="cf-note"><span class="cf-note-spark cf-lux"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.7 6.3L20 10l-6.3 1.7L12 18l-1.7-6.3L4 10l6.3-1.7z"/></svg></span><span id="cf-note-tx"></span><button id="cf-note-x" aria-label="Dismiss">&#10005;</button></div>
 <div id="cf-pill" role="button" aria-label="Open chat" tabindex="0">
 <div class="cf-pi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
 <span class="cf-pi-txt">Write a message...</span>
 <div class="cf-pi-send"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+<span class="cf-pi-robot"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M32 13v7"/><rect x="16" y="20" width="32" height="27" rx="9"/><circle cx="26" cy="34" r="3.6"/><circle cx="38" cy="34" r="3.6"/><path d="M28 42h8"/><path d="M12 31v8M52 31v8"/></svg></span>
 <span id="cf-badge"></span>
 </div>
 </div>`
@@ -675,8 +806,13 @@ function applyConfig(cfg){
     var win=$('cf-win');if(win)win.setAttribute('aria-label','Chat with '+cfg.chatbot_name);
   }
   if(cfg.chatbot_theme&&w)w.setAttribute('data-cf-theme',cfg.chatbot_theme);
+  // Widget style (Style 1 'classic' pill · Style 2 'assistant' card)
+  var styleA=(cfg.widget_style==='assistant');
+  if(w)w.setAttribute('data-cf-style',styleA?'assistant':'classic');
   if(cfg.voice_input_enabled)$('cf-vb').style.display='flex';else $('cf-vb').style.display='none';
-  if(cfg.image_input_enabled)$('cf-ib').style.display='flex';else $('cf-ib').style.display='none';
+  // Image attach: classic uses #cf-ib, Style 2 uses #cf-mediab — never both.
+  if(cfg.image_input_enabled&&!styleA)$('cf-ib').style.display='flex';else $('cf-ib').style.display='none';
+  var _mb=$('cf-mediab');if(_mb)_mb.style.display=(styleA&&cfg.image_input_enabled)?'flex':'none';
   if(cfg.cta_message)liveCtaMsg=cfg.cta_message;
   // Page-aware proactive config
   if(Array.isArray(cfg.page_rules))pageRules=cfg.page_rules;
@@ -1370,6 +1506,16 @@ $('cf-ib').onclick=function(){$('cf-fi').click()};
 $('cf-fi').onchange=function(){handleFile(this.files[0]);this.value=''};
 $('cf-prm').onclick=clearImg;
 $('cf-vb').onclick=toggleVoice;
+// Style 2 — media button opens the image picker; emoji picker inserts into input.
+var _cfMediab=$('cf-mediab');if(_cfMediab)_cfMediab.onclick=function(){$('cf-fi').click()};
+var _cfEmoji=$('cf-emoji'),_cfEpick=$('cf-emojipick');
+if(_cfEmoji&&_cfEpick){
+  _cfEmoji.onclick=function(e){e.stopPropagation();_cfEpick.hidden=!_cfEpick.hidden};
+  Array.prototype.forEach.call(_cfEpick.querySelectorAll('button'),function(b){
+    b.onclick=function(){var inp=$('cf-inp');inp.value+=b.textContent;try{inp.dispatchEvent(new Event('input'))}catch(e){}inp.focus();_cfEpick.hidden=true};
+  });
+  document.addEventListener('click',function(ev){if(!ev.target.closest||!ev.target.closest('.cf-emojiwrap'))_cfEpick.hidden=true});
+}
 $('cf-lead-cls').onclick=dismissLead;
 $('cf-lead-sb').onclick=submitLead;
 $('cf-lead-em').addEventListener('keydown',function(e){if(e.key==='Enter')submitLead()});

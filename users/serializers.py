@@ -17,7 +17,7 @@ class ClientSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'domain_url', 'platform',
             'is_active', 'chatbot_name', 'chatbot_color', 'chatbot_logo_url',
-            'chatbot_theme', 'primary_goal', 'onboarding_complete',
+            'chatbot_theme', 'widget_style', 'primary_goal', 'onboarding_complete',
             'notification_email',
             'cta_mode', 'discount_code', 'cta_message', 'fomo_offer_text', 'fomo_countdown_seconds',
             'return_policy_blurb', 'shipping_blurb', 'scarcity_blurb',

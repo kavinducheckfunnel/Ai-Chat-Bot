@@ -114,6 +114,20 @@
           </div>
         </div>
 
+        <div class="field" style="grid-column:1/-1">
+          <label>Widget style</label>
+          <div class="style-row">
+            <button class="style-card" :class="{ selected: form.widget_style === 'classic' }" @click="form.widget_style = 'classic'" type="button">
+              <span class="style-prev style-prev-classic"><span class="spc-pill"></span></span>
+              <span class="style-meta"><strong>Style 1 · Pill</strong><span>Compact bar launcher</span></span>
+            </button>
+            <button class="style-card" :class="{ selected: form.widget_style === 'assistant' }" @click="form.widget_style = 'assistant'" type="button">
+              <span class="style-prev style-prev-assistant"><span class="spa-card"></span><span class="spa-bot"></span></span>
+              <span class="style-meta"><strong>Style 2 · Assistant</strong><span>Robot + greeting card</span></span>
+            </button>
+          </div>
+        </div>
+
         <div class="field">
           <label>Theme</label>
           <div class="theme-row">
@@ -1150,6 +1164,7 @@ const form = ref({
   chatbot_color: '#6366F1',
   chatbot_logo_url: '',
   chatbot_theme: 'dark',
+  widget_style: 'classic',
   notification_email: '',
   cta_mode: 'ai',
   cta_message: '',
@@ -1220,6 +1235,7 @@ watch(() => props.client, (c) => {
   form.value.chatbot_color = c.chatbot_color || '#6366F1'
   form.value.chatbot_logo_url = c.chatbot_logo_url || ''
   form.value.chatbot_theme = c.chatbot_theme || 'dark'
+  form.value.widget_style = c.widget_style || 'classic'
   form.value.notification_email = c.notification_email || ''
   form.value.cta_mode = c.cta_mode || 'ai'
   form.value.cta_message = c.cta_message || ''
@@ -2024,6 +2040,27 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .input::placeholder { color: var(--cf-text-muted); }
 
 /* Theme */
+/* Widget style picker */
+.style-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.style-card {
+  display: flex; align-items: center; gap: 12px; flex: 1; min-width: 200px;
+  padding: 12px 14px; background: var(--cf-bg-input); border: 1.5px solid var(--cf-border-default);
+  border-radius: 12px; cursor: pointer; transition: all 0.12s; text-align: left; font-family: inherit;
+}
+.style-card:hover { border-color: var(--cf-border-strong); }
+.style-card.selected { border-color: #6366f1; background: rgba(99,102,241,0.08); }
+.style-prev { position: relative; width: 54px; height: 54px; flex-shrink: 0; border-radius: 10px;
+  background: linear-gradient(160deg, #eef2ff, #e0e7ff); overflow: hidden; border: 1px solid var(--cf-border-default); }
+.style-prev-classic .spc-pill { position: absolute; right: 6px; bottom: 8px; width: 38px; height: 13px;
+  border-radius: 7px; background: #6366f1; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+.style-prev-assistant .spa-bot { position: absolute; right: 6px; bottom: 6px; width: 18px; height: 18px;
+  border-radius: 50%; background: linear-gradient(140deg, #818cf8, #6d28d9); border: 1.5px solid #fff; }
+.style-prev-assistant .spa-card { position: absolute; right: 6px; bottom: 26px; width: 34px; height: 16px;
+  border-radius: 6px 6px 6px 2px; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
+.style-meta { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.style-meta strong { font-size: 13px; font-weight: 700; color: var(--cf-text-primary); }
+.style-meta span { font-size: 11.5px; color: var(--cf-text-muted); }
+
 .theme-row { display: flex; gap: 10px; }
 .theme-btn {
   display: flex; align-items: center; gap: 8px;

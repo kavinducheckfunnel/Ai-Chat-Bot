@@ -115,6 +115,10 @@ class Client(models.Model):
     chatbot_color = models.CharField(max_length=20, default='#3B82F6')
     chatbot_logo_url = models.URLField(max_length=500, blank=True, null=True)
     chatbot_theme = models.CharField(max_length=10, choices=THEME_CHOICES, default='dark')
+    # Widget visual style: 'classic' = pill launcher + compact window (Style 1),
+    # 'assistant' = robot launcher + assistant-card intro + tooled chat (Style 2).
+    WIDGET_STYLE_CHOICES = [('classic', 'Classic'), ('assistant', 'Assistant Card')]
+    widget_style = models.CharField(max_length=20, choices=WIDGET_STYLE_CHOICES, default='classic')
 
     # Widget feature toggles
     voice_input_enabled = models.BooleanField(default=False)
