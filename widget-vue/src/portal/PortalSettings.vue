@@ -355,51 +355,45 @@
         </div>
       </div>
 
-      <!-- Page rules -->
+      <!-- Pages — auto-detected from your website crawl -->
       <div class="section-card">
         <div class="pr-head">
           <div>
-            <h2 class="section-title">Page rules</h2>
-            <p class="section-desc">Per page type: the greeting shown, how the AI should behave there, and whether the widget is visible. Matched by URL — most specific wins.</p>
+            <h2 class="section-title">Pages</h2>
+            <p class="section-desc">These are the high-level pages we found when crawling your site for the knowledge base. Tick the ones you want a greeting on, edit the message / behaviour, and choose whether the widget shows. Unticked pages get a generic greeting.</p>
           </div>
           <div class="pr-head-actions">
-            <button class="btn-secondary" @click="seedDefaults" v-if="!pageRules.length">Load default rules</button>
-            <button class="btn-secondary" @click="addRule">+ Add rule</button>
+            <button class="btn-secondary" @click="syncPages" :disabled="pSyncing">{{ pSyncing ? 'Syncing…' : '↻ Sync pages from website' }}</button>
+            <button class="btn-secondary" @click="addRow">+ Add page</button>
           </div>
         </div>
 
-        <div v-if="discoveredPages.length" class="pr-discovered">
-          <span class="pr-disc-label">Discovered pages:</span>
-          <span v-for="dp in discoveredPages" :key="dp.path" class="pr-chip" :title="dp.url">{{ dp.page_type }} · {{ dp.path }}</span>
+        <div v-if="!pageRows.length" class="pr-empty">
+          No pages detected yet. Run a knowledge-base sync (Knowledge base tab), then click <strong>Sync pages from website</strong>.
         </div>
 
-        <div v-if="!pageRules.length" class="pr-empty">No rules yet — load the defaults or add one.</div>
-
-        <div v-for="(r, i) in pageRules" :key="r.id || i" class="pr-rule">
-          <div class="pr-rule-top">
-            <input class="input pr-label" v-model="r.label" placeholder="Label (e.g. Single Product)" />
-            <select class="input pr-type" v-model="r.page_type">
-              <option v-for="t in PAGE_TYPES" :key="t" :value="t">{{ t }}</option>
-            </select>
-            <button class="pr-del" @click="pageRules.splice(i,1)" title="Remove rule">&times;</button>
+        <div class="pr-table" v-else>
+          <div v-for="(r, i) in pageRows" :key="r.path + i" class="pr-row" :class="{ off: !r.greeting_on && r.widget_visible }">
+            <div class="pr-row-head">
+              <label class="pr-check">
+                <input type="checkbox" v-model="r.greeting_on" />
+                <span class="pr-path" :title="r.url || r.path">{{ r.path }}</span>
+              </label>
+              <span class="pr-typebadge">{{ r.page_type }}</span>
+              <label class="pr-toggle"><input type="checkbox" v-model="r.widget_visible" /> Widget visible</label>
+              <button v-if="r.custom" class="pr-del" @click="pageRows.splice(i,1)" title="Remove">&times;</button>
+            </div>
+            <input v-if="r.custom" class="input pr-pat" v-model="r.path" placeholder="/path or /prefix/" />
+            <textarea class="input pr-msg" v-model="r.greeting_message" rows="2"
+              :placeholder="r.page_type==='product' ? 'Greeting — use {product_name} here' : 'Greeting message for this page'"
+              :disabled="!r.greeting_on"></textarea>
+            <textarea class="input pr-bp" v-model="r.behavior_prompt" rows="2"
+              placeholder="How the AI should behave on this page (optional)"></textarea>
           </div>
-          <div class="pr-rule-mid">
-            <select class="input pr-mt" v-model="r.match_type">
-              <option value="contains">URL contains</option>
-              <option value="prefix">URL starts with</option>
-              <option value="exact">URL equals</option>
-              <option value="regex">Regex</option>
-            </select>
-            <input class="input pr-pat" v-model="r.pattern" placeholder="/products/" />
-            <label class="pr-toggle"><input type="checkbox" v-model="r.greeting_enabled" /> Greeting</label>
-            <label class="pr-toggle"><input type="checkbox" v-model="r.enabled_widget" /> Widget visible</label>
-          </div>
-          <textarea class="input pr-msg" v-model="r.greeting_message" rows="2" placeholder="Greeting message — use {product_name} on product pages"></textarea>
-          <textarea class="input pr-bp" v-model="r.behavior_prompt" rows="2" placeholder="How the AI should behave on this page (optional)"></textarea>
         </div>
 
         <div class="save-row">
-          <button class="btn-save" @click="savePageRules" :disabled="pSaving">{{ pSaving ? 'Saving…' : prSaved ? '✓ Saved' : 'Save page rules' }}</button>
+          <button class="btn-save" @click="savePageRules" :disabled="pSaving">{{ pSaving ? 'Saving…' : prSaved ? '✓ Saved' : 'Save pages' }}</button>
         </div>
       </div>
     </div>
@@ -1240,7 +1234,6 @@ watch(() => props.client, (c) => {
   pForm.value.assistant_intro = c.assistant_intro || "Hi! I'm your AI Shopping Assistant."
   pForm.value.notification_timeout_seconds = c.notification_timeout_seconds || 20
   pForm.value.auto_close_seconds = c.auto_close_seconds || 0
-  pageRules.value = Array.isArray(c.page_rules) ? c.page_rules.map(r => ({ ...r, id: r.id || cryptoId() })) : []
   loadSitePages()
   // After client loads, fetch live Telegram webhook health so the user
   // sees right away whether Telegram knows where to deliver messages.
@@ -1250,43 +1243,82 @@ watch(() => props.client, (c) => {
 }, { immediate: true })
 
 // ── Proactive & pages ─────────────────────────────────────────────────────────
-const PAGE_TYPES = ['home', 'collection', 'product', 'cart', 'checkout', 'contact', 'about', 'faq', 'offers', 'track', 'fallback']
 const pForm = ref({
   proactive_notifications_enabled: true,
   assistant_intro: "Hi! I'm your AI Shopping Assistant.",
   notification_timeout_seconds: 20,
   auto_close_seconds: 0,
 })
-const pageRules = ref([])
-const discoveredPages = ref([])
+// Table rows are DERIVED from the pages we detected when crawling the site
+// (different per site), merged with any rules the tenant already saved.
+const pageRows = ref([])
 const defaultRules = ref([])
+const genericFallback = ref('How can I help you with your shopping today?')
 const pSaving = ref(false)
 const pSaved = ref(false)
 const prSaved = ref(false)
+const pSyncing = ref(false)
 
-function cryptoId() {
-  try { return crypto.randomUUID() } catch { return 'r' + Math.random().toString(36).slice(2, 10) }
+function typeGreeting(pt) {
+  const r = defaultRules.value.find(x => x.page_type === pt)
+  if (r) return r.greeting_message
+  return genericFallback.value
+}
+
+function buildRows(pages) {
+  const existing = Array.isArray(props.client?.page_rules) ? props.client.page_rules : []
+  const byPath = {}
+  existing.forEach(r => { if (r && r.pattern) byPath[r.pattern] = r })
+  // First-time (no saved rules besides maybe a fallback) → default every page ON.
+  const neverConfigured = existing.filter(r => (r.page_type || '') !== 'fallback').length === 0
+  const rows = (pages || []).map(p => {
+    const ex = byPath[p.path]
+    return {
+      path: p.path, url: p.url, title: p.title || '', page_type: p.page_type,
+      greeting_on: ex ? (ex.greeting_enabled !== false) : neverConfigured,
+      greeting_message: ex ? (ex.greeting_message || typeGreeting(p.page_type)) : typeGreeting(p.page_type),
+      behavior_prompt: ex ? (ex.behavior_prompt || '') : '',
+      widget_visible: ex ? (ex.enabled_widget !== false) : true,
+      custom: false,
+    }
+  })
+  // Keep any saved custom rules whose path isn't in the discovered set.
+  const discovered = new Set((pages || []).map(p => p.path))
+  existing.forEach(r => {
+    if (!r || !r.pattern || (r.page_type || '') === 'fallback' || discovered.has(r.pattern)) return
+    rows.push({
+      path: r.pattern, url: '', title: r.label || '', page_type: r.page_type || 'fallback',
+      greeting_on: r.greeting_enabled !== false, greeting_message: r.greeting_message || '',
+      behavior_prompt: r.behavior_prompt || '', widget_visible: r.enabled_widget !== false, custom: true,
+    })
+  })
+  pageRows.value = rows
 }
 
 async function loadSitePages() {
   if (!props.client) return
   try {
     const data = await api.getSitePages(props.client.id)
-    discoveredPages.value = data?.pages || []
     defaultRules.value = data?.default_rules || []
+    const fb = defaultRules.value.find(x => x.page_type === 'fallback')
+    if (fb) genericFallback.value = fb.greeting_message
+    buildRows(data?.pages || [])
   } catch { /* non-fatal */ }
 }
 
-function seedDefaults() {
-  const src = defaultRules.value.length ? defaultRules.value : []
-  pageRules.value = src.map(r => ({ ...r, id: cryptoId() }))
+async function syncPages() {
+  if (!props.client) return
+  pSyncing.value = true
+  try {
+    const data = await api.syncSitePages(props.client.id)
+    buildRows(data?.pages || [])
+  } catch {} finally { pSyncing.value = false }
 }
 
-function addRule() {
-  pageRules.value.push({
-    id: cryptoId(), label: 'New page', match_type: 'contains', pattern: '/',
-    page_type: 'fallback', priority: 20, enabled_widget: true, greeting_enabled: true,
-    greeting_message: '', behavior_prompt: '',
+function addRow() {
+  pageRows.value.push({
+    path: '/', url: '', title: 'Custom', page_type: 'fallback',
+    greeting_on: true, greeting_message: '', behavior_prompt: '', widget_visible: true, custom: true,
   })
 }
 
@@ -1309,9 +1341,33 @@ async function savePageRules() {
   if (!props.client) return
   pSaving.value = true
   try {
-    // Strip the client-only `id` before persisting; keep stable order/priority.
-    const clean = pageRules.value.map(({ id, ...rest }) => rest)
-    const updated = await api.updatePortalClient(props.client.id, { page_rules: clean })
+    const rules = []
+    pageRows.value.forEach(r => {
+      const path = (r.path || '').trim()
+      if (!path) return
+      // A row produces a rule if it customizes anything: greeting on, widget
+      // hidden, or a behavior prompt. Pure-default rows are left to fallback.
+      const active = r.greeting_on || !r.widget_visible || (r.behavior_prompt || '').trim()
+      if (!active) return
+      const isProduct = r.page_type === 'product'
+      rules.push({
+        label: r.title || r.path,
+        page_type: r.page_type || 'fallback',
+        match_type: isProduct ? 'contains' : 'exact',
+        pattern: path,
+        priority: isProduct ? 60 : (path === '/' ? 15 : 50),
+        greeting_enabled: !!r.greeting_on,
+        enabled_widget: r.widget_visible !== false,
+        greeting_message: r.greeting_on ? (r.greeting_message || typeGreeting(r.page_type)) : '',
+        behavior_prompt: (r.behavior_prompt || '').trim(),
+      })
+    })
+    // Q2: pages the tenant didn't enable get a generic fallback greeting.
+    rules.push({
+      label: 'Fallback', page_type: 'fallback', match_type: 'contains', pattern: '', priority: 0,
+      greeting_enabled: true, enabled_widget: true, greeting_message: genericFallback.value, behavior_prompt: '',
+    })
+    const updated = await api.updatePortalClient(props.client.id, { page_rules: rules })
     emit('client-updated', updated)
     prSaved.value = true; setTimeout(() => { prSaved.value = false }, 3000)
   } catch {} finally { pSaving.value = false }
@@ -2549,23 +2605,23 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .pr-disc-label { font-size: 12px; color: var(--cf-text-muted); font-weight: 600; }
 .pr-chip { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px;
   background: var(--cf-bg-input, rgba(148,163,184,0.08)); border: 1px solid var(--cf-border-default); color: var(--cf-text-secondary); }
-.pr-empty { font-size: 13px; color: var(--cf-text-muted); padding: 14px 0; }
-.pr-rule { border: 1px solid var(--cf-border-default); border-radius: 12px; padding: 12px; margin-bottom: 12px;
-  display: flex; flex-direction: column; gap: 8px; background: var(--cf-bg-surface); }
-.pr-rule-top { display: flex; gap: 8px; align-items: center; }
-.pr-rule-mid { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.pr-label { flex: 1; }
-.pr-type { width: 130px; flex-shrink: 0; }
-.pr-mt { width: 150px; flex-shrink: 0; }
-.pr-pat { flex: 1; min-width: 140px; }
+.pr-empty { font-size: 13px; color: var(--cf-text-muted); padding: 14px 0; line-height: 1.6; }
+.pr-table { display: flex; flex-direction: column; gap: 10px; }
+.pr-row { border: 1px solid var(--cf-border-default); border-radius: 12px; padding: 12px;
+  display: flex; flex-direction: column; gap: 8px; background: var(--cf-bg-surface); transition: opacity .15s; }
+.pr-row.off { opacity: 0.6; }
+.pr-row-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pr-check { display: inline-flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
+.pr-path { font-family: ui-monospace, monospace; font-size: 13px; color: var(--cf-text-primary);
+  font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-typebadge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 8px; border-radius: 20px; background: rgba(99,102,241,0.12); color: #a5b4fc; flex-shrink: 0; }
 .pr-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
-  color: var(--cf-text-secondary); white-space: nowrap; cursor: pointer; }
+  color: var(--cf-text-secondary); white-space: nowrap; cursor: pointer; flex-shrink: 0; }
+.pr-pat { width: 100%; font-family: ui-monospace, monospace; }
 .pr-msg, .pr-bp { width: 100%; resize: vertical; font-family: inherit; }
+.pr-msg:disabled { opacity: 0.5; }
 .pr-del { background: none; border: none; color: var(--cf-text-muted); font-size: 20px; line-height: 1;
   cursor: pointer; padding: 0 4px; flex-shrink: 0; }
 .pr-del:hover { color: #ef4444; }
-@media (max-width: 640px) {
-  .pr-type, .pr-mt { width: 100%; }
-  .pr-rule-top, .pr-rule-mid { flex-wrap: wrap; }
-}
 </style>

@@ -523,7 +523,7 @@ function cfMatches(rule,path){
   if(pt==='fallback')return true;
   var mt=rule.match_type||'contains',pat=rule.pattern||'';
   if(pat){try{
-    if(mt==='exact'){if(path===pat)return true}
+    if(mt==='exact'){if(path===pat||path.replace(/\\/+$/,'')===pat.replace(/\\/+$/,''))return true}
     else if(mt==='prefix'){if(path.indexOf(pat)===0)return true}
     else if(mt==='regex'){if(new RegExp(pat).test(path))return true}
     else{if(path.toLowerCase().indexOf(pat.toLowerCase())>=0)return true}

@@ -455,6 +455,31 @@ def client_site_pages(request, client_id):
     })
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sync_site_pages_view(request, client_id):
+    """Re-detect this client's high-level pages from the latest crawl and
+    return the refreshed list (the 'Sync pages from website' button)."""
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    from scraper.tasks import sync_site_pages
+    from scraper.models import SitePage
+    try:
+        sync_site_pages(client)
+    except Exception as e:
+        return Response({'detail': f'Sync failed: {e}'}, status=500)
+
+    pages = [
+        {'path': p.path, 'url': p.url, 'title': p.title, 'page_type': p.page_type}
+        for p in SitePage.objects.filter(client=client)[:500]
+    ]
+    return Response({'pages': pages, 'count': len(pages)})
+
+
 # ─── Client logo upload ──────────────────────────────────────────────────────
 #
 # Accepts a multipart image (PNG / JPEG / GIF / WebP), saves it under

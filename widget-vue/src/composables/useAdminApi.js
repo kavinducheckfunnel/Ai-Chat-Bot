@@ -407,6 +407,7 @@ export function useAdminApi() {
 
     // Discovered high-level pages + default page rules (Proactive & Pages tab)
     getSitePages: (id) => apiFetch(`/api/admin/clients/${id}/site-pages/`),
+    syncSitePages: (id) => apiFetch(`/api/admin/clients/${id}/sync-pages/`, { method: 'POST' }),
 
     getTelegramWebhookStatus: (clientId) =>
       apiFetch(`/api/admin/clients/${clientId}/telegram-webhook/`),

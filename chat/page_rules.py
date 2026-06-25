@@ -133,7 +133,8 @@ def _pattern_matches(rule, path):
         return False
     try:
         if mt == 'exact':
-            return path == pat
+            # trailing-slash insensitive (/about == /about/)
+            return path.rstrip('/') == pat.rstrip('/') or path == pat
         if mt == 'prefix':
             return path.startswith(pat)
         if mt == 'regex':

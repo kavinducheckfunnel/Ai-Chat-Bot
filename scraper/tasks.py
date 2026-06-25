@@ -195,43 +195,76 @@ def scrape_client_website(self, client_id):
         raise self.retry(exc=exc, countdown=60)
 
 
-def sync_site_pages(client):
-    """Rebuild the high-level SitePage list for a client from its embedded
-    pages. Collapsed to ONE representative page per page_type (so a store with
-    thousands of products yields a clean ~10-row list the tenant attaches
-    rules to), keyed by chat.page_rules.classify_path.
+def _norm_path(path):
+    p = (path or '/').split('?')[0].split('#')[0]
+    if len(p) > 1 and p.endswith('/'):
+        p = p.rstrip('/')
+    return p or '/'
+
+
+def sync_site_pages(client, max_pages=200):
+    """Detect the real HIGH-LEVEL pages of THIS site dynamically from what the
+    crawl actually discovered (every page structure differs site to site — no
+    hardcoded list).
+
+    Rules:
+      • Individual product pages are collapsed into ONE 'Product pages' template
+        row (a store can have thousands — listing each is useless here).
+      • Every other distinct page up to depth 2 (e.g. /, /about, /contact,
+        /collections/men, /pages/shipping) is listed individually.
+      • Capped at `max_pages`.
+
+    These rows are what the tenant ticks/edits in Settings → Proactive & pages.
     """
     from urllib.parse import urlparse
     from scraper.models import DocumentChunk, SitePage
     from chat.page_rules import classify_path
 
-    seen = {}  # page_type -> (path, url, title)
+    seen = {}            # path -> (url, title, page_type)
+    product_seen = False
+    product_prefix = '/products/'
+
     rows = (DocumentChunk.objects
             .filter(client=client)
-            .values_list('source_url', 'metadata')[:5000])
+            .values_list('source_url', 'metadata')[:8000])
     for url, meta in rows:
         if not url:
             continue
         try:
-            path = urlparse(url).path or '/'
+            path = _norm_path(urlparse(url).path or '/')
         except Exception:
             path = '/'
         pt = classify_path(path)
-        if pt in seen:
+        title = (meta.get('title') or '')[:300] if isinstance(meta, dict) else ''
+
+        if pt == 'product':
+            product_seen = True
+            if '/product/' in path and '/products/' not in path:
+                product_prefix = '/product/'
             continue
-        title = ''
-        if isinstance(meta, dict):
-            title = (meta.get('title') or '')[:300]
-        seen[pt] = (path, url, title)
+        if path in seen:
+            continue
+        depth = len([s for s in path.strip('/').split('/') if s])
+        if depth > 2:
+            continue  # deeper than high-level (blog posts, nested docs, …)
+        seen[path] = (url, title, pt)
+        if len(seen) >= max_pages:
+            break
 
     keep_paths = []
-    for pt, (path, url, title) in seen.items():
+    for path, (url, title, pt) in seen.items():
         SitePage.objects.update_or_create(
             client=client, path=path,
             defaults={'url': url, 'title': title, 'page_type': pt},
         )
         keep_paths.append(path)
-    # Drop stale rows no longer represented.
+    if product_seen:
+        SitePage.objects.update_or_create(
+            client=client, path=product_prefix,
+            defaults={'url': '', 'title': 'Product pages', 'page_type': 'product'},
+        )
+        keep_paths.append(product_prefix)
+
     SitePage.objects.filter(client=client).exclude(path__in=keep_paths).delete()
     return len(keep_paths)
 

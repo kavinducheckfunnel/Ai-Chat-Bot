@@ -48,6 +48,12 @@ class TestMatchRule:
         rule = pr.match_rule(pr.DEFAULT_PAGE_RULES, 'https://shop.com/category/men')
         assert rule and rule['page_type'] == 'collection'
 
+    def test_exact_trailing_slash_insensitive(self):
+        rules = [{'page_type': 'about', 'match_type': 'exact', 'pattern': '/about', 'priority': 50,
+                  'greeting_message': 'a', 'greeting_enabled': True, 'enabled_widget': True}]
+        assert pr.match_rule(rules, 'https://s.com/about/') is not None
+        assert pr.match_rule(rules, 'https://s.com/about') is not None
+
     def test_priority_specific_wins(self):
         rules = [
             {'page_type': 'fallback', 'match_type': 'contains', 'pattern': '', 'priority': 0,
@@ -162,3 +168,45 @@ class TestSitePagesEndpoint:
     def test_other_tenant_blocked(self, tenant_client2, client_obj):
         resp = tenant_client2.get(f'/api/admin/clients/{client_obj.id}/site-pages/')
         assert resp.status_code in (403, 404)
+
+
+# ─── Dynamic high-level page detection (sync_site_pages) ──────────────────────
+
+@pytest.mark.django_db
+class TestSyncSitePages:
+    def _doc(self, client, url, title=''):
+        from scraper.models import DocumentChunk
+        DocumentChunk.objects.create(
+            client=client, content='x', embedding=[0.0] * 1024,
+            source_url=url, metadata={'title': title},
+        )
+
+    def test_detects_high_level_and_collapses_products(self, client_obj):
+        from scraper.tasks import sync_site_pages
+        from scraper.models import SitePage
+        base = 'https://shop.com'
+        self._doc(client_obj, base + '/', 'Home')
+        self._doc(client_obj, base + '/about-us', 'About')
+        self._doc(client_obj, base + '/collections/men', 'Men')
+        self._doc(client_obj, base + '/products/blue-hoodie', 'Blue Hoodie')
+        self._doc(client_obj, base + '/products/red-cap', 'Red Cap')
+        self._doc(client_obj, base + '/blogs/news/deep/post', 'Deep')  # too deep → excluded
+
+        sync_site_pages(client_obj)
+        paths = set(SitePage.objects.filter(client=client_obj).values_list('path', flat=True))
+        types = set(SitePage.objects.filter(client=client_obj).values_list('page_type', flat=True))
+
+        assert '/' in paths and '/about-us' in paths and '/collections/men' in paths
+        # individual products collapsed to ONE template row, not listed each
+        assert '/products/blue-hoodie' not in paths and '/products/red-cap' not in paths
+        assert '/products/' in paths
+        assert 'product' in types
+        # deep blog post excluded from high-level
+        assert '/blogs/news/deep/post' not in paths
+
+    def test_sync_endpoint(self, tenant_client, client_obj):
+        self._doc(client_obj, 'https://shop.com/contact', 'Contact')
+        resp = tenant_client.post(f'/api/admin/clients/{client_obj.id}/sync-pages/')
+        assert resp.status_code == 200
+        data = resp.json()
+        assert any(p['path'] == '/contact' for p in data['pages'])
