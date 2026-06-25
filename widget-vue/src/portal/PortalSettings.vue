@@ -372,25 +372,50 @@
           No pages detected yet. Run a knowledge-base sync (Knowledge base tab), then click <strong>Sync pages from website</strong>.
         </div>
 
-        <div class="pr-table" v-else>
-          <div v-for="(r, i) in pageRows" :key="r.path + i" class="pr-row" :class="{ off: !r.greeting_on && r.widget_visible }">
-            <div class="pr-row-head">
-              <label class="pr-check">
-                <input type="checkbox" v-model="r.greeting_on" />
-                <span class="pr-path" :title="r.url || r.path">{{ r.path }}</span>
-              </label>
-              <span class="pr-typebadge">{{ r.page_type }}</span>
-              <label class="pr-toggle"><input type="checkbox" v-model="r.widget_visible" /> Widget visible</label>
-              <button v-if="r.custom" class="pr-del" @click="pageRows.splice(i,1)" title="Remove">&times;</button>
-            </div>
-            <input v-if="r.custom" class="input pr-pat" v-model="r.path" placeholder="/path or /prefix/" />
-            <textarea class="input pr-msg" v-model="r.greeting_message" rows="2"
-              :placeholder="r.page_type==='product' ? 'Greeting — use {product_name} here' : 'Greeting message for this page'"
-              :disabled="!r.greeting_on"></textarea>
-            <textarea class="input pr-bp" v-model="r.behavior_prompt" rows="2"
-              placeholder="How the AI should behave on this page (optional)"></textarea>
+        <template v-else>
+          <div class="pg-toolbar">
+            <span class="pg-summary">{{ pageRows.length }} pages · {{ greetingOnCount }} with a greeting</span>
+            <button class="pg-expand-all" @click="toggleAll">{{ allOpen ? 'Collapse all' : 'Expand all' }}</button>
           </div>
-        </div>
+
+          <div class="pg-list">
+            <div v-for="(r, i) in pageRows" :key="r.path + i" class="pg-row" :class="{ open: r._open }">
+              <div class="pg-head" @click="r._open = !r._open">
+                <svg class="pg-caret" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span class="pg-path" :title="r.url || r.path">{{ r.path }}</span>
+                <span class="pg-type">{{ r.page_type }}</span>
+                <span class="pg-preview">{{ r.greeting_on ? (r.greeting_message || '(default greeting)') : 'No greeting' }}</span>
+                <div class="pg-switches" @click.stop>
+                  <span class="pg-sw-wrap" title="Show a greeting on this page">
+                    <span class="pg-sw-label">Greeting</span>
+                    <label class="pg-switch"><input type="checkbox" v-model="r.greeting_on" /><span class="pg-slider"></span></label>
+                  </span>
+                  <span class="pg-sw-wrap" title="Show the chat widget on this page">
+                    <span class="pg-sw-label">Widget</span>
+                    <label class="pg-switch"><input type="checkbox" v-model="r.widget_visible" /><span class="pg-slider"></span></label>
+                  </span>
+                  <button v-if="r.custom" class="pg-del" @click="pageRows.splice(i, 1)" title="Remove">&times;</button>
+                </div>
+              </div>
+              <div class="pg-body" v-if="r._open">
+                <div class="pg-field" v-if="r.custom">
+                  <label>URL path</label>
+                  <input class="input" v-model="r.path" placeholder="/path or /prefix/" />
+                </div>
+                <div class="pg-field">
+                  <label>Greeting message</label>
+                  <textarea class="input" v-model="r.greeting_message" rows="2" :disabled="!r.greeting_on"
+                    :placeholder="r.page_type==='product' ? 'Greeting — use {product_name} here' : 'Greeting message for this page'"></textarea>
+                </div>
+                <div class="pg-field">
+                  <label>AI behaviour on this page (optional)</label>
+                  <textarea class="input" v-model="r.behavior_prompt" rows="2"
+                    placeholder="e.g. Focus on sizing &amp; materials; don't push discounts here"></textarea>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
 
         <div class="save-row">
           <button class="btn-save" @click="savePageRules" :disabled="pSaving">{{ pSaving ? 'Saving…' : prSaved ? '✓ Saved' : 'Save pages' }}</button>
@@ -1279,7 +1304,7 @@ function buildRows(pages) {
       greeting_message: ex ? (ex.greeting_message || typeGreeting(p.page_type)) : typeGreeting(p.page_type),
       behavior_prompt: ex ? (ex.behavior_prompt || '') : '',
       widget_visible: ex ? (ex.enabled_widget !== false) : true,
-      custom: false,
+      custom: false, _open: false,
     }
   })
   // Keep any saved custom rules whose path isn't in the discovered set.
@@ -1289,10 +1314,17 @@ function buildRows(pages) {
     rows.push({
       path: r.pattern, url: '', title: r.label || '', page_type: r.page_type || 'fallback',
       greeting_on: r.greeting_enabled !== false, greeting_message: r.greeting_message || '',
-      behavior_prompt: r.behavior_prompt || '', widget_visible: r.enabled_widget !== false, custom: true,
+      behavior_prompt: r.behavior_prompt || '', widget_visible: r.enabled_widget !== false, custom: true, _open: false,
     })
   })
   pageRows.value = rows
+}
+
+const greetingOnCount = computed(() => pageRows.value.filter(r => r.greeting_on).length)
+const allOpen = computed(() => pageRows.value.length > 0 && pageRows.value.every(r => r._open))
+function toggleAll() {
+  const open = !allOpen.value
+  pageRows.value.forEach(r => { r._open = open })
 }
 
 async function loadSitePages() {
@@ -1318,7 +1350,7 @@ async function syncPages() {
 function addRow() {
   pageRows.value.push({
     path: '/', url: '', title: 'Custom', page_type: 'fallback',
-    greeting_on: true, greeting_message: '', behavior_prompt: '', widget_visible: true, custom: true,
+    greeting_on: true, greeting_message: '', behavior_prompt: '', widget_visible: true, custom: true, _open: true,
   })
 }
 
@@ -2606,22 +2638,49 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .pr-chip { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px;
   background: var(--cf-bg-input, rgba(148,163,184,0.08)); border: 1px solid var(--cf-border-default); color: var(--cf-text-secondary); }
 .pr-empty { font-size: 13px; color: var(--cf-text-muted); padding: 14px 0; line-height: 1.6; }
-.pr-table { display: flex; flex-direction: column; gap: 10px; }
-.pr-row { border: 1px solid var(--cf-border-default); border-radius: 12px; padding: 12px;
-  display: flex; flex-direction: column; gap: 8px; background: var(--cf-bg-surface); transition: opacity .15s; }
-.pr-row.off { opacity: 0.6; }
-.pr-row-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.pr-check { display: inline-flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
-.pr-path { font-family: ui-monospace, monospace; font-size: 13px; color: var(--cf-text-primary);
-  font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pr-typebadge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
-  padding: 2px 8px; border-radius: 20px; background: rgba(99,102,241,0.12); color: #a5b4fc; flex-shrink: 0; }
-.pr-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
-  color: var(--cf-text-secondary); white-space: nowrap; cursor: pointer; flex-shrink: 0; }
-.pr-pat { width: 100%; font-family: ui-monospace, monospace; }
-.pr-msg, .pr-bp { width: 100%; resize: vertical; font-family: inherit; }
-.pr-msg:disabled { opacity: 0.5; }
-.pr-del { background: none; border: none; color: var(--cf-text-muted); font-size: 20px; line-height: 1;
-  cursor: pointer; padding: 0 4px; flex-shrink: 0; }
-.pr-del:hover { color: #ef4444; }
+
+/* Compact, collapsible page list — one line per page; expand to edit. */
+.pg-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.pg-summary { font-size: 12.5px; color: var(--cf-text-muted); font-weight: 600; }
+.pg-expand-all { background: none; border: none; color: #6366f1; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; font-family: inherit; }
+.pg-expand-all:hover { text-decoration: underline; }
+.pg-list { display: flex; flex-direction: column; gap: 6px; }
+.pg-row { border: 1px solid var(--cf-border-default); border-radius: 10px; background: var(--cf-bg-surface); overflow: hidden; }
+.pg-row.open { border-color: rgba(99,102,241,0.4); }
+.pg-head { display: flex; align-items: center; gap: 10px; padding: 9px 12px; cursor: pointer; }
+.pg-head:hover { background: var(--cf-bg-ghost-hover, rgba(148,163,184,0.06)); }
+.pg-caret { color: var(--cf-text-muted); flex-shrink: 0; transition: transform .2s; }
+.pg-row.open .pg-caret { transform: rotate(90deg); }
+.pg-path { font-family: ui-monospace, monospace; font-size: 13px; font-weight: 600; color: var(--cf-text-primary);
+  flex-shrink: 0; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: 20px; background: rgba(99,102,241,0.12); color: #a5b4fc; flex-shrink: 0; }
+.pg-preview { flex: 1; min-width: 0; font-size: 12px; color: var(--cf-text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-switches { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.pg-sw-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.pg-sw-label { font-size: 11px; font-weight: 600; color: var(--cf-text-muted); }
+.pg-switch { position: relative; display: inline-block; width: 34px; height: 20px; flex-shrink: 0; cursor: pointer; }
+.pg-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.pg-slider { position: absolute; inset: 0; background: var(--cf-border-default, #475569); border-radius: 20px; transition: background .15s; }
+.pg-slider::before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%; transition: transform .15s; }
+.pg-switch input:checked + .pg-slider { background: #6366f1; }
+.pg-switch input:checked + .pg-slider::before { transform: translateX(14px); }
+.pg-body { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px;
+  border-top: 1px solid var(--cf-border-subtle); }
+.pg-field { display: flex; flex-direction: column; gap: 4px; }
+.pg-field label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cf-text-muted); }
+.pg-field textarea { resize: vertical; font-family: inherit; }
+.pg-field textarea:disabled { opacity: 0.5; }
+.pg-del { background: none; border: none; color: var(--cf-text-muted); font-size: 18px; line-height: 1;
+  cursor: pointer; padding: 0 2px; flex-shrink: 0; }
+.pg-del:hover { color: #ef4444; }
+@media (max-width: 640px) {
+  .pg-preview { display: none; }
+  .pg-path { max-width: 110px; }
+  .pg-sw-label { display: none; }
+  .pg-switches { gap: 10px; }
+}
 </style>
