@@ -178,6 +178,8 @@ class ChatSession(models.Model):
 
     # Trigger flags
     closing_triggered = models.BooleanField(default=False)
+    # First-touch intro prepend control for page-aware greetings (page_rules).
+    greeting_intro_sent = models.BooleanField(default=False)
     afk_nudge_sent = models.BooleanField(default=False)
     nudge_count = models.IntegerField(default=0)
     last_nudge_at = models.DateTimeField(null=True, blank=True)

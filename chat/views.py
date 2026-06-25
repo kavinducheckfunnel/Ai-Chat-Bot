@@ -11,6 +11,7 @@ from rest_framework.response import Response
 from .models import ChatSession
 from .ai_service import generate_ai_response
 from .utils import client_allows_image
+from . import page_rules as _page_rules
 from .throttles import ChatRateThrottle, SessionRateThrottle
 from users.models import Client
 from channels.layers import get_channel_layer
@@ -215,6 +216,12 @@ def widget_config(request, client_id):
         # Reflect plan entitlement so the widget shows the upload button for
         # Growth+ tenants even if the per-client toggle was never flipped.
         'image_input_enabled': client_allows_image(client),
+        # ── Page-aware proactive triggers ────────────────────────────────
+        'assistant_intro': client.assistant_intro,
+        'proactive_enabled': bool(client.proactive_notifications_enabled) and getattr(client, 'cta_mode', 'ai') != 'off',
+        'notification_timeout_seconds': client.notification_timeout_seconds,
+        'auto_close_seconds': client.auto_close_seconds,
+        'page_rules': _page_rules.public_rules(client),
     })
 
 
@@ -423,6 +430,80 @@ def trigger_event(request):
         pass  # WS might not be open; message is still saved to history
 
     return Response({'status': 'sent', 'trigger_type': trigger_type})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([SessionRateThrottle])
+def page_message(request):
+    """Page-aware proactive greeting (URL trigger).
+
+    The widget matches the current URL against the client's page_rules and shows
+    a suggestion bubble INSTANTLY (client-side, zero LLM). It then calls this to
+    persist the greeting into the session so it appears in the chat inbox /
+    God-View and survives reload. We re-derive the message server-side
+    (authoritative), prepend the first-touch intro once, and de-dupe one
+    greeting per page_type per session.
+
+    Body: { session_id, client_id, page_url, page_type?, product_name? }
+    Returns: { status, message?, msg_id? }
+    """
+    session_id = (request.data.get('session_id') or '').strip()
+    page_url = (request.data.get('page_url') or '').strip()
+    product_name = (request.data.get('product_name') or '').strip()[:160]
+
+    if not session_id:
+        return Response({'status': 'ignored', 'reason': 'no session'}, status=status.HTTP_202_ACCEPTED)
+
+    try:
+        session = ChatSession.objects.select_related('client').get(session_id=session_id)
+    except (ChatSession.DoesNotExist, Exception):
+        return Response({'status': 'ignored', 'reason': 'session not found'}, status=status.HTTP_202_ACCEPTED)
+
+    client = session.client
+    if not client:
+        return Response({'status': 'ignored', 'reason': 'no client'}, status=status.HTTP_202_ACCEPTED)
+
+    # Respect global proactive switch + takeover.
+    if session.takeover_active:
+        return Response({'status': 'ignored', 'reason': 'takeover'}, status=status.HTTP_202_ACCEPTED)
+    if not client.proactive_notifications_enabled or getattr(client, 'cta_mode', 'ai') == 'off':
+        return Response({'status': 'ignored', 'reason': 'proactive off'}, status=status.HTTP_202_ACCEPTED)
+
+    rules = _page_rules.get_rules(client)
+    rule = _page_rules.match_rule(rules, page_url)
+    if not rule or not rule.get('greeting_enabled', True) or not rule.get('greeting_message'):
+        return Response({'status': 'ignored', 'reason': 'no greeting for page'}, status=status.HTTP_202_ACCEPTED)
+
+    page_type = rule.get('page_type') or _page_rules.classify_path(page_url)
+
+    # De-dupe: one greeting per page_type per session (decision: avoid spam).
+    from django.core.cache import cache
+    dedupe_key = f'pg_{session_id}_{page_type}'
+    if cache.get(dedupe_key):
+        return Response({'status': 'duplicate'}, status=status.HTTP_202_ACCEPTED)
+
+    text = _page_rules.resolve_greeting_text(rule, product_name)
+    if not text:
+        return Response({'status': 'ignored', 'reason': 'empty'}, status=status.HTTP_202_ACCEPTED)
+
+    # First-touch intro prepend (once per session).
+    if not session.greeting_intro_sent:
+        intro = (client.assistant_intro or '').strip()
+        if intro:
+            text = f'{intro} {text}'
+
+    msg_id = f'pg_{uuid.uuid4().hex[:12]}'
+    history = session.chat_history or []
+    history.append({'role': 'ai', 'message': text, 'source': 'page_greeting', 'msg_id': msg_id})
+    ChatSession.objects.filter(session_id=session_id).update(
+        chat_history=history,
+        last_message_at=timezone.now(),
+        greeting_intro_sent=True,
+    )
+    cache.set(dedupe_key, '1', 2 * 60 * 60)  # 2h ~ session lifetime
+
+    return Response({'status': 'sent', 'message': text, 'msg_id': msg_id, 'page_type': page_type})
 
 
 @api_view(['POST'])

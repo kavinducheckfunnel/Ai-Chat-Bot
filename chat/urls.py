@@ -6,6 +6,7 @@ urlpatterns = [
     path('message/', views.chat_message, name='chat_message'),
     path('widget-config/<uuid:client_id>/', views.widget_config, name='widget_config'),
     path('trigger/', views.trigger_event, name='trigger_event'),
+    path('page-message/', views.page_message, name='page_message'),
     path('lead/', views.capture_lead, name='capture_lead'),
     path('link-click/', views.track_link_click, name='track_link_click'),
     path('session/<str:session_id>/messages/', views.session_messages, name='session_messages'),

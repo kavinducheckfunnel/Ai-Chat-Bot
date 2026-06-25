@@ -227,6 +227,18 @@ class Client(models.Model):
     # [{"id": "uuid-str", "title": "Greeting", "body": "Hi there! How can I help?"}]
     canned_responses = models.JSONField(default=list, blank=True)
 
+    # ── Page-aware proactive triggers (URL → greeting) ────────────────────────
+    # Ordered list of page rules; see chat/page_rules.py for the shape + defaults.
+    # Empty = use DEFAULT_PAGE_RULES.
+    page_rules = models.JSONField(default=list, blank=True)
+    assistant_intro = models.CharField(
+        max_length=200, default="Hi! I'm your AI Shopping Assistant."
+    )
+    proactive_notifications_enabled = models.BooleanField(default=True)
+    notification_timeout_seconds = models.IntegerField(default=20)
+    # Auto-close the open chat window after N seconds idle. 0 = never.
+    auto_close_seconds = models.IntegerField(default=0)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

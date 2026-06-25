@@ -405,6 +405,9 @@ export function useAdminApi() {
       method: 'PATCH', body: JSON.stringify(data),
     }),
 
+    // Discovered high-level pages + default page rules (Proactive & Pages tab)
+    getSitePages: (id) => apiFetch(`/api/admin/clients/${id}/site-pages/`),
+
     getTelegramWebhookStatus: (clientId) =>
       apiFetch(`/api/admin/clients/${clientId}/telegram-webhook/`),
     reregisterTelegramWebhook: (clientId) =>

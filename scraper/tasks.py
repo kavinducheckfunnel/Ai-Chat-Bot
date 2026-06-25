@@ -183,11 +183,57 @@ def scrape_client_website(self, client_id):
         client.save(update_fields=['ingestion_status', 'total_pages_ingested', 'last_scraped_at'])
         logger.info(f'[scrape_client_website] Done — {count} chunks for "{client.name}"')
 
+        try:
+            sync_site_pages(client)
+        except Exception as e:
+            logger.warning(f'[scrape_client_website] site-page sync failed: {e}')
+
     except Exception as exc:
         logger.error(f'[scrape_client_website] Failed for "{client.name}": {exc}')
         client.ingestion_status = 'FAILED'
         client.save(update_fields=['ingestion_status'])
         raise self.retry(exc=exc, countdown=60)
+
+
+def sync_site_pages(client):
+    """Rebuild the high-level SitePage list for a client from its embedded
+    pages. Collapsed to ONE representative page per page_type (so a store with
+    thousands of products yields a clean ~10-row list the tenant attaches
+    rules to), keyed by chat.page_rules.classify_path.
+    """
+    from urllib.parse import urlparse
+    from scraper.models import DocumentChunk, SitePage
+    from chat.page_rules import classify_path
+
+    seen = {}  # page_type -> (path, url, title)
+    rows = (DocumentChunk.objects
+            .filter(client=client)
+            .values_list('source_url', 'metadata')[:5000])
+    for url, meta in rows:
+        if not url:
+            continue
+        try:
+            path = urlparse(url).path or '/'
+        except Exception:
+            path = '/'
+        pt = classify_path(path)
+        if pt in seen:
+            continue
+        title = ''
+        if isinstance(meta, dict):
+            title = (meta.get('title') or '')[:300]
+        seen[pt] = (path, url, title)
+
+    keep_paths = []
+    for pt, (path, url, title) in seen.items():
+        SitePage.objects.update_or_create(
+            client=client, path=path,
+            defaults={'url': url, 'title': title, 'page_type': pt},
+        )
+        keep_paths.append(path)
+    # Drop stale rows no longer represented.
+    SitePage.objects.filter(client=client).exclude(path__in=keep_paths).delete()
+    return len(keep_paths)
 
 
 @shared_task

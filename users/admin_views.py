@@ -431,6 +431,30 @@ def client_detail(request, client_id):
         return Response(status=204)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def client_site_pages(request, client_id):
+    """Pages discovered during scraping (for the Proactive & Pages config UI),
+    plus the canonical default page rules so the tenant can seed/extend them."""
+    accessible = get_accessible_clients(request.user)
+    try:
+        client = accessible.get(pk=client_id)
+    except Client.DoesNotExist:
+        return Response({'detail': 'Not found.'}, status=404)
+
+    from scraper.models import SitePage
+    from chat.page_rules import DEFAULT_PAGE_RULES, classify_path
+    pages = [
+        {'path': p.path, 'url': p.url, 'title': p.title, 'page_type': p.page_type}
+        for p in SitePage.objects.filter(client=client)[:500]
+    ]
+    return Response({
+        'pages': pages,
+        'default_rules': DEFAULT_PAGE_RULES,
+        'page_types': list({classify_path('/'), *[r['page_type'] for r in DEFAULT_PAGE_RULES]}),
+    })
+
+
 # ─── Client logo upload ──────────────────────────────────────────────────────
 #
 # Accepts a multipart image (PNG / JPEG / GIF / WebP), saves it under

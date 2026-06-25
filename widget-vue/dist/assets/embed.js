@@ -1,4 +1,4 @@
-(function(){"use strict";function f(i,r,o,s,d){if(!i||!r)return"";const n=r.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),l=`<style>
+(function(){"use strict";function f(i,a,o,s,l){if(!i||!a)return"";const n=a.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),d=`<style>
 #cf-w {
   --cf-accent: ${o||"#6366f1"};
   --cf-bg: #111111;
@@ -18,13 +18,29 @@
 }
 
 /* ── Pill bar ── */
-#cf-pill { display: flex; align-items: center; gap: 10px;
+#cf-pill { position: relative; display: flex; align-items: center; gap: 10px;
   padding: 9px 11px 9px 9px; background: rgba(17,17,17,0.97);
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.08); border-radius: 100px; cursor: pointer;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5); transition: transform .2s, box-shadow .2s;
   min-width: 220px; user-select: none;
   animation: cf-pi .3s cubic-bezier(.34,1.56,.64,1) forwards; }
+/* ── Suggestion notification (page-aware greeting) ── */
+#cf-note { display: none; max-width: 280px; margin-bottom: 10px; padding: 11px 13px;
+  background: rgba(17,17,17,0.97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.10); border-radius: 16px; border-bottom-right-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5); color: #e7e9ee; font-size: 13px; line-height: 1.45;
+  position: relative; cursor: pointer; user-select: none;
+  animation: cf-pi .3s cubic-bezier(.34,1.56,.64,1) forwards; }
+#cf-note.show { display: block; }
+#cf-note-tx { display: block; padding-right: 16px; }
+#cf-note-x { position: absolute; top: 5px; right: 7px; background: none; border: none; color: #94a3b8;
+  font-size: 15px; line-height: 1; cursor: pointer; padding: 2px; }
+#cf-note-x:hover { color: #fff; }
+/* ── Unread badge on the launcher ── */
+#cf-badge { position: absolute; top: -6px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px;
+  background: #ef4444; color: #fff; font-size: 11px; font-weight: 700; border-radius: 9px;
+  display: none; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.4); }
 @keyframes cf-pi { from { opacity: 0; transform: translateY(12px) scale(.95); }
   to { opacity: 1; transform: translateY(0) scale(1); } }
 #cf-pill:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.55); }
@@ -265,6 +281,7 @@
   border: 1px solid #e2e8f0; box-shadow: 0 8px 32px rgba(0,0,0,0.10); }
 #cf-w[data-cf-theme="light"] .cf-pi-txt { color: #64748b; }
 #cf-w[data-cf-theme="light"] #cf-win { box-shadow: 0 24px 64px rgba(0,0,0,0.15); }
+#cf-w[data-cf-theme="light"] #cf-note { background: rgba(255,255,255,0.98); color: #1e293b; border-color: rgba(0,0,0,0.08); }
 #cf-w[data-cf-theme="light"] #cf-xb { background: #f1f5f9; color: #475569; }
 #cf-w[data-cf-theme="light"] #cf-xb:hover { background: #e2e8f0; color: #1e293b; }
 #cf-w[data-cf-theme="light"] #cf-inp { background: #f8fafc; border-color: #e2e8f0; color: #1e293b; }
@@ -382,12 +399,14 @@
 </div>
 <div id="cf-pby">Powered by <a href="https://checkfunnels.com" target="_blank" rel="noopener">Checkfunnels</a></div>
 </div>
+<div id="cf-note"><span id="cf-note-tx"></span><button id="cf-note-x" aria-label="Dismiss">&#10005;</button></div>
 <div id="cf-pill" role="button" aria-label="Open chat" tabindex="0">
 <div class="cf-pi-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
 <span class="cf-pi-txt">Write a message...</span>
 <div class="cf-pi-send"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+<span id="cf-badge"></span>
 </div>
-</div>`,a=`<script>
+</div>`,r=`<script>
 (function(){
 var C='${i}',B='${n}';
 
@@ -477,6 +496,144 @@ function markSeen(id){if(id)seenMsgIds[id]=1}
 function isSeen(id){return !!(id&&seenMsgIds[id])}
 function newMsgId(){return 'u_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)}
 
+// ── Page-aware proactive triggers (URL → greeting) ───────────────────
+// State + helpers. Matching/classification mirrors chat/page_rules.py so the
+// widget can show greetings INSTANTLY (no LLM, no blocking round-trip); the
+// server re-derives authoritatively when we persist for the inbox.
+var pageRules=[],assistantIntro='',proactiveEnabled=true,notifTimeout=20,autoCloseSeconds=0;
+var cfgReady=false,widgetHidden=false;
+var UNREAD_KEY='cf_unread_'+sid,GREET_KEY='cf_greeted_'+sid,INTRO_KEY='cf_intro_'+sid,DND_KEY='cf_dnd_'+C;
+
+function cfClassify(path){
+  var p=(path||'/').toLowerCase().split('?')[0].split('#')[0];
+  if(p===''||p==='/'||p==='/home'||p==='/home/')return'home';
+  if(p.indexOf('/checkout')>=0)return'checkout';
+  if(p.indexOf('/cart')>=0)return'cart';
+  if(p.indexOf('/products/')>=0||p.indexOf('/product/')>=0)return'product';
+  if(p.indexOf('/collections/')>=0||p.indexOf('/category/')>=0||p.indexOf('/product-category/')>=0||p.indexOf('/shop')>=0)return'collection';
+  if(p.indexOf('/order-tracking')>=0||p.indexOf('/track')>=0||p.indexOf('/orders/')>=0)return'track';
+  if(p.indexOf('/offers')>=0||p.indexOf('/pricing')>=0||p.indexOf('/deals')>=0||p.indexOf('/sale')>=0)return'offers';
+  if(p.indexOf('/contact')>=0)return'contact';
+  if(p.indexOf('/about')>=0)return'about';
+  if(p.indexOf('/faq')>=0||p.indexOf('/help')>=0)return'faq';
+  return'fallback';
+}
+function cfMatches(rule,path){
+  var pt=rule.page_type||'';
+  if(pt==='fallback')return true;
+  var mt=rule.match_type||'contains',pat=rule.pattern||'';
+  if(pat){try{
+    if(mt==='exact'){if(path===pat)return true}
+    else if(mt==='prefix'){if(path.indexOf(pat)===0)return true}
+    else if(mt==='regex'){if(new RegExp(pat).test(path))return true}
+    else{if(path.toLowerCase().indexOf(pat.toLowerCase())>=0)return true}
+  }catch(e){}}
+  return !!pt&&cfClassify(path)===pt;
+}
+function cfMatchRule(rules,path){
+  var ranked=(rules||[]).slice().sort(function(a,b){return(b.priority||0)-(a.priority||0)});
+  for(var i=0;i<ranked.length;i++){if(cfMatches(ranked[i],path))return ranked[i]}
+  return null;
+}
+function cfGreetText(rule,pname){
+  var m=rule.greeting_message||'';
+  if(m.indexOf('{product_name}')>=0){
+    var n=(pname||'').trim();
+    if(n)m=m.split('{product_name}').join(n);
+    else m=m.split('the {product_name}').join('this product').split('{product_name}').join('this product');
+  }
+  return m;
+}
+function cfProductName(){
+  try{
+    var s=document.querySelectorAll('script[type="application/ld+json"]');
+    for(var i=0;i<s.length;i++){try{
+      var j=JSON.parse(s[i].textContent||'{}');var arr=Array.isArray(j)?j:[j];
+      for(var k=0;k<arr.length;k++){var o=arr[k];if(!o)continue;
+        var ty=o['@type'];var isP=(ty==='Product')||(Array.isArray(ty)&&ty.indexOf('Product')>=0);
+        if(isP&&o.name)return String(o.name).slice(0,120);
+        if(o['@graph']&&o['@graph'].length){for(var g=0;g<o['@graph'].length;g++){var go=o['@graph'][g];if(go&&go['@type']==='Product'&&go.name)return String(go.name).slice(0,120)}}
+      }
+    }catch(e){}}
+    var og=document.querySelector('meta[property="og:title"]');
+    if(og&&og.content)return og.content.slice(0,120);
+    if(document.title)return document.title.split('|')[0].split('\\u2013')[0].split('-')[0].trim().slice(0,120);
+  }catch(e){}
+  return'';
+}
+// Badge (persists across page loads, keyed by sid)
+function getUnread(){try{return parseInt(localStorage.getItem(UNREAD_KEY)||'0',10)||0}catch(e){return 0}}
+function setUnread(n){try{localStorage.setItem(UNREAD_KEY,String(n))}catch(e){}renderBadge()}
+function bumpUnread(){setUnread(getUnread()+1)}
+function clearUnread(){setUnread(0)}
+function renderBadge(){var b=$('cf-badge');if(!b)return;var n=getUnread();if(n>0&&!isOpen){b.textContent=n>9?'9+':String(n);b.style.display='flex'}else{b.style.display='none'}}
+// Do-not-disturb (session) + per-type greeting dedupe
+function isDnd(){try{return sessionStorage.getItem(DND_KEY)==='1'}catch(e){return false}}
+function setDnd(){try{sessionStorage.setItem(DND_KEY,'1')}catch(e){}}
+function greetedTypes(){try{return JSON.parse(localStorage.getItem(GREET_KEY)||'[]')||[]}catch(e){return[]}}
+function markGreeted(t){var a=greetedTypes();if(a.indexOf(t)<0){a.push(t);try{localStorage.setItem(GREET_KEY,JSON.stringify(a))}catch(e){}}}
+// Suggestion bubble
+var noteTimer=null;
+function showNote(text){
+  if(isDnd()||isOpen||widgetHidden)return;
+  var n=$('cf-note'),tx=$('cf-note-tx');if(!n||!tx)return;
+  tx.textContent=text;n.classList.add('show');
+  if(noteTimer)clearTimeout(noteTimer);
+  noteTimer=setTimeout(hideNote,(notifTimeout||20)*1000);
+}
+function hideNote(){var n=$('cf-note');if(n)n.classList.remove('show');if(noteTimer){clearTimeout(noteTimer);noteTimer=null}}
+// Core: decide + show + persist the page greeting (one per page_type / session)
+function maybeGreet(){
+  if(!cfgReady||widgetHidden||!proactiveEnabled||isOpen)return;
+  var path=location.pathname||'/';
+  var rule=cfMatchRule(pageRules,path);
+  if(!rule||rule.greeting_enabled===false||!rule.greeting_message)return;
+  var pt=rule.page_type||cfClassify(path);
+  if(greetedTypes().indexOf(pt)>=0)return;
+  markGreeted(pt);
+  var pname=(pt==='product')?cfProductName():'';
+  var text=cfGreetText(rule,pname);
+  var introDone=false;try{introDone=localStorage.getItem(INTRO_KEY)==='1'}catch(e){}
+  if(!introDone&&assistantIntro){text=assistantIntro+' '+text;try{localStorage.setItem(INTRO_KEY,'1')}catch(e){}}
+  bumpUnread();
+  showNote(text);
+  try{fetch(B+'/api/chat/page-message/',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({session_id:sid,client_id:C,page_url:location.href,page_type:pt,product_name:pname})}).catch(function(){})}catch(e){}
+}
+// Re-fetch the server transcript so persisted greetings appear when opened.
+function refreshTranscript(){
+  fetch(B+'/api/chat/session/'+encodeURIComponent(sid)+'/messages/?limit=50')
+    .then(function(r){return r.ok?r.json():null})
+    .then(function(d){if(d&&Array.isArray(d.messages)&&d.messages.length)renderServerMsgs(d.messages)})
+    .catch(function(){});
+}
+// Auto-close idle timer
+var lastActivity=Date.now();
+function resetIdle(){lastActivity=Date.now()}
+setInterval(function(){
+  if(autoCloseSeconds>0&&isOpen&&(Date.now()-lastActivity)/1000>=autoCloseSeconds)toggleOpen();
+},2000);
+// Re-evaluate visibility + greeting on SPA route changes
+function cfOnNav(){
+  if(!cfgReady)return;
+  applyVisibility();
+  maybeGreet();
+}
+(function(){
+  try{
+    var _ps=history.pushState;history.pushState=function(){var r=_ps.apply(this,arguments);try{cfOnNav()}catch(e){}return r};
+    var _rs=history.replaceState;history.replaceState=function(){var r=_rs.apply(this,arguments);try{cfOnNav()}catch(e){}return r};
+    window.addEventListener('popstate',function(){try{cfOnNav()}catch(e){}});
+  }catch(e){}
+})();
+function applyVisibility(){
+  var w=$('cf-w');if(!w)return;
+  var vr=cfMatchRule(pageRules,location.pathname||'/');
+  widgetHidden=!!(vr&&vr.enabled_widget===false);
+  w.style.display=widgetHidden?'none':'';
+  if(widgetHidden)hideNote();
+}
+
 // ── Live config — applied on load + every 60 seconds ─────────────────
 function applyConfig(cfg){
   if(!cfg)return;
@@ -490,6 +647,16 @@ function applyConfig(cfg){
   if(cfg.voice_input_enabled)$('cf-vb').style.display='flex';else $('cf-vb').style.display='none';
   if(cfg.image_input_enabled)$('cf-ib').style.display='flex';else $('cf-ib').style.display='none';
   if(cfg.cta_message)liveCtaMsg=cfg.cta_message;
+  // Page-aware proactive config
+  if(Array.isArray(cfg.page_rules))pageRules=cfg.page_rules;
+  if(typeof cfg.assistant_intro==='string')assistantIntro=cfg.assistant_intro;
+  if(typeof cfg.proactive_enabled!=='undefined')proactiveEnabled=!!cfg.proactive_enabled;
+  if(cfg.notification_timeout_seconds)notifTimeout=cfg.notification_timeout_seconds;
+  if(typeof cfg.auto_close_seconds!=='undefined')autoCloseSeconds=cfg.auto_close_seconds||0;
+  cfgReady=true;
+  applyVisibility();
+  renderBadge();
+  maybeGreet();
 }
 function fetchConfig(){
   fetch(B+'/api/chat/widget-config/'+C+'/').then(function(r){return r.json()}).then(applyConfig).catch(function(){});
@@ -765,7 +932,10 @@ function _sendProactive(){
     sessionStorage.setItem(k,String(Date.now()));
   }catch(_){}
 }
-setTimeout(_sendProactive,10000);
+// Page-aware greetings (maybeGreet) are now the landing/navigation layer —
+// they show as a non-intrusive bubble + badge instead of the old proactive_open
+// which force-opened the window. Disabled to avoid double messaging.
+// setTimeout(_sendProactive,10000);
 
 function connect(){
   ws=new WebSocket(B.replace(/^https/,'wss').replace(/^http/,'ws')+'/ws/chat/'+C+'/'+sid+'/');
@@ -815,8 +985,10 @@ function connect(){
           });
           $('cf-msgs').appendChild(qrEl);$('cf-msgs').scrollTop=9999;
         }
-        var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action','lead_captured','proactive_open'];
+        var AUTO_OPEN=['afk_nudge','fomo','exit_intent','pricing_hesitation','add_to_cart_help','abandoned_form','deep_engagement','rage_click_help','high_intent_action','lead_captured'];
         if(AUTO_OPEN.indexOf(d.source)>=0&&!isOpen)toggleOpen();
+        // Any bot message that arrives while the chat is closed counts as unread.
+        else if(!isOpen)bumpUnread();
       }
     }catch(x){}};
   ws.onerror=function(){rmDots();busy=false};
@@ -873,8 +1045,18 @@ function toggleVoice(){
 // ── Toggle ───────────────────────────────────────────────────────────
 function toggleOpen(){
   isOpen=!isOpen;
-  if(isOpen){$('cf-win').classList.add('open');$('cf-pill').style.display='none';if(!ws)connect()}
-  else{$('cf-win').classList.remove('open');$('cf-pill').style.display='flex'}}
+  if(isOpen){
+    $('cf-win').classList.add('open');$('cf-pill').style.display='none';
+    hideNote();
+    var hadUnread=getUnread()>0;
+    clearUnread();              // read & clear — those messages won't re-badge
+    if(hadUnread)refreshTranscript();   // surface persisted page greetings
+    resetIdle();
+    if(!ws)connect();
+  }else{
+    $('cf-win').classList.remove('open');$('cf-pill').style.display='flex';
+    renderBadge();
+  }}
 
 // ── Lightweight behavioral tracker — PERSISTS ACROSS PAGE LOADS ──────
 // State is kept in sessionStorage so visitors browsing multiple pages
@@ -1147,8 +1329,12 @@ $('cf-pill').onclick=toggleOpen;
 $('cf-pill').onkeydown=function(e){if(e.key==='Enter'||e.key===' ')toggleOpen()};
 $('cf-xb').onclick=toggleOpen;
 $('cf-sb').onclick=send;
-$('cf-inp').addEventListener('keydown',function(e){if(e.key==='Enter')send()});
-$('cf-inp').addEventListener('input',function(){$('cf-sb').disabled=!this.value.trim()&&!pendingImg});
+$('cf-inp').addEventListener('keydown',function(e){resetIdle();if(e.key==='Enter')send()});
+$('cf-inp').addEventListener('input',function(){resetIdle();$('cf-sb').disabled=!this.value.trim()&&!pendingImg});
+// Suggestion bubble: click body → open chat; click X → do-not-disturb (session)
+$('cf-note').onclick=function(e){if(e&&e.target&&e.target.id==='cf-note-x')return;hideNote();if(!isOpen)toggleOpen()};
+$('cf-note-x').onclick=function(e){if(e){e.stopPropagation()}hideNote();setDnd()};
+renderBadge();
 $('cf-ib').onclick=function(){$('cf-fi').click()};
 $('cf-fi').onchange=function(){handleFile(this.files[0]);this.value=''};
 $('cf-prm').onclick=clearImg;
@@ -1192,7 +1378,7 @@ if($('cf-lead-ph')){
 })();
 })();
 <\/script>`;return`<!-- Start of Checkfunnel code -->
-`+l+`
+`+d+`
 `+t+`
-`+a+`
-<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=n;var l=Array.prototype.slice.call(c.childNodes);l.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var r=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=r+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",d=window.__CF_NAME__||"AI Assistant",n=f(i,o,s,d,"html");if(!n)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();
+`+r+`
+<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=n;var d=Array.prototype.slice.call(c.childNodes);d.forEach(function(t){if(t.tagName==="SCRIPT"){var r=document.createElement("script");t.src?r.src=t.src:r.textContent=t.textContent,document.body.appendChild(r)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var a=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=a+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",l=window.__CF_NAME__||"AI Assistant",n=f(i,o,s,l,"html");if(!n)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();

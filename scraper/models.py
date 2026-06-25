@@ -31,6 +31,30 @@ class DocumentChunk(models.Model):
         return f"Chunk {self.id} from {self.source_url}"
 
 
+class SitePage(models.Model):
+    """A distinct high-level page discovered during scraping/sync.
+
+    Powers the tenant's "Pages" config in the portal — they attach per-page
+    greeting/behavior rules + a show/hide toggle to these. Upserted by the
+    ingestion pipeline (dedup by client+path); page_type auto-classified from
+    the URL via chat.page_rules.classify_path.
+    """
+    client    = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='site_pages')
+    path      = models.CharField(max_length=1000)
+    url       = models.URLField(max_length=1000)
+    title     = models.CharField(max_length=300, blank=True)
+    page_type = models.CharField(max_length=32, default='fallback')
+    last_seen = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [('client', 'path')]
+        indexes = [models.Index(fields=['client', 'page_type'])]
+        ordering = ['path']
+
+    def __str__(self):
+        return f'{self.client_id} {self.path} [{self.page_type}]'
+
+
 class WebhookEvent(models.Model):
     """
     Audit log of every incoming sync webhook (Shopify/WooCommerce/WordPress).

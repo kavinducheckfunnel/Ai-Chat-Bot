@@ -885,6 +885,28 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         system_prompt += order_block
         dynamic_system += order_block  # Anthropic path reads dynamic_system, not system_prompt
 
+    # ── Per-page behavior prompt (page_rules) ────────────────────────────────
+    # If the tenant wrote a "how to act on this page" instruction for the page
+    # the visitor is currently on, inject it so the AI tailors its replies
+    # (e.g. on a product page focus on specs/sizing; on cart reassure on
+    # shipping/returns). Derived from the visitor's most recent page visit.
+    try:
+        visits = session.page_visits or []
+        if visits and session.client_id:
+            from . import page_rules as _pr
+            last_url = (visits[-1] or {}).get('url') or ''
+            rule = _pr.match_rule(_pr.get_rules(session.client), last_url)
+            bp = (rule or {}).get('behavior_prompt', '').strip() if rule else ''
+            if bp:
+                page_block = (
+                    f"\n\nPAGE CONTEXT — the visitor is currently on the "
+                    f"\"{rule.get('label', 'page')}\" page. {bp}"
+                )
+                system_prompt += page_block
+                dynamic_system += page_block
+    except Exception as e:
+        logger.warning(f'[ai] page behavior injection failed: {e}')
+
     # JSON-mode tail-prompt — used for text-only turns. Vision turns get a
     # plain-text instruction instead: image-capable models reliably break
     # strict-JSON output when an image is also in the request, so forcing

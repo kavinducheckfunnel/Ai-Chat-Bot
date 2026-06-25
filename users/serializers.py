@@ -33,6 +33,8 @@ class ClientSerializer(serializers.ModelSerializer):
             'slack_webhook_url',
             'outbound_webhook_url', 'outbound_webhook_events',
             'canned_responses',
+            'page_rules', 'assistant_intro', 'proactive_notifications_enabled',
+            'notification_timeout_seconds', 'auto_close_seconds',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'session_count', 'ingestion_status', 'total_pages_ingested']
 

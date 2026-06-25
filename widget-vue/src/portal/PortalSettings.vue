@@ -8,6 +8,7 @@
     <div class="tabs">
       <button class="tab" :class="{ active: activeTab === 'channels' }" @click="activeTab = 'channels'">Channels & embed</button>
       <button class="tab" :class="{ active: activeTab === 'chatbot' }" @click="activeTab = 'chatbot'">Chatbot</button>
+      <button class="tab" :class="{ active: activeTab === 'proactive' }" @click="activeTab = 'proactive'">Proactive &amp; pages</button>
       <button class="tab" :class="{ active: activeTab === 'knowledge' }" @click="activeTab = 'knowledge'">Knowledge base</button>
       <button class="tab" :class="{ active: activeTab === 'integrations' }" @click="activeTab = 'integrations'">Integrations</button>
     </div>
@@ -318,6 +319,89 @@
         </div>
       </div>
       </div><!-- end gate-wrap -->
+    </div>
+
+    <!-- ── Proactive & pages ───────────────────────────────────────────────── -->
+    <div v-if="activeTab === 'proactive'" class="tab-content">
+      <!-- Global proactive settings -->
+      <div class="section-card">
+        <h2 class="section-title">Proactive notifications</h2>
+        <p class="section-desc">Page-aware greetings appear as a small suggestion above the chat icon (they never force the window open) and land silently in the inbox with an unread badge.</p>
+        <div class="form-grid">
+          <div class="field" style="grid-column:1/-1">
+            <label>Enable proactive greetings</label>
+            <div class="toggle-row">
+              <button class="toggle-btn" :class="{ on: pForm.proactive_notifications_enabled }" @click="pForm.proactive_notifications_enabled = !pForm.proactive_notifications_enabled">
+                <span class="toggle-knob"></span>
+              </button>
+              <span class="toggle-lbl">{{ pForm.proactive_notifications_enabled ? 'On — show page greetings' : 'Off' }}</span>
+            </div>
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>First-touch intro (prepended to the first greeting of a session)</label>
+            <input class="input" type="text" v-model="pForm.assistant_intro" maxlength="200" placeholder="Hi! I'm your AI Shopping Assistant." />
+          </div>
+          <div class="field">
+            <label>Notification timeout (seconds)</label>
+            <input class="input" type="number" min="3" max="120" v-model.number="pForm.notification_timeout_seconds" />
+          </div>
+          <div class="field">
+            <label>Auto-close chat after idle (seconds, 0 = never)</label>
+            <input class="input" type="number" min="0" max="3600" v-model.number="pForm.auto_close_seconds" />
+          </div>
+        </div>
+        <div class="save-row">
+          <button class="btn-save" @click="saveProactive" :disabled="pSaving">{{ pSaving ? 'Saving…' : pSaved ? '✓ Saved' : 'Save settings' }}</button>
+        </div>
+      </div>
+
+      <!-- Page rules -->
+      <div class="section-card">
+        <div class="pr-head">
+          <div>
+            <h2 class="section-title">Page rules</h2>
+            <p class="section-desc">Per page type: the greeting shown, how the AI should behave there, and whether the widget is visible. Matched by URL — most specific wins.</p>
+          </div>
+          <div class="pr-head-actions">
+            <button class="btn-secondary" @click="seedDefaults" v-if="!pageRules.length">Load default rules</button>
+            <button class="btn-secondary" @click="addRule">+ Add rule</button>
+          </div>
+        </div>
+
+        <div v-if="discoveredPages.length" class="pr-discovered">
+          <span class="pr-disc-label">Discovered pages:</span>
+          <span v-for="dp in discoveredPages" :key="dp.path" class="pr-chip" :title="dp.url">{{ dp.page_type }} · {{ dp.path }}</span>
+        </div>
+
+        <div v-if="!pageRules.length" class="pr-empty">No rules yet — load the defaults or add one.</div>
+
+        <div v-for="(r, i) in pageRules" :key="r.id || i" class="pr-rule">
+          <div class="pr-rule-top">
+            <input class="input pr-label" v-model="r.label" placeholder="Label (e.g. Single Product)" />
+            <select class="input pr-type" v-model="r.page_type">
+              <option v-for="t in PAGE_TYPES" :key="t" :value="t">{{ t }}</option>
+            </select>
+            <button class="pr-del" @click="pageRules.splice(i,1)" title="Remove rule">&times;</button>
+          </div>
+          <div class="pr-rule-mid">
+            <select class="input pr-mt" v-model="r.match_type">
+              <option value="contains">URL contains</option>
+              <option value="prefix">URL starts with</option>
+              <option value="exact">URL equals</option>
+              <option value="regex">Regex</option>
+            </select>
+            <input class="input pr-pat" v-model="r.pattern" placeholder="/products/" />
+            <label class="pr-toggle"><input type="checkbox" v-model="r.greeting_enabled" /> Greeting</label>
+            <label class="pr-toggle"><input type="checkbox" v-model="r.enabled_widget" /> Widget visible</label>
+          </div>
+          <textarea class="input pr-msg" v-model="r.greeting_message" rows="2" placeholder="Greeting message — use {product_name} on product pages"></textarea>
+          <textarea class="input pr-bp" v-model="r.behavior_prompt" rows="2" placeholder="How the AI should behave on this page (optional)"></textarea>
+        </div>
+
+        <div class="save-row">
+          <button class="btn-save" @click="savePageRules" :disabled="pSaving">{{ pSaving ? 'Saving…' : prSaved ? '✓ Saved' : 'Save page rules' }}</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── Knowledge base ──────────────────────────────────────────────────── -->
@@ -1151,12 +1235,87 @@ watch(() => props.client, (c) => {
   intForm.value.outbound_webhook_url = c.outbound_webhook_url || ''
   intForm.value.outbound_webhook_events = c.outbound_webhook_events || 'hot_lead,lead_captured,new_session'
   cannedResponses.value = (c.canned_responses || []).map(cr => ({ ...cr }))
+  // Proactive & pages
+  pForm.value.proactive_notifications_enabled = c.proactive_notifications_enabled !== false
+  pForm.value.assistant_intro = c.assistant_intro || "Hi! I'm your AI Shopping Assistant."
+  pForm.value.notification_timeout_seconds = c.notification_timeout_seconds || 20
+  pForm.value.auto_close_seconds = c.auto_close_seconds || 0
+  pageRules.value = Array.isArray(c.page_rules) ? c.page_rules.map(r => ({ ...r, id: r.id || cryptoId() })) : []
+  loadSitePages()
   // After client loads, fetch live Telegram webhook health so the user
   // sees right away whether Telegram knows where to deliver messages.
   if (c.telegram_enabled && c.telegram_bot_token) {
     loadTelegramWebhookStatus()
   }
 }, { immediate: true })
+
+// ── Proactive & pages ─────────────────────────────────────────────────────────
+const PAGE_TYPES = ['home', 'collection', 'product', 'cart', 'checkout', 'contact', 'about', 'faq', 'offers', 'track', 'fallback']
+const pForm = ref({
+  proactive_notifications_enabled: true,
+  assistant_intro: "Hi! I'm your AI Shopping Assistant.",
+  notification_timeout_seconds: 20,
+  auto_close_seconds: 0,
+})
+const pageRules = ref([])
+const discoveredPages = ref([])
+const defaultRules = ref([])
+const pSaving = ref(false)
+const pSaved = ref(false)
+const prSaved = ref(false)
+
+function cryptoId() {
+  try { return crypto.randomUUID() } catch { return 'r' + Math.random().toString(36).slice(2, 10) }
+}
+
+async function loadSitePages() {
+  if (!props.client) return
+  try {
+    const data = await api.getSitePages(props.client.id)
+    discoveredPages.value = data?.pages || []
+    defaultRules.value = data?.default_rules || []
+  } catch { /* non-fatal */ }
+}
+
+function seedDefaults() {
+  const src = defaultRules.value.length ? defaultRules.value : []
+  pageRules.value = src.map(r => ({ ...r, id: cryptoId() }))
+}
+
+function addRule() {
+  pageRules.value.push({
+    id: cryptoId(), label: 'New page', match_type: 'contains', pattern: '/',
+    page_type: 'fallback', priority: 20, enabled_widget: true, greeting_enabled: true,
+    greeting_message: '', behavior_prompt: '',
+  })
+}
+
+async function saveProactive() {
+  if (!props.client) return
+  pSaving.value = true
+  try {
+    const updated = await api.updatePortalClient(props.client.id, {
+      proactive_notifications_enabled: pForm.value.proactive_notifications_enabled,
+      assistant_intro: pForm.value.assistant_intro,
+      notification_timeout_seconds: pForm.value.notification_timeout_seconds,
+      auto_close_seconds: pForm.value.auto_close_seconds,
+    })
+    emit('client-updated', updated)
+    pSaved.value = true; setTimeout(() => { pSaved.value = false }, 3000)
+  } catch {} finally { pSaving.value = false }
+}
+
+async function savePageRules() {
+  if (!props.client) return
+  pSaving.value = true
+  try {
+    // Strip the client-only `id` before persisting; keep stable order/priority.
+    const clean = pageRules.value.map(({ id, ...rest }) => rest)
+    const updated = await api.updatePortalClient(props.client.id, { page_rules: clean })
+    emit('client-updated', updated)
+    prSaved.value = true; setTimeout(() => { prSaved.value = false }, 3000)
+  } catch {} finally { pSaving.value = false }
+}
 
 // ── Canned responses ─────────────────────────────────────────────────────────
 const cannedResponses = ref([])
@@ -2380,5 +2539,33 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   }
   /* Form grids collapse to single column. */
   .form-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Proactive & pages ─────────────────────────────────────────────────────── */
+.section-desc { font-size: 13px; color: var(--cf-text-muted); margin: 4px 0 16px; line-height: 1.5; }
+.pr-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pr-head-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.pr-discovered { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 14px; }
+.pr-disc-label { font-size: 12px; color: var(--cf-text-muted); font-weight: 600; }
+.pr-chip { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px;
+  background: var(--cf-bg-input, rgba(148,163,184,0.08)); border: 1px solid var(--cf-border-default); color: var(--cf-text-secondary); }
+.pr-empty { font-size: 13px; color: var(--cf-text-muted); padding: 14px 0; }
+.pr-rule { border: 1px solid var(--cf-border-default); border-radius: 12px; padding: 12px; margin-bottom: 12px;
+  display: flex; flex-direction: column; gap: 8px; background: var(--cf-bg-surface); }
+.pr-rule-top { display: flex; gap: 8px; align-items: center; }
+.pr-rule-mid { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.pr-label { flex: 1; }
+.pr-type { width: 130px; flex-shrink: 0; }
+.pr-mt { width: 150px; flex-shrink: 0; }
+.pr-pat { flex: 1; min-width: 140px; }
+.pr-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600;
+  color: var(--cf-text-secondary); white-space: nowrap; cursor: pointer; }
+.pr-msg, .pr-bp { width: 100%; resize: vertical; font-family: inherit; }
+.pr-del { background: none; border: none; color: var(--cf-text-muted); font-size: 20px; line-height: 1;
+  cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+.pr-del:hover { color: #ef4444; }
+@media (max-width: 640px) {
+  .pr-type, .pr-mt { width: 100%; }
+  .pr-rule-top, .pr-rule-mid { flex-wrap: wrap; }
 }
 </style>
