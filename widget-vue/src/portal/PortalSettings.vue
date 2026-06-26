@@ -435,6 +435,62 @@
           <button class="btn-save" @click="savePageRules" :disabled="pSaving">{{ pSaving ? 'Saving…' : prSaved ? '✓ Saved' : 'Save pages' }}</button>
         </div>
       </div>
+
+      <!-- Offers & sales -->
+      <div class="section-card">
+        <div class="pr-head">
+          <div>
+            <h2 class="section-title">Offers &amp; sales</h2>
+            <p class="section-desc">Tell the chatbot about a live sale or offer. While it's running, the bot mentions it when relevant and links visitors to the offer page. It turns off automatically when the end date passes — no need to remove it. The bot promotes up to {{ MAX_OFFERS }} live offers at a time.</p>
+          </div>
+          <div class="pr-head-actions">
+            <button class="btn-secondary" @click="addOffer">+ Add offer</button>
+          </div>
+        </div>
+
+        <div v-if="liveOfferCount > MAX_OFFERS" class="of-warn">⚠ {{ liveOfferCount }} offers are live but the bot only promotes the first {{ MAX_OFFERS }}. Turn some off or set end dates.</div>
+
+        <div v-if="!offers.length" class="pr-empty">No offers yet. Add one when you're running a sale or promotion.</div>
+
+        <div class="of-list" v-else>
+          <div v-for="(o, i) in offers" :key="o.id || i" class="of-card" :class="{ off: !o.enabled }">
+            <div class="of-head">
+              <span class="of-status" :class="offerStatus(o).cls">{{ offerStatus(o).label }}</span>
+              <input class="input of-title" v-model="o.title" placeholder="Offer title (e.g. Summer Sale)" />
+              <label class="pg-switch" title="Enable this offer"><input type="checkbox" v-model="o.enabled" /><span class="pg-slider"></span></label>
+              <button class="pg-del" @click="offers.splice(i,1)" title="Remove offer">&times;</button>
+            </div>
+            <div class="of-grid">
+              <div class="of-field">
+                <label>Type</label>
+                <select class="input" v-model="o.type">
+                  <option v-for="t in OFFER_TYPES" :key="t" :value="t">{{ t.replace('_',' ') }}</option>
+                </select>
+              </div>
+              <div class="of-field">
+                <label>Offer page link</label>
+                <input class="input" v-model="o.link" type="url" placeholder="https://yourstore.com/sale" />
+              </div>
+              <div class="of-field">
+                <label>Starts</label>
+                <input class="input" v-model="o.starts_at" type="date" />
+              </div>
+              <div class="of-field">
+                <label>Ends</label>
+                <input class="input" v-model="o.ends_at" type="date" />
+              </div>
+            </div>
+            <div class="of-field">
+              <label>Description (what the offer is)</label>
+              <textarea class="input" v-model="o.description" rows="2" placeholder="e.g. 20% off everything storewide, plus free shipping over $75"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="save-row">
+          <button class="btn-save" @click="saveOffers" :disabled="pSaving">{{ pSaving ? 'Saving…' : ofSaved ? '✓ Saved' : 'Save offers' }}</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── Knowledge base ──────────────────────────────────────────────────── -->
@@ -1275,6 +1331,7 @@ watch(() => props.client, (c) => {
   pForm.value.assistant_intro = c.assistant_intro || "Hi! I'm your AI Shopping Assistant."
   pForm.value.notification_timeout_seconds = c.notification_timeout_seconds || 20
   pForm.value.auto_close_seconds = c.auto_close_seconds || 0
+  offers.value = Array.isArray(c.active_offers) ? c.active_offers.map(o => ({ ...o, id: o.id || offId() })) : []
   loadSitePages()
   // After client loads, fetch live Telegram webhook health so the user
   // sees right away whether Telegram knows where to deliver messages.
@@ -1418,6 +1475,45 @@ async function savePageRules() {
     const updated = await api.updatePortalClient(props.client.id, { page_rules: rules })
     emit('client-updated', updated)
     prSaved.value = true; setTimeout(() => { prSaved.value = false }, 3000)
+  } catch {} finally { pSaving.value = false }
+}
+
+// ── Offers & sales ─────────────────────────────────────────────────────────────
+const OFFER_TYPES = ['sale', 'discount', 'bundle', 'free_shipping', 'new_arrival', 'seasonal', 'other']
+const offers = ref([])
+const ofSaved = ref(false)
+function offId() { try { return crypto.randomUUID() } catch { return 'o' + Math.random().toString(36).slice(2, 10) } }
+
+function addOffer() {
+  offers.value.push({ id: offId(), type: 'sale', title: '', description: '', link: '', starts_at: '', ends_at: '', enabled: true })
+}
+
+function offerStatus(o) {
+  if (!o.enabled) return { label: 'Off', cls: 'of-st-off' }
+  // Empty offers aren't injected by the bot and are dropped on save — show Draft.
+  if (!(o.title || '').trim() && !(o.description || '').trim()) return { label: 'Draft', cls: 'of-st-off' }
+  const today = new Date().toISOString().slice(0, 10)
+  if (o.starts_at && today < o.starts_at) return { label: 'Scheduled', cls: 'of-st-soon' }
+  if (o.ends_at && today > o.ends_at) return { label: 'Expired', cls: 'of-st-exp' }
+  return { label: 'Live', cls: 'of-st-live' }
+}
+
+const MAX_OFFERS = 3
+const liveOfferCount = computed(() =>
+  offers.value.filter(o => o.enabled && ((o.title || '').trim() || (o.description || '').trim())
+    && (!o.ends_at || new Date().toISOString().slice(0, 10) <= o.ends_at)).length
+)
+
+async function saveOffers() {
+  if (!props.client) return
+  pSaving.value = true
+  try {
+    const clean = offers.value
+      .filter(o => (o.title || '').trim() || (o.description || '').trim())
+      .map(({ id, ...rest }) => ({ id, ...rest }))
+    const updated = await api.updatePortalClient(props.client.id, { active_offers: clean })
+    emit('client-updated', updated)
+    ofSaved.value = true; setTimeout(() => { ofSaved.value = false }, 3000)
   } catch {} finally { pSaving.value = false }
 }
 
@@ -2720,4 +2816,25 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   .pg-sw-label { display: none; }
   .pg-switches { gap: 10px; }
 }
+
+/* Offers & sales */
+.of-list { display: flex; flex-direction: column; gap: 12px; }
+.of-card { border: 1px solid var(--cf-border-default); border-radius: 12px; padding: 12px;
+  display: flex; flex-direction: column; gap: 10px; background: var(--cf-bg-surface); transition: opacity .15s; }
+.of-card.off { opacity: 0.6; }
+.of-head { display: flex; align-items: center; gap: 10px; }
+.of-title { flex: 1; }
+.of-status { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+  padding: 3px 8px; border-radius: 20px; flex-shrink: 0; }
+.of-st-live { background: rgba(34,197,94,0.15); color: #22c55e; }
+.of-st-soon { background: rgba(99,102,241,0.15); color: #a5b4fc; }
+.of-st-exp { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.of-st-off { background: rgba(71,85,105,0.3); color: var(--cf-text-muted); }
+.of-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.of-field { display: flex; flex-direction: column; gap: 4px; }
+.of-field label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cf-text-muted); }
+.of-field textarea { resize: vertical; font-family: inherit; }
+.of-warn { font-size: 12.5px; color: #f59e0b; background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+@media (max-width: 640px) { .of-grid { grid-template-columns: 1fr; } }
 </style>

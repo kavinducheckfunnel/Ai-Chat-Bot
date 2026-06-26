@@ -842,9 +842,10 @@ function renderMd(text){
     var l=links[+i],st=l.t.replace(/</g,'&lt;').replace(/>/g,'&gt;');
     // data-cf-plink tags AI-sent links so the delegated click handler can
     // attribute referrals (marketing dashboards). data-cf-pltext carries the
-    // visible label for the report.
-    var safeTxt=l.t.replace(/"/g,'&quot;');
-    return'<a href="'+l.u+'" target="_blank" rel="noopener noreferrer" data-cf-plink="'+l.u+'" data-cf-pltext="'+safeTxt+'">'+st+'</a>'
+    // visible label for the report. escAttr() escapes quotes so a URL/label
+    // containing a quote can't break out of the attribute (DOM-XSS guard);
+    // the link regex already constrains the scheme to http(s).
+    return'<a href="'+escAttr(l.u)+'" target="_blank" rel="noopener noreferrer" data-cf-plink="'+escAttr(l.u)+'" data-cf-pltext="'+escAttr(l.t)+'">'+st+'</a>'
   });
   s=s.replace(/\\*\\*([^*]+)\\*\\*/g,'<strong>$1</strong>');
   var lines=s.split('\\n'),out=[],inList=false;

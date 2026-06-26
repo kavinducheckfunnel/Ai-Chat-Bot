@@ -231,6 +231,12 @@ class Client(models.Model):
     # [{"id": "uuid-str", "title": "Greeting", "body": "Hi there! How can I help?"}]
     canned_responses = models.JSONField(default=list, blank=True)
 
+    # ── Active offers / sales (tenant-declared promotions) ────────────────────
+    # List of {id, type, title, description, link, starts_at, ends_at, enabled}.
+    # The bot mentions live ones in conversation (chat/offers.py); date-gated so
+    # they auto-expire. Distinct from the reactive FOMO fields above.
+    active_offers = models.JSONField(default=list, blank=True)
+
     # ── Page-aware proactive triggers (URL → greeting) ────────────────────────
     # Ordered list of page rules; see chat/page_rules.py for the shape + defaults.
     # Empty = use DEFAULT_PAGE_RULES.

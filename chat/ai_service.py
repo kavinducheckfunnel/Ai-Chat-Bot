@@ -907,6 +907,21 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     except Exception as e:
         logger.warning(f'[ai] page behavior injection failed: {e}')
 
+    # ── Active offers / sales (tenant-declared promotions) ───────────────────
+    # Inject currently-live offers as knowledge so the bot can mention them when
+    # relevant and share the offer link. Date-gated → auto-expires. Separate
+    # from the reactive FOMO/discount_code path (which is untouched).
+    try:
+        if session.client_id:
+            from . import offers as _offers
+            offs = _offers.active_offers(session.client)
+            if offs:
+                offer_block = _offers.format_offers_block(offs)
+                system_prompt += offer_block
+                dynamic_system += offer_block
+    except Exception as e:
+        logger.warning(f'[ai] offers injection failed: {e}')
+
     # JSON-mode tail-prompt — used for text-only turns. Vision turns get a
     # plain-text instruction instead: image-capable models reliably break
     # strict-JSON output when an image is also in the request, so forcing
