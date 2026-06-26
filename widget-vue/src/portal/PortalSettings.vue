@@ -391,6 +391,11 @@
             <span class="pg-summary">{{ pageRows.length }} pages · {{ greetingOnCount }} with a greeting</span>
             <button class="pg-expand-all" @click="toggleAll">{{ allOpen ? 'Collapse all' : 'Expand all' }}</button>
           </div>
+          <div class="pg-legend">
+            <span class="pg-legend-item"><strong>Greeting</strong> — the bot sends a welcome message on this page</span>
+            <span class="pg-legend-dot">•</span>
+            <span class="pg-legend-item"><strong>Show widget</strong> — the chat button appears on this page</span>
+          </div>
 
           <div class="pg-list">
             <div v-for="(r, i) in pageRows" :key="r.path + i" class="pg-row" :class="{ open: r._open }">
@@ -400,14 +405,16 @@
                 <span class="pg-type">{{ r.page_type }}</span>
                 <span class="pg-preview">{{ r.greeting_on ? (r.greeting_message || '(default greeting)') : 'No greeting' }}</span>
                 <div class="pg-switches" @click.stop>
-                  <span class="pg-sw-wrap" title="Show a greeting on this page">
-                    <span class="pg-sw-label">Greeting</span>
-                    <label class="pg-switch"><input type="checkbox" v-model="r.greeting_on" /><span class="pg-slider"></span></label>
-                  </span>
-                  <span class="pg-sw-wrap" title="Show the chat widget on this page">
-                    <span class="pg-sw-label">Widget</span>
-                    <label class="pg-switch"><input type="checkbox" v-model="r.widget_visible" /><span class="pg-slider"></span></label>
-                  </span>
+                  <label class="cf-toggle" :class="{ on: r.greeting_on }" title="Send a welcome message on this page">
+                    <span class="cf-toggle-cap">Greeting</span>
+                    <span class="pg-switch"><input type="checkbox" v-model="r.greeting_on" /><span class="pg-slider"></span></span>
+                    <span class="cf-toggle-state">{{ r.greeting_on ? 'On' : 'Off' }}</span>
+                  </label>
+                  <label class="cf-toggle" :class="{ on: r.widget_visible }" title="Show the chat button on this page">
+                    <span class="cf-toggle-cap">Show widget</span>
+                    <span class="pg-switch"><input type="checkbox" v-model="r.widget_visible" /><span class="pg-slider"></span></span>
+                    <span class="cf-toggle-state">{{ r.widget_visible ? 'On' : 'Off' }}</span>
+                  </label>
                   <button v-if="r.custom" class="pg-del" @click="pageRows.splice(i, 1)" title="Remove">&times;</button>
                 </div>
               </div>
@@ -457,7 +464,10 @@
             <div class="of-head">
               <span class="of-status" :class="offerStatus(o).cls">{{ offerStatus(o).label }}</span>
               <input class="input of-title" v-model="o.title" placeholder="Offer title (e.g. Summer Sale)" />
-              <label class="pg-switch" title="Enable this offer"><input type="checkbox" v-model="o.enabled" /><span class="pg-slider"></span></label>
+              <label class="cf-toggle of-enable" :class="{ on: o.enabled }" :title="o.enabled ? 'This offer is running — click to turn off' : 'This offer is off — click to turn on'">
+                <span class="cf-toggle-cap">{{ o.enabled ? 'Running' : 'Turn on' }}</span>
+                <span class="pg-switch"><input type="checkbox" v-model="o.enabled" /><span class="pg-slider"></span></span>
+              </label>
               <button class="pg-del" @click="offers.splice(i,1)" title="Remove offer">&times;</button>
             </div>
             <div class="of-grid">
@@ -2791,7 +2801,7 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   padding: 2px 7px; border-radius: 20px; background: rgba(99,102,241,0.12); color: #a5b4fc; flex-shrink: 0; }
 .pg-preview { flex: 1; min-width: 0; font-size: 12px; color: var(--cf-text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pg-switches { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.pg-switches { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
 .pg-sw-wrap { display: inline-flex; align-items: center; gap: 6px; }
 .pg-sw-label { font-size: 11px; font-weight: 600; color: var(--cf-text-muted); }
 .pg-switch { position: relative; display: inline-block; width: 34px; height: 20px; flex-shrink: 0; cursor: pointer; }
@@ -2801,6 +2811,22 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   background: #fff; border-radius: 50%; transition: transform .15s; }
 .pg-switch input:checked + .pg-slider { background: #6366f1; }
 .pg-switch input:checked + .pg-slider::before { transform: translateX(14px); }
+
+/* Clear labelled On/Off toggle (non-technical friendly) */
+.pg-legend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 14px;
+  font-size: 12px; color: var(--cf-text-muted); line-height: 1.5; }
+.pg-legend-item strong { color: var(--cf-text-secondary); font-weight: 700; }
+.pg-legend-dot { color: var(--cf-text-muted); opacity: 0.5; }
+.cf-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+  padding: 5px 11px; border: 1px solid var(--cf-border-default); border-radius: 22px;
+  background: var(--cf-bg-input, rgba(148,163,184,0.06)); transition: border-color .15s, background .15s; }
+.cf-toggle:hover { border-color: var(--cf-border-strong); }
+.cf-toggle.on { border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.08); }
+.cf-toggle-cap { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cf-text-secondary); }
+.cf-toggle.on .pg-slider { background: #22c55e; }
+.cf-toggle-state { font-size: 12px; font-weight: 800; color: var(--cf-text-muted); min-width: 22px; }
+.cf-toggle.on .cf-toggle-state { color: #22c55e; }
+.of-enable .cf-toggle-cap { min-width: 52px; text-align: right; }
 .pg-body { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px;
   border-top: 1px solid var(--cf-border-subtle); }
 .pg-field { display: flex; flex-direction: column; gap: 4px; }
@@ -2812,9 +2838,9 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .pg-del:hover { color: #ef4444; }
 @media (max-width: 640px) {
   .pg-preview { display: none; }
-  .pg-path { max-width: 110px; }
-  .pg-sw-label { display: none; }
-  .pg-switches { gap: 10px; }
+  .pg-head { flex-wrap: wrap; }
+  .pg-path { max-width: 150px; }
+  .pg-switches { width: 100%; gap: 8px; }
 }
 
 /* Offers & sales */
