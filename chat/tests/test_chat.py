@@ -171,6 +171,38 @@ class TestTriggerEvent:
         assert resp.json()['status'] == 'ignored'
         assert resp.json()['reason'] == 'already triggered'
 
+    @patch('chat.views.async_to_sync')
+    def test_non_closing_trigger_also_caps_session(self, mock_async, anon_client, chat_session):
+        """The duplicate-nudge fix: a NON-closing trigger (deep_engagement) now
+        also sets the one-per-session guard, so a later trigger is suppressed."""
+        r1 = anon_client.post(TRIGGER_URL, {
+            'session_id': str(chat_session.session_id),
+            'trigger_type': 'deep_engagement',
+        }, format='json')
+        assert r1.json()['status'] == 'sent'
+        chat_session.refresh_from_db()
+        assert chat_session.closing_triggered is True       # guard now set
+        assert chat_session.proactive_count == 1
+
+        r2 = anon_client.post(TRIGGER_URL, {
+            'session_id': str(chat_session.session_id),
+            'trigger_type': 'exit_intent',
+        }, format='json')
+        assert r2.json()['status'] == 'ignored'             # second nudge blocked
+
+    @patch('chat.views.async_to_sync')
+    def test_trigger_throttled_by_recent_proactive(self, mock_async, anon_client, chat_session):
+        """A behavioral CTA won't stack right after a recent page greeting."""
+        from django.utils import timezone
+        from chat.models import ChatSession
+        ChatSession.objects.filter(pk=chat_session.pk).update(last_proactive_at=timezone.now())
+        resp = anon_client.post(TRIGGER_URL, {
+            'session_id': str(chat_session.session_id),
+            'trigger_type': 'deep_engagement',
+        }, format='json')
+        assert resp.json()['status'] == 'ignored'
+        assert resp.json()['reason'] == 'proactive throttled'
+
     def test_trigger_missing_session_id(self, anon_client):
         resp = anon_client.post(TRIGGER_URL, {'trigger_type': 'exit_intent'}, format='json')
         assert resp.status_code == 400

@@ -313,6 +313,31 @@ def _generate_personalised_cta(session, client, trigger_type):
         return None
 
 
+# ── Unified proactive throttle ───────────────────────────────────────────────
+# Shared by behavioral triggers (trigger_event) AND page greetings (page_message)
+# so a visitor never receives a pile of near-identical proactive nudges. Caps the
+# total per session and enforces a minimum gap between any two proactive messages.
+PROACTIVE_GAP_SECONDS = 60
+PROACTIVE_MAX_PER_SESSION = 4
+
+
+def _proactive_blocked(session):
+    if (session.proactive_count or 0) >= PROACTIVE_MAX_PER_SESSION:
+        return True
+    last = session.last_proactive_at
+    if last and (timezone.now() - last).total_seconds() < PROACTIVE_GAP_SECONDS:
+        return True
+    return False
+
+
+def _mark_proactive(session_id, extra=None):
+    from django.db.models import F
+    fields = {'last_proactive_at': timezone.now(), 'proactive_count': F('proactive_count') + 1}
+    if extra:
+        fields.update(extra)
+    ChatSession.objects.filter(session_id=session_id).update(**fields)
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def trigger_event(request):
@@ -339,9 +364,16 @@ def trigger_event(request):
     if session.takeover_active:
         return Response({'status': 'ignored', 'reason': 'takeover active'})
 
-    # Don't fire if already triggered
+    # One behavioral CTA per session: once ANY trigger fired, suppress the rest
+    # (closing_triggered is now set for every trigger type — see below). This is
+    # the fix for the pile of near-identical "checking out our t-shirts" nudges
+    # caused by deep_engagement/exit_intent/etc. each firing independently.
     if session.closing_triggered:
         return Response({'status': 'ignored', 'reason': 'already triggered'})
+
+    # Unified throttle: don't stack on top of a recent page greeting / nudge.
+    if _proactive_blocked(session):
+        return Response({'status': 'ignored', 'reason': 'proactive throttled'})
 
     client = session.client
     if not client:
@@ -411,13 +443,20 @@ def trigger_event(request):
         mins = seconds // 60
         fomo_msg += f" This offer expires in {mins} minute{'s' if mins != 1 else ''}!"
 
-    # Persist to chat history; only mark closing_triggered for exit/pricing/high-intent
+    # Persist to chat history. closing_triggered is now set for EVERY trigger
+    # type (not just closing) so a session sends at most ONE behavioral CTA —
+    # this is what stops the duplicate near-identical nudges. Also stamp the
+    # unified proactive throttle.
+    from django.db.models import F
     history = session.chat_history or []
     history.append({'role': 'ai', 'message': fomo_msg, 'source': trigger_type})
-    update_fields = {'chat_history': history, 'last_message_at': timezone.now()}
-    if trigger_type in CLOSING_TRIGGERS:
-        update_fields['closing_triggered'] = True
-    ChatSession.objects.filter(session_id=session_id).update(**update_fields)
+    ChatSession.objects.filter(session_id=session_id).update(
+        chat_history=history,
+        last_message_at=timezone.now(),
+        closing_triggered=True,
+        last_proactive_at=timezone.now(),
+        proactive_count=F('proactive_count') + 1,
+    )
 
     # Push into visitor's WebSocket
     channel_layer = get_channel_layer()
@@ -484,6 +523,10 @@ def page_message(request):
     dedupe_key = f'pg_{session_id}_{page_type}'
     if cache.get(dedupe_key):
         return Response({'status': 'duplicate'}, status=status.HTTP_202_ACCEPTED)
+    # Page greetings are governed by the per-type dedupe above (one per page type
+    # per session) — NOT the time-gap, so a visitor still gets a distinct greeting
+    # when they move to a different page type. We DO stamp last_proactive_at below
+    # so behavioral CTAs won't pile on top of a greeting.
 
     text = _page_rules.resolve_greeting_text(rule, product_name)
     if not text:
@@ -495,6 +538,7 @@ def page_message(request):
         if intro:
             text = f'{intro} {text}'
 
+    from django.db.models import F
     msg_id = f'pg_{uuid.uuid4().hex[:12]}'
     history = session.chat_history or []
     history.append({'role': 'ai', 'message': text, 'source': 'page_greeting', 'msg_id': msg_id})
@@ -502,6 +546,8 @@ def page_message(request):
         chat_history=history,
         last_message_at=timezone.now(),
         greeting_intro_sent=True,
+        last_proactive_at=timezone.now(),
+        proactive_count=F('proactive_count') + 1,
     )
     cache.set(dedupe_key, '1', 2 * 60 * 60)  # 2h ~ session lifetime
 

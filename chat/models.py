@@ -180,6 +180,10 @@ class ChatSession(models.Model):
     closing_triggered = models.BooleanField(default=False)
     # First-touch intro prepend control for page-aware greetings (page_rules).
     greeting_intro_sent = models.BooleanField(default=False)
+    # Unified proactive-message throttle (shared by behavioral triggers AND page
+    # greetings) so a visitor never gets a pile of near-identical nudges.
+    last_proactive_at = models.DateTimeField(null=True, blank=True)
+    proactive_count = models.IntegerField(default=0)
     afk_nudge_sent = models.BooleanField(default=False)
     nudge_count = models.IntegerField(default=0)
     last_nudge_at = models.DateTimeField(null=True, blank=True)
