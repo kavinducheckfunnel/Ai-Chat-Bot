@@ -7,12 +7,7 @@
       </div>
       <div class="header-controls">
         <input class="search-input" v-model="search" placeholder="Search email or ID…" @keydown.enter="loadVisitors" />
-        <select class="period-select" v-model.number="days" @change="loadVisitors">
-          <option :value="1">Last 24h</option>
-          <option :value="7">Last 7 days</option>
-          <option :value="30">Last 30 days</option>
-          <option :value="0">All time</option>
-        </select>
+        <PortalDateFilter v-model="period" @change="onDateChange" />
       </div>
     </div>
 
@@ -135,6 +130,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import PortalDateFilter from './PortalDateFilter.vue'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
@@ -145,7 +141,9 @@ const nextOffset = ref(null)
 const loadingMore = ref(false)
 const loading = ref(false)
 const search = ref('')
-const days = ref(7)
+const period = ref('30d')
+const dateRange = ref({ period: '30d', dateFrom: null, dateTo: null })
+function onDateChange(p) { dateRange.value = p; loadVisitors() }
 const selectedVisitor = ref(null)
 const detail = ref({})
 const sentinel = ref(null)
@@ -154,7 +152,10 @@ let observer = null
 
 function _params(offset = 0) {
   const params = { limit: PAGE, offset }
-  if (days.value > 0) params.days = days.value
+  const dr = dateRange.value
+  if (dr.period && dr.period !== 'all') params.period = dr.period
+  if (dr.dateFrom) params.date_from = dr.dateFrom
+  if (dr.dateTo) params.date_to = dr.dateTo
   if (search.value.trim()) params.q = search.value.trim()
   return params
 }

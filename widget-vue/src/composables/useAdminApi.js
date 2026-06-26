@@ -441,16 +441,28 @@ export function useAdminApi() {
       return apiFetch(`/api/admin/clients/${clientId}/analytics/${qs ? '?' + qs : ''}`)
     },
 
-    // Issue 4 — product-link click attribution
-    getClientLinkClicks: (clientId, period = '30d') => apiFetch(`/api/admin/clients/${clientId}/link-clicks/?period=${period}`),
+    // Issue 4 — product-link click attribution. Accepts the standardized date
+    // filter { period, dateFrom, dateTo } (matches PortalDateFilter output).
+    getClientLinkClicks: (clientId, o = {}) => {
+      const p = new URLSearchParams()
+      if (o.period) p.set('period', o.period)
+      if (o.dateFrom) p.set('date_from', o.dateFrom)
+      if (o.dateTo) p.set('date_to', o.dateTo)
+      return apiFetch(`/api/admin/clients/${clientId}/link-clicks/?${p.toString()}`)
+    },
     getPlatformLinkClicks: (period = '30d') => apiFetch(`/api/admin/link-clicks/?period=${period}`),
 
     suggestCta: (clientId) => apiFetch(`/api/admin/clients/${clientId}/suggest-cta/`, {
       method: 'POST', body: JSON.stringify({}),
     }),
 
-    getActivityPages: (clientId, days = 7) =>
-      apiFetch(`/api/admin/clients/${clientId}/activity/pages/?days=${days}`),
+    getActivityPages: (clientId, o = {}) => {
+      const p = new URLSearchParams()
+      if (o.period) p.set('period', o.period)
+      if (o.dateFrom) p.set('date_from', o.dateFrom)
+      if (o.dateTo) p.set('date_to', o.dateTo)
+      return apiFetch(`/api/admin/clients/${clientId}/activity/pages/?${p.toString()}`)
+    },
 
     getPageHeatmap: (clientId, pageUrl, days = 7) =>
       apiFetch(`/api/admin/clients/${clientId}/heatmap/?page_url=${encodeURIComponent(pageUrl)}&days=${days}`),

@@ -5,15 +5,7 @@
         <h1 class="page-title">Visitor Activity</h1>
         <p class="page-sub">See which pages visitors explore and what they click on.</p>
       </div>
-      <div class="period-tabs">
-        <button
-          v-for="p in periods"
-          :key="p.value"
-          class="period-tab"
-          :class="{ active: days === p.value }"
-          @click="setPeriod(p.value)"
-        >{{ p.label }}</button>
-      </div>
+      <PortalDateFilter v-model="period" @change="onDateChange" />
     </div>
 
     <!-- Loading -->
@@ -114,18 +106,23 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import PortalDateFilter from './PortalDateFilter.vue'
 
 const props = defineProps({ client: Object })
 const api = useAdminApi()
 
-const periods = [
-  { label: '24h', value: 1 },
-  { label: '7 days', value: 7 },
-  { label: '30 days', value: 30 },
-  { label: '90 days', value: 90 },
-]
-
-const days = ref(7)
+const period = ref('7d')
+const dateRange = ref({ period: '7d', dateFrom: null, dateTo: null })
+function onDateChange(p) { dateRange.value = p; load() }
+function periodToDays(p) { return p === 'today' ? 1 : p === '7d' ? 7 : p === '30d' ? 30 : p === '90d' ? 90 : p === 'all' ? 365 : 90 }
+function heatmapDays() {
+  const dr = dateRange.value
+  if (dr.dateFrom && dr.dateTo) {
+    const d = Math.ceil((new Date(dr.dateTo) - new Date(dr.dateFrom)) / 86400000) + 1
+    return Math.max(1, Math.min(d, 365))
+  }
+  return periodToDays(dr.period)
+}
 const pages = ref([])
 const selectedPage = ref('')
 const heatmapData = ref({ clusters: [], top_elements: [] })
@@ -171,10 +168,10 @@ async function load() {
   if (!props.client) return
   loading.value = true
   try {
-    const periodKey = days.value === 1 ? 'today' : days.value === 7 ? '7d' : days.value === 30 ? '30d' : '90d'
+    const dr = dateRange.value
     const [pagesData, analyticsData] = await Promise.all([
-      api.getActivityPages(props.client.id, days.value),
-      api.getPortalAnalytics(props.client.id, periodKey),
+      api.getActivityPages(props.client.id, { period: dr.period, dateFrom: dr.dateFrom, dateTo: dr.dateTo }),
+      api.getPortalAnalytics(props.client.id, dr.period, { dateFrom: dr.dateFrom, dateTo: dr.dateTo }),
     ])
     pages.value = pagesData?.pages || []
     analytics.value = analyticsData || {}
@@ -196,18 +193,13 @@ async function loadTopInteractions() {
   if (!props.client || !selectedPage.value) return
   loadingHeatmap.value = true
   try {
-    const data = await api.getPageHeatmap(props.client.id, selectedPage.value, days.value)
+    const data = await api.getPageHeatmap(props.client.id, selectedPage.value, heatmapDays())
     heatmapData.value = data || { clusters: [], top_elements: [] }
   } catch {
     heatmapData.value = { clusters: [], top_elements: [] }
   } finally {
     loadingHeatmap.value = false
   }
-}
-
-function setPeriod(val) {
-  days.value = val
-  load()
 }
 
 onMounted(load)

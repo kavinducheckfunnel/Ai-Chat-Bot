@@ -779,11 +779,9 @@ def client_link_clicks(request, client_id):
     except Client.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
-    period = request.query_params.get('period', '30d')
+    # Uniform date handling: ?period=today|7d|30d|90d|all or ?date_from/&date_to.
     qs = ProductLinkClick.objects.filter(client=client)
-    since = _period_since(period)
-    if since:
-        qs = qs.filter(created_at__gte=since)
+    qs, _ = apply_period_filter(qs, request)
 
     rows = (
         qs.values('url')
@@ -807,7 +805,7 @@ def client_link_clicks(request, client_id):
     } for r in rows]
 
     return Response({
-        'period': period,
+        'period': (request.query_params.get('period') or '').strip() or 'all',
         'total_clicks': qs.count(),
         'total_links': len(data),
         'links': data,
@@ -1033,6 +1031,9 @@ def client_visitors(request, client_id):
             qs = qs.filter(last_seen__gte=timezone.now() - timedelta(days=days))
         except ValueError:
             pass
+    else:
+        # Standardized date filter (period / custom range) on last activity.
+        qs, _ = apply_period_filter(qs, request, field='last_seen')
 
     q = (request.query_params.get('q') or '').strip()
     if q:
@@ -1219,16 +1220,20 @@ def activity_pages(request, client_id):
     except Client.DoesNotExist:
         return Response({'detail': 'Not found.'}, status=404)
 
-    try:
-        days = max(1, min(int(request.query_params.get('days', '7')), 90))
-    except ValueError:
-        days = 7
-    since = timezone.now() - timedelta(days=days)
+    # Standardized date filter: ?period / ?date_from&date_to, with legacy ?days.
+    qs = AnalyticEvent.objects.filter(client=client).exclude(page_url='')
+    if request.query_params.get('period') or request.query_params.get('date_from') or request.query_params.get('date_to'):
+        qs, _ = apply_period_filter(qs, request)
+        days = None
+    else:
+        try:
+            days = max(1, min(int(request.query_params.get('days', '7')), 90))
+        except ValueError:
+            days = 7
+        qs = qs.filter(created_at__gte=timezone.now() - timedelta(days=days))
 
     pages = (
-        AnalyticEvent.objects
-        .filter(client=client, created_at__gte=since)
-        .exclude(page_url='')
+        qs
         .values('page_url')
         .annotate(
             total_clicks=Count('id', filter=Q(event_type__in=['click', 'cta_click', 'add_to_cart'])),

@@ -6,13 +6,7 @@
         <p class="rf-sub">Products and pages your chatbot sent visitors to — track which links the AI drives traffic to.</p>
       </div>
       <div class="rf-actions">
-        <div class="rf-period">
-          <button
-            v-for="p in periods" :key="p.val"
-            class="rf-period-btn" :class="{ active: period === p.val }"
-            @click="setPeriod(p.val)"
-          >{{ p.label }}</button>
-        </div>
+        <PortalDateFilter v-model="period" @change="onDateChange" />
         <button class="rf-export" :disabled="!links.length" @click="exportCSV">⬇ Export CSV</button>
       </div>
     </div>
@@ -67,21 +61,17 @@
 <script setup>
 import { ref, computed, onMounted, onActivated, inject, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
+import PortalDateFilter from './PortalDateFilter.vue'
 
 const api = useAdminApi()
 const client = inject('portalClient', ref(null))
 
 const period = ref('30d')
+const dateRange = ref({ period: '30d', dateFrom: null, dateTo: null })
 const loading = ref(false)
 const links = ref([])
 const totalClicks = ref(0)
 
-const periods = [
-  { val: '7d', label: '7 days' },
-  { val: '30d', label: '30 days' },
-  { val: '90d', label: '90 days' },
-  { val: 'all', label: 'All time' },
-]
 const uniqueTotal = computed(() =>
   links.value.reduce((sum, l) => sum + (l.unique_sessions || 0), 0)
 )
@@ -91,7 +81,8 @@ async function load() {
   if (!c || !c.id) return
   loading.value = true
   try {
-    const data = await api.getClientLinkClicks(c.id, period.value)
+    const dr = dateRange.value
+    const data = await api.getClientLinkClicks(c.id, { period: dr.period, dateFrom: dr.dateFrom, dateTo: dr.dateTo })
     links.value = (data && Array.isArray(data.links)) ? data.links : []
     totalClicks.value = (data && data.total_clicks) || 0
   } catch {
@@ -101,11 +92,7 @@ async function load() {
     loading.value = false
   }
 }
-function setPeriod(p) {
-  if (period.value === p) return
-  period.value = p
-  load()
-}
+function onDateChange(p) { dateRange.value = p; load() }
 function exportCSV() {
   if (!links.value.length) return
   const head = ['Product / Link', 'URL', 'Clicks', 'Unique visitors']
