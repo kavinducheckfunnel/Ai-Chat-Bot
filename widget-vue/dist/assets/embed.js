@@ -1,4 +1,4 @@
-(function(){"use strict";function f(i,r,o,s,l){if(!i||!r)return"";const n=r.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),d=`<style>
+(function(){"use strict";function f(i,n,o,s,l){if(!i||!n)return"";const r=n.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),d=`<style>
 #cf-w {
   --cf-accent: ${o||"#6366f1"};
   --cf-bg: #111111;
@@ -51,33 +51,33 @@
   background: var(--cf-accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
 /* ── Chat window ── */
-#cf-win { position: absolute; bottom: 0; right: 0; width: 370px;
-  background: var(--cf-bg); border-radius: 20px;
+#cf-win { position: absolute; bottom: 0; right: 0; width: 344px;
+  background: var(--cf-bg); border-radius: 18px;
   border: 1px solid var(--cf-border); box-shadow: 0 24px 64px rgba(0,0,0,0.65);
-  display: none; flex-direction: column; overflow: hidden; max-height: 600px; }
+  display: none; flex-direction: column; overflow: hidden; max-height: 516px; }
 #cf-win.open { display: flex; animation: cf-wi .28s cubic-bezier(.34,1.56,.64,1) forwards; }
 @keyframes cf-wi { from { opacity: 0; transform: translateY(14px) scale(.97); }
   to { opacity: 1; transform: translateY(0) scale(1); } }
 
 /* ── Header ── */
 #cf-head { background: var(--cf-bg-elev); border-bottom: 1px solid var(--cf-border-soft);
-  padding: 13px 15px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.cf-av { width: 36px; height: 36px; border-radius: 50%; background: var(--cf-accent);
-  display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; color: #fff; }
+  padding: 11px 13px; display: flex; align-items: center; gap: 9px; flex-shrink: 0; }
+.cf-av { width: 32px; height: 32px; border-radius: 50%; background: var(--cf-accent);
+  display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; color: #fff; }
 .cf-hi { flex: 1; min-width: 0; }
-.cf-hn { font-size: 14px; font-weight: 600; color: var(--cf-text-strong); letter-spacing: -.2px; }
-.cf-hs { font-size: 11px; color: var(--cf-text-muted); display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+.cf-hn { font-size: 13.5px; font-weight: 600; color: var(--cf-text-strong); letter-spacing: -.2px; }
+.cf-hs { font-size: 10.5px; color: var(--cf-text-muted); display: flex; align-items: center; gap: 4px; margin-top: 1px; }
 .cf-dot { width: 6px; height: 6px; border-radius: 50%; background: #4ade80; flex-shrink: 0; }
 #cf-xb { background: rgba(255,255,255,0.06); border: none; color: #94a3b8;
-  width: 28px; height: 28px; border-radius: 50%; cursor: pointer; font-size: 16px;
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer; font-size: 15px;
   display: flex; align-items: center; justify-content: center; transition: background .15s;
   padding: 0; line-height: 1; }
 #cf-xb:hover { background: rgba(255,255,255,0.12); color: var(--cf-text-strong); }
 
 /* ── Messages — clean conversation UI, reactions as crisp icon chips inside the bubble ── */
-#cf-msgs { flex: 1; overflow-y: auto; padding: 16px 14px;
-  display: flex; flex-direction: column; gap: 10px; background: var(--cf-bg);
-  min-height: 180px; max-height: 340px;
+#cf-msgs { flex: 1; overflow-y: auto; padding: 13px 12px;
+  display: flex; flex-direction: column; gap: 8px; background: var(--cf-bg);
+  min-height: 140px; max-height: 300px;
   scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.1) transparent; }
 #cf-msgs::-webkit-scrollbar { width: 4px; }
 #cf-msgs::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
@@ -85,8 +85,8 @@
 /* All chat-message selectors are scoped to #cf-w so they beat the universal
    #cf-w * { padding: 0 } reset on specificity — without this prefix, the
    reset wins and bubble padding silently collapses to 0. */
-#cf-w .cf-ai, #cf-w .cf-me { padding: 12px 17px; border-radius: 19px; font-size: 14px;
-  line-height: 1.5; max-width: 82%; animation: cf-mi .22s ease; word-break: break-word;
+#cf-w .cf-ai, #cf-w .cf-me { padding: 10px 13px; border-radius: 15px; font-size: 13.5px;
+  line-height: 1.5; max-width: 85%; animation: cf-mi .22s ease; word-break: break-word;
   box-shadow: 0 1px 2px rgba(0,0,0,0.18); }
 @keyframes cf-mi { from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); } }
@@ -159,10 +159,10 @@
   font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; }
 
 /* ── Input ── */
-#cf-foot { display: flex; gap: 7px; padding: 10px 12px; background: var(--cf-bg-elev);
+#cf-foot { display: flex; gap: 6px; padding: 9px 11px; background: var(--cf-bg-elev);
   border-top: 1px solid var(--cf-border-soft); flex-shrink: 0; align-items: center; }
 .cf-mb { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
-  color: var(--cf-text-muted); width: 34px; height: 34px; border-radius: 50%;
+  color: var(--cf-text-muted); width: 32px; height: 32px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   padding: 0; transition: all .15s; line-height: 1; }
 .cf-mb:hover { background: rgba(255,255,255,0.1); color: #94a3b8; }
@@ -170,14 +170,14 @@
   color: #f87171; animation: cf-prec 1s ease-in-out infinite; }
 @keyframes cf-prec { 0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
   50% { box-shadow: 0 0 0 5px transparent; } }
-#cf-inp { flex: 1; padding: 9px 14px; border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 20px; outline: none; font-size: 13px; font-family: inherit;
+#cf-inp { flex: 1; padding: 8px 13px; border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 20px; outline: none; font-size: 12.5px; font-family: inherit;
   background: rgba(255,255,255,0.05); color: var(--cf-text);
   transition: border-color .2s, background .2s; }
 #cf-inp:focus { border-color: rgba(99,102,241,0.4); background: rgba(255,255,255,0.07); }
 #cf-inp::placeholder { color: rgba(255,255,255,0.25); }
 #cf-inp:disabled { opacity: .5; cursor: not-allowed; }
-#cf-sb { width: 36px; height: 36px; border-radius: 50%; background: var(--cf-accent);
+#cf-sb { width: 32px; height: 32px; border-radius: 50%; background: var(--cf-accent);
   border: none; color: #fff; cursor: pointer; display: flex;
   align-items: center; justify-content: center; padding: 0;
   transition: opacity .15s, transform .15s; line-height: 1; }
@@ -326,26 +326,35 @@
      full mobile viewport when open — Stripe Checkout / Tidio / Drift
      all do the same on phones because side-anchored 370px popups
      blow off-screen on iPhone SE-class devices. */
+  /* Compact bottom-anchored card on phones — capped height (not a full-screen
+     takeover) + slightly smaller fonts/icons so it never feels oversized. */
   #cf-win {
     position: fixed;
-    bottom: max(12px, env(safe-area-inset-bottom, 12px));
-    left: max(8px, env(safe-area-inset-left, 8px));
-    right: max(8px, env(safe-area-inset-right, 8px));
+    bottom: max(10px, env(safe-area-inset-bottom, 10px));
+    left: max(10px, env(safe-area-inset-left, 10px));
+    right: max(10px, env(safe-area-inset-right, 10px));
     width: auto;
-    max-height: calc(100vh - 24px - env(safe-area-inset-top, 0px));
-    max-height: calc(100dvh - 24px - env(safe-area-inset-top, 0px));
+    max-height: min(560px, 78vh);
+    max-height: min(560px, 78dvh);
     border-radius: 16px;
   }
-  /* Header / input padding tightens on phones — no horizontal scroll. */
-  #cf-head { padding: 11px 13px; }
-  /* Messages area uses the rest of the viewport, capped so the input
-     bar always stays visible above the on-screen keyboard. */
-  #cf-msgs {
-    padding: 12px 11px;
-    max-height: none;
-    /* Keep room for header (≈58px) + input (≈64px) + powered-by (≈22px). */
-    min-height: 120px;
-  }
+  #cf-head { padding: 10px 12px; }
+  #cf-msgs { padding: 11px 11px; max-height: none; min-height: 110px; }
+  /* Smaller content on phones (fonts + icon buttons). */
+  #cf-w .cf-ai, #cf-w .cf-me { font-size: 13px; padding: 9px 12px; }
+  .cf-hn { font-size: 13px; }
+  .cf-av { width: 30px; height: 30px; }
+  .cf-mb { width: 30px; height: 30px; }
+  #cf-sb { width: 30px; height: 30px; }
+  #cf-inp { font-size: 12.5px; padding: 8px 12px; }
+  /* Style 2 (assistant) phone sizing. */
+  #cf-w[data-cf-style="assistant"] #cf-pill { width: 54px; height: 54px; }
+  #cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-robot { width: 30px; height: 30px; }
+  #cf-w[data-cf-style="assistant"] .cf-av { width: 34px; height: 34px; }
+  #cf-w[data-cf-style="assistant"] .cf-mb { width: 34px; height: 34px; }
+  #cf-w[data-cf-style="assistant"] #cf-sb { width: 38px; height: 38px; }
+  #cf-w[data-cf-style="assistant"] #cf-msgs { padding: 12px 11px; gap: 10px; }
+  #cf-w[data-cf-style="assistant"] #cf-note { max-width: 76vw; font-size: 13.5px; }
   /* Lead-capture overlay must also fit small screens. */
   .cf-lead-card {
     left: 8px !important;
@@ -375,7 +384,7 @@
 
 /* Launcher → gradient robot circle */
 #cf-w[data-cf-style="assistant"] #cf-pill {
-  min-width: 0; width: 64px; height: 64px; padding: 0; border-radius: 50%;
+  min-width: 0; width: 58px; height: 58px; padding: 0; border-radius: 50%;
   align-items: center; justify-content: center;
   background: var(--cf-accent);
   background: linear-gradient(140deg, color-mix(in srgb, var(--cf-accent) 76%, #ffffff), color-mix(in srgb, var(--cf-accent) 82%, #000000));
@@ -385,14 +394,14 @@
 #cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-icon,
 #cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-txt,
 #cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-send { display: none; }
-#cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-robot { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; color: #fff; }
+#cf-w[data-cf-style="assistant"] #cf-pill .cf-pi-robot { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; color: #fff; }
 #cf-w[data-cf-style="assistant"] #cf-badge { top: -3px; right: -3px; border: 2px solid #fff; }
 
 /* Suggestion card with sparkle + tail */
 #cf-w[data-cf-style="assistant"] #cf-note {
-  max-width: 300px; padding: 16px 30px 16px 16px; border-radius: 20px; border-bottom-right-radius: 6px;
+  max-width: 280px; padding: 14px 28px 14px 14px; border-radius: 18px; border-bottom-right-radius: 6px;
   background: var(--cf-bg-elev); color: var(--cf-text); border: 1px solid var(--cf-border-soft);
-  box-shadow: 0 18px 48px rgba(0,0,0,0.22); font-size: 15px; line-height: 1.5; font-weight: 600;
+  box-shadow: 0 18px 48px rgba(0,0,0,0.22); font-size: 14px; line-height: 1.5; font-weight: 600;
 }
 #cf-w[data-cf-style="assistant"] #cf-note::after {
   content: ''; position: absolute; bottom: -8px; right: 24px; width: 16px; height: 16px;
@@ -406,17 +415,18 @@
 /* Window + header */
 #cf-w[data-cf-style="assistant"] #cf-win { border-radius: 22px; }
 #cf-w[data-cf-style="assistant"] #cf-head {
-  background: color-mix(in srgb, var(--cf-accent) 8%, var(--cf-bg-elev)); padding: 15px 16px;
+  background: color-mix(in srgb, var(--cf-accent) 8%, var(--cf-bg-elev)); padding: 12px 14px;
 }
 #cf-w[data-cf-style="assistant"] .cf-av {
-  width: 42px; height: 42px;
+  width: 38px; height: 38px;
   background: linear-gradient(140deg, color-mix(in srgb, var(--cf-accent) 76%, #ffffff), color-mix(in srgb, var(--cf-accent) 82%, #000000));
 }
-#cf-w[data-cf-style="assistant"] .cf-hn { font-size: 15px; font-weight: 700; }
+#cf-w[data-cf-style="assistant"] #cf-av .cf-av-bot { width: 23px; height: 23px; }
+#cf-w[data-cf-style="assistant"] .cf-hn { font-size: 14px; font-weight: 700; }
 #cf-w[data-cf-style="assistant"] #cf-xb { background: var(--cf-bg); border: 1px solid var(--cf-border-soft); }
 
 /* Messages — labels above soft cards */
-#cf-w[data-cf-style="assistant"] #cf-msgs { padding: 18px 16px; gap: 14px; }
+#cf-w[data-cf-style="assistant"] #cf-msgs { padding: 14px 13px; gap: 11px; }
 #cf-w[data-cf-style="assistant"] .cf-ai, #cf-w[data-cf-style="assistant"] .cf-me { max-width: 90%; border-radius: 16px; }
 #cf-w[data-cf-style="assistant"] .cf-ai {
   background: color-mix(in srgb, var(--cf-text) 6%, var(--cf-bg));
@@ -434,12 +444,12 @@
 }
 
 /* Footer — tool row + input row */
-#cf-w[data-cf-style="assistant"] #cf-foot { flex-direction: column; align-items: stretch; gap: 12px; padding: 12px 14px; }
-#cf-w[data-cf-style="assistant"] #cf-tools { display: flex; align-items: center; gap: 10px; }
-#cf-w[data-cf-style="assistant"] #cf-inrow { display: flex; align-items: center; gap: 10px; }
+#cf-w[data-cf-style="assistant"] #cf-foot { flex-direction: column; align-items: stretch; gap: 10px; padding: 10px 12px; }
+#cf-w[data-cf-style="assistant"] #cf-tools { display: flex; align-items: center; gap: 9px; }
+#cf-w[data-cf-style="assistant"] #cf-inrow { display: flex; align-items: center; gap: 9px; }
 #cf-w[data-cf-style="assistant"] .cf-emojiwrap { display: block; position: relative; }
 #cf-w[data-cf-style="assistant"] .cf-mb {
-  width: 40px; height: 40px; border-radius: 12px; flex: none;
+  width: 36px; height: 36px; border-radius: 11px; flex: none;
   background: color-mix(in srgb, var(--cf-accent) 10%, var(--cf-bg)); color: var(--cf-accent);
   border: 1px solid color-mix(in srgb, var(--cf-accent) 20%, transparent);
 }
@@ -449,11 +459,11 @@
   border-radius: 50%;
 }
 #cf-w[data-cf-style="assistant"] #cf-inp {
-  flex: 1; border-radius: 24px; padding: 12px 16px;
+  flex: 1; border-radius: 22px; padding: 10px 14px; font-size: 13px;
   border: 1.5px solid color-mix(in srgb, var(--cf-accent) 28%, var(--cf-border)); background: var(--cf-bg);
 }
 #cf-w[data-cf-style="assistant"] #cf-sb {
-  width: 46px; height: 46px; border-radius: 50%; flex: none; opacity: 1;
+  width: 40px; height: 40px; border-radius: 50%; flex: none; opacity: 1;
   background: linear-gradient(140deg, color-mix(in srgb, var(--cf-accent) 76%, #ffffff), color-mix(in srgb, var(--cf-accent) 82%, #000000));
 }
 #cf-w[data-cf-style="assistant"] #cf-sb:disabled { opacity: 0.55; }
@@ -539,7 +549,7 @@
 </div>
 </div>`,a=`<script>
 (function(){
-var C='${i}',B='${n}';
+var C='${i}',B='${r}';
 
 // ── Identity persistence ─────────────────────────────────────────────
 // session_id (sid)  → a FIRST-PARTY COOKIE (primary) + localStorage (mirror)
@@ -1528,4 +1538,4 @@ if($('cf-lead-ph')){
 `+d+`
 `+t+`
 `+a+`
-<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=n;var d=Array.prototype.slice.call(c.childNodes);d.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var r=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=r+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",l=window.__CF_NAME__||"AI Assistant",n=f(i,o,s,l,"html");if(!n)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();
+<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=r;var d=Array.prototype.slice.call(c.childNodes);d.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var n=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=n+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",l=window.__CF_NAME__||"AI Assistant",r=f(i,o,s,l,"html");if(!r)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();
