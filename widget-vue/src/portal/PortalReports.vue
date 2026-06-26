@@ -309,7 +309,13 @@ function leadVal(key) { const m = leadsData.value[key]; return (m && typeof m ==
 function leadDelta(key) { const m = leadsData.value[key]; return (m && typeof m === 'object' && 'delta' in m) ? m.delta : 0 }
 
 function deltaCls(d) { if (!d) return 'd-neutral'; return d > 0 ? 'd-up' : 'd-down' }
-function fmtDeltaVal(d, unit) { const a = Math.abs(d); return unit === '%' ? a + '%' : (unit === 's' ? a + 's' : a) }
+function round1(x) { return Math.round((Number(x) || 0) * 10) / 10 }   // 1-decimal, kills float noise
+function fmtDeltaVal(d, unit) {
+  const a = Math.abs(Number(d) || 0)
+  if (unit === '%') return round1(a) + '%'
+  if (unit === 's') return Math.round(a) + 's'
+  return Math.round(a)
+}
 function fmtDuration(s) {
   s = Math.max(0, Math.round(s || 0))
   const h2 = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
@@ -341,7 +347,7 @@ const kpiCards = computed(() => {
     { label: 'AI Handled', icon: 'bot', iconClass: 'i-indigo', value: val('ai_handled'), delta: delta('ai_handled') },
     { label: 'Human Handoff', icon: 'users', iconClass: 'i-blue', value: val('manual_handled'), delta: delta('manual_handled') },
     { label: 'Opened, No Message', icon: 'mail', iconClass: 'i-amber', value: val('opened_no_message'), delta: delta('opened_no_message') },
-    { label: 'AI Resolution Rate', icon: 'bolt', iconClass: 'i-purple', value: val('ai_resolution_rate') + '%', delta: delta('ai_resolution_rate'), unit: '%' },
+    { label: 'AI Resolution Rate', icon: 'bolt', iconClass: 'i-purple', value: round1(val('ai_resolution_rate')) + '%', delta: delta('ai_resolution_rate'), unit: '%' },
     { label: 'Answered Chats', icon: 'check', iconClass: 'i-green', value: val('answered_chats'), delta: delta('answered_chats') },
     { label: 'Avg Chat Duration', icon: 'clock', iconClass: 'i-blue', value: fmtDuration(val('avg_duration_seconds')), delta: null, sub: 'over ' + val('answered_chats') + ' answered chats' },
     { label: 'Avg First Response', icon: 'clock', iconClass: 'i-indigo', value: (val('ai_response_seconds') || 0) + 's', delta: null, sub: 'avg AI reply time' },
@@ -353,15 +359,15 @@ const kpiCards = computed(() => {
     { label: 'Hot Leads', icon: 'fire', iconClass: 'i-red', value: leadVal('hot'), delta: leadDelta('hot') },
     { label: 'Ready to Buy', icon: 'cart', iconClass: 'i-amber', value: leadVal('ready_to_buy'), delta: leadDelta('ready_to_buy') },
     { label: 'Converted Leads', icon: 'check', iconClass: 'i-green', value: leadVal('converted'), delta: leadDelta('converted') },
-    { label: 'Lead Capture Rate', icon: 'funnel', iconClass: 'i-purple', value: leadVal('capture_rate') + '%', delta: leadDelta('capture_rate'), unit: '%' },
-    { label: 'Hot Lead Rate', icon: 'percent', iconClass: 'i-amber', value: leadVal('hot_lead_rate') + '%', delta: leadDelta('hot_lead_rate'), unit: '%' },
-    { label: 'Conversion Rate', icon: 'trophy', iconClass: 'i-green', value: leadVal('conversion_rate') + '%', delta: leadDelta('conversion_rate'), unit: '%' },
+    { label: 'Lead Capture Rate', icon: 'funnel', iconClass: 'i-purple', value: round1(leadVal('capture_rate')) + '%', delta: leadDelta('capture_rate'), unit: '%' },
+    { label: 'Hot Lead Rate', icon: 'percent', iconClass: 'i-amber', value: round1(leadVal('hot_lead_rate')) + '%', delta: leadDelta('hot_lead_rate'), unit: '%' },
+    { label: 'Conversion Rate', icon: 'trophy', iconClass: 'i-green', value: round1(leadVal('conversion_rate')) + '%', delta: leadDelta('conversion_rate'), unit: '%' },
   ]
   if (activeTab.value === 'engagement') return [
     { label: 'Page Views', icon: 'eye', iconClass: 'i-indigo', value: events.value.page_views || 0, delta: null },
-    { label: 'Chat Start Rate', icon: 'chat', iconClass: 'i-blue', value: val('chat_start_rate') + '%', delta: delta('chat_start_rate'), unit: '%' },
+    { label: 'Chat Start Rate', icon: 'chat', iconClass: 'i-blue', value: round1(val('chat_start_rate')) + '%', delta: delta('chat_start_rate'), unit: '%' },
     { label: 'Opened, No Message', icon: 'mail', iconClass: 'i-amber', value: val('opened_no_message'), delta: delta('opened_no_message') },
-    { label: 'Avg Heat Score', icon: 'fire', iconClass: 'i-pink', value: (analytics.value.avg_heat_score || 0) + '%', delta: null },
+    { label: 'Avg Heat Score', icon: 'fire', iconClass: 'i-pink', value: round1(analytics.value.avg_heat_score || 0) + '%', delta: null },
     { label: 'Exit Intent Fired', icon: 'exit', iconClass: 'i-red', value: events.value.exit_intent_count || 0, delta: null },
     { label: 'Pricing Page Visits', icon: 'tag', iconClass: 'i-purple', value: events.value.pricing_page_visits || 0, delta: null },
     { label: 'Leads Captured', icon: 'leadplus', iconClass: 'i-green', value: val('leads_captured'), delta: delta('leads_captured') },
@@ -372,7 +378,7 @@ const kpiCards = computed(() => {
     { label: 'Total Conversations', icon: 'chat', iconClass: 'i-indigo', value: val('total_sessions'), delta: delta('total_sessions') },
     { label: 'Answered Chats', icon: 'check', iconClass: 'i-green', value: val('answered_chats'), delta: delta('answered_chats') },
     { label: 'Opened, No Message', icon: 'mail', iconClass: 'i-amber', value: val('opened_no_message'), delta: delta('opened_no_message') },
-    { label: 'AI Resolution Rate', icon: 'bolt', iconClass: 'i-purple', value: val('ai_resolution_rate') + '%', delta: delta('ai_resolution_rate'), unit: '%' },
+    { label: 'AI Resolution Rate', icon: 'bolt', iconClass: 'i-purple', value: round1(val('ai_resolution_rate')) + '%', delta: delta('ai_resolution_rate'), unit: '%' },
     { label: 'Unique Visitors', icon: 'users', iconClass: 'i-blue', value: val('unique_visitors'), delta: delta('unique_visitors') },
     { label: 'Avg Chat Duration', icon: 'clock', iconClass: 'i-blue', value: fmtDuration(val('avg_duration_seconds')), delta: null, sub: 'over ' + val('answered_chats') + ' answered chats' },
     { label: 'Leads Captured', icon: 'leadplus', iconClass: 'i-pink', value: val('leads_captured'), delta: delta('leads_captured') },
@@ -509,7 +515,14 @@ const LineChart = {
             return nodes
           }),
         ]),
-        h('div', { class: 'chart-x' }, c.labels.map(l => h('span', { style: { left: l.left + '%' } }, l.text))),
+        h('div', { class: 'chart-x' }, c.labels.map(l => h('span', {
+          style: {
+            left: l.left + '%',
+            // Center each label on its dot; pin the edge labels inside so they
+            // don't clip off the chart.
+            transform: l.left <= 4 ? 'translateX(0)' : (l.left >= 96 ? 'translateX(-100%)' : 'translateX(-50%)'),
+          },
+        }, l.text))),
       ])
     }
   },

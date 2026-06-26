@@ -1,26 +1,13 @@
 <template>
   <div class="conv-page">
-    <!-- Row 1: title + view switch (List / Live grid) -->
+    <!-- Single condensed header: title (left) + live status, Filters & view
+         switch (right) — one row instead of two to give the chat more height. -->
     <div class="conv-header">
       <div class="conv-titles">
         <h1 class="conv-title">Conversations</h1>
         <p class="conv-sub">Live chats from every channel — read, monitor, and take over.</p>
       </div>
-      <div class="view-toggle" role="tablist" aria-label="Conversation view">
-        <button :class="{ active: view === 'list' }" @click="setView('list')" role="tab" :aria-selected="view === 'list'">
-          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          List
-        </button>
-        <button :class="{ active: view === 'live' }" @click="setView('live')" role="tab" :aria-selected="view === 'live'">
-          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>
-          Live grid
-        </button>
-      </div>
-    </div>
-
-    <!-- Row 2: live status (mute + Live) on the left, Filters on the right. -->
-    <div class="conv-actionbar">
-      <div class="ab-left">
+      <div class="conv-head-right">
         <button class="sound-btn" @click="toggleMute" :title="muted ? 'Unmute notifications' : 'Mute notifications'">
           <svg v-if="!muted" width="16" height="16" fill="none" viewBox="0 0 24 24">
             <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
@@ -33,35 +20,42 @@
           </svg>
         </button>
         <div class="live-badge"><span class="live-dot"></span> Live</div>
-      </div>
-
-      <div class="ab-right">
-        <button class="filters-btn" :class="{ on: activeFilters > 0 }" @click="filtersOpen = !filtersOpen">
-          <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          Filters
-          <span v-if="activeFilters > 0" class="filters-count">{{ activeFilters }}</span>
-        </button>
-
-        <!-- Filters popover -->
-        <div v-if="filtersOpen" class="filters-backdrop" @click="filtersOpen = false"></div>
-        <div v-if="filtersOpen" class="filters-pop">
-          <div class="fp-group">
-            <div class="fp-label">Sort by</div>
-            <div class="fp-opts">
-              <button :class="{ on: sortBy === 'recent' }" @click="sortBy = 'recent'">Most recent</button>
-              <button :class="{ on: sortBy === 'score' }" @click="sortBy = 'score'">Highest score</button>
+        <div class="ab-right">
+          <button class="filters-btn" :class="{ on: activeFilters > 0 }" @click="filtersOpen = !filtersOpen">
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M3 5h18M6 12h12M10 19h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Filters
+            <span v-if="activeFilters > 0" class="filters-count">{{ activeFilters }}</span>
+          </button>
+          <div v-if="filtersOpen" class="filters-backdrop" @click="filtersOpen = false"></div>
+          <div v-if="filtersOpen" class="filters-pop">
+            <div class="fp-group">
+              <div class="fp-label">Sort by</div>
+              <div class="fp-opts">
+                <button :class="{ on: sortBy === 'recent' }" @click="sortBy = 'recent'">Most recent</button>
+                <button :class="{ on: sortBy === 'score' }" @click="sortBy = 'score'">Highest score</button>
+              </div>
+            </div>
+            <div class="fp-group">
+              <div class="fp-label">Minimum score</div>
+              <div class="fp-opts">
+                <button v-for="opt in scoreOpts" :key="opt.v" :class="{ on: minScore === opt.v }" @click="minScore = opt.v">{{ opt.l }}</button>
+              </div>
+            </div>
+            <div class="fp-footer">
+              <button class="fp-reset" @click="resetFilters">Reset</button>
+              <button class="fp-done" @click="filtersOpen = false">Done</button>
             </div>
           </div>
-          <div class="fp-group">
-            <div class="fp-label">Minimum score</div>
-            <div class="fp-opts">
-              <button v-for="opt in scoreOpts" :key="opt.v" :class="{ on: minScore === opt.v }" @click="minScore = opt.v">{{ opt.l }}</button>
-            </div>
-          </div>
-          <div class="fp-footer">
-            <button class="fp-reset" @click="resetFilters">Reset</button>
-            <button class="fp-done" @click="filtersOpen = false">Done</button>
-          </div>
+        </div>
+        <div class="view-toggle" role="tablist" aria-label="Conversation view">
+          <button :class="{ active: view === 'list' }" @click="setView('list')" role="tab" :aria-selected="view === 'list'">
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            List
+          </button>
+          <button :class="{ active: view === 'live' }" @click="setView('live')" role="tab" :aria-selected="view === 'live'">
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" stroke-width="2"/></svg>
+            Live grid
+          </button>
         </div>
       </div>
     </div>
@@ -159,13 +153,14 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 24px 32px 14px;
+  gap: 14px;
+  padding: 16px 32px 10px;
   flex-wrap: wrap;
 }
 .conv-titles { min-width: 0; }
-.conv-title { font-size: 22px; font-weight: 700; color: var(--cf-text-primary); margin: 0 0 3px; }
-.conv-sub { font-size: 13px; color: var(--cf-text-muted); margin: 0; }
+.conv-title { font-size: 20px; font-weight: 700; color: var(--cf-text-primary); margin: 0 0 2px; }
+.conv-sub { font-size: 12.5px; color: var(--cf-text-muted); margin: 0; }
+.conv-head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
 .view-toggle {
   display: flex;
@@ -188,13 +183,7 @@ onMounted(() => {
 
 .conv-body { flex: 1; min-height: 0; overflow-y: auto; }
 
-/* ── Row 2: action bar (mute + Live · Filters) ──────────────────────────── */
-.conv-actionbar {
-  flex-shrink: 0;
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 0 32px 12px;
-}
-.ab-left { display: flex; align-items: center; gap: 10px; }
+/* Live status + Filters now live in the header's right cluster. */
 .ab-right { position: relative; }
 
 .sound-btn {
@@ -229,13 +218,13 @@ onMounted(() => {
   display: inline-flex; align-items: center; justify-content: center;
 }
 
-.filters-backdrop { position: fixed; inset: 0; z-index: 40; }
+.filters-backdrop { position: fixed; inset: 0; z-index: 900; background: rgba(2,6,23,0.45); }
 .filters-pop {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 41;
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 901;
   width: 248px; padding: 14px;
-  background: var(--cf-bg-surface, #0f172a);
+  background: var(--cf-bg-surface-raised, #161622);
   border: 1px solid var(--cf-border-default); border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+  box-shadow: 0 16px 44px rgba(0,0,0,0.5);
   display: flex; flex-direction: column; gap: 14px;
 }
 .fp-group { display: flex; flex-direction: column; gap: 8px; }
@@ -260,12 +249,12 @@ onMounted(() => {
 .conv-channels-card {
   flex-shrink: 0;
   display: flex; align-items: center; justify-content: space-between;
-  gap: 14px; flex-wrap: wrap;
-  margin: 0 32px 14px;
-  padding: 10px 14px;
+  gap: 12px; flex-wrap: wrap;
+  margin: 0 32px 10px;
+  padding: 8px 12px;
   background: var(--cf-bg-surface);
   border: 1px solid var(--cf-border-default);
-  border-radius: 14px;
+  border-radius: 12px;
 }
 .cc-left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
 .cc-label { font-size: 13px; font-weight: 600; color: var(--cf-text-muted); flex-shrink: 0; }
@@ -286,9 +275,8 @@ onMounted(() => {
 .chip-messenger.active { background: #0084ff; border-color: #0084ff; }
 
 @media (max-width: 600px) {
-  .conv-header { padding: 18px 16px 12px; }
-  .conv-actionbar { padding: 0 16px 10px; }
-  .conv-channels-card { margin: 0 16px 12px; }
+  .conv-header { padding: 14px 16px 10px; }
+  .conv-channels-card { margin: 0 16px 10px; }
   .view-toggle button { padding: 7px 12px; }
 }
 </style>

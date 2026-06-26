@@ -682,7 +682,7 @@
   </div>
 
   <!-- ── Integrations tab ─────────────────────────────────────────────────── -->
-  <div v-if="activeTab === 'integrations'" class="tab-content">
+  <div v-if="activeTab === 'integrations'" class="tab-content int-grid">
 
     <!-- BYOK -->
     <div class="gate-wrap">
@@ -1880,6 +1880,13 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .tab.active { color: #6366f1; border-bottom-color: #6366f1; }
 
 .tab-content { display: flex; flex-direction: column; gap: 16px; }
+
+/* Integrations: 2-column tile grid so connectors sit side-by-side instead of a
+   long single-column scroll. Each gate-wrap is a self-contained tile. */
+.int-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.int-grid > .gate-wrap { min-width: 0; }
+.int-grid .section-card { height: 100%; }
+@media (max-width: 900px) { .int-grid { grid-template-columns: 1fr; } }
 
 /* Section cards */
 .section-card {

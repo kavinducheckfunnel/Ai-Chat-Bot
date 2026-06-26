@@ -1199,7 +1199,7 @@ watch(selected, (s) => {
 
 .tab {
   display: flex; align-items: center; gap: 7px;
-  padding: 10px 16px; background: none; border: none;
+  padding: 8px 16px; background: none; border: none;
   border-bottom: 2px solid transparent;
   font-size: 13px; font-weight: 500; color: var(--cf-text-muted);
   cursor: pointer; transition: all 0.12s; margin-bottom: -1px;

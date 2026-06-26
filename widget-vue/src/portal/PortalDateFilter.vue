@@ -122,13 +122,13 @@ function clearCustom() {
 .df-trigger.open .df-caret { transform: rotate(90deg); }
 
 /* ── Popover ────────────────────────────────────────────────────────────── */
-.df-backdrop { position: fixed; inset: 0; z-index: 40; }
+.df-backdrop { position: fixed; inset: 0; z-index: 900; background: rgba(2,6,23,0.45); }
 .df-pop {
-  position: absolute; top: calc(100% + 8px); right: 0; z-index: 41;
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 901;
   width: 300px; padding: 12px;
-  background: var(--cf-bg-surface, #0f172a);
+  background: var(--cf-bg-surface-raised, #161622);
   border: 1px solid var(--cf-border-default); border-radius: 12px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+  box-shadow: 0 16px 44px rgba(0,0,0,0.5);
 }
 .df-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .df-presets button {
