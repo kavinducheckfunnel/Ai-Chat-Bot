@@ -695,7 +695,7 @@
   </div>
 
   <!-- ── Integrations tab ─────────────────────────────────────────────────── -->
-  <div v-if="activeTab === 'integrations'" class="tab-content int-grid">
+  <div v-if="activeTab === 'integrations'" class="tab-content">
 
     <!-- BYOK -->
     <div class="gate-wrap">
@@ -714,6 +714,7 @@
             <h2 class="section-title">AI Model (BYOK)</h2>
             <p class="section-sub">Use your own OpenAI, Anthropic or OpenRouter API key instead of the platform default.</p>
           </div>
+          <div class="status-badge" :class="intForm.ai_api_key ? 'active' : 'inactive'">{{ intForm.ai_api_key ? 'Connected' : 'Platform default' }}</div>
         </div>
       </div>
       <div class="form-grid">
@@ -848,8 +849,8 @@
     <div class="section-card">
       <div class="section-header">
         <div class="section-title-row">
-          <div class="channel-icon messenger-icon">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z" fill="#0084FF"/></svg>
+          <div class="channel-icon" style="background:rgba(0,132,255,0.12);color:#0084ff">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.145 2 11.243c0 2.842 1.358 5.38 3.504 7.106V22l3.36-1.847A10.94 10.94 0 0012 20.486c5.523 0 10-4.145 10-9.243S17.523 2 12 2z"/></svg>
           </div>
           <div>
             <h2 class="section-title">Facebook Messenger</h2>
@@ -903,8 +904,8 @@
     <div class="section-card">
       <div class="section-header">
         <div class="section-title-row">
-          <div class="channel-icon" style="background:rgba(225,48,108,0.12)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E1306C" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#E1306C" stroke="none"/></svg>
+          <div class="channel-icon" style="background:rgba(225,48,108,0.12);color:#E1306C">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
           </div>
           <div>
             <h2 class="section-title">Instagram Direct</h2>
@@ -991,14 +992,16 @@
       </div>
     <div class="section-card">
       <div class="section-header">
-        <div class="section-icon" style="background:#0088cc20">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0088cc" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(0,136,204,0.14);color:#0088cc">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22 11 13 2 9l20-7z"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">Telegram Bot</h2>
+            <p class="section-sub">Connect a Telegram bot so visitors can chat via Telegram.</p>
+          </div>
+          <div class="status-badge" :class="intForm.telegram_enabled ? 'active' : 'inactive'">{{ intForm.telegram_enabled ? 'Enabled' : 'Disabled' }}</div>
         </div>
-        <div>
-          <h2 class="section-title">Telegram Bot</h2>
-          <p class="section-sub">Connect a Telegram bot so visitors can chat via Telegram.</p>
-        </div>
-        <div class="status-badge" :class="intForm.telegram_enabled ? 'active' : 'inactive'">{{ intForm.telegram_enabled ? 'Enabled' : 'Disabled' }}</div>
       </div>
       <div class="form-grid">
         <div class="field" style="grid-column:1/-1">
@@ -1045,14 +1048,16 @@
       </div>
     <div class="section-card">
       <div class="section-header">
-        <div class="section-icon" style="background:#4a154b20">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4a154b" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="2"/><rect x="14" y="2" width="8" height="8" rx="2"/><rect x="2" y="14" width="8" height="8" rx="2"/><rect x="14" y="14" width="8" height="8" rx="2"/></svg>
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(168,85,247,0.14);color:#c084fc">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="8" height="8" rx="2"/><rect x="14" y="2" width="8" height="8" rx="2"/><rect x="2" y="14" width="8" height="8" rx="2"/><rect x="14" y="14" width="8" height="8" rx="2"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">Slack Notifications</h2>
+            <p class="section-sub">Get notified in Slack when a hot lead or new lead is captured.</p>
+          </div>
+          <div class="status-badge" :class="intForm.slack_webhook_url ? 'active' : 'inactive'">{{ intForm.slack_webhook_url ? 'Connected' : 'Not connected' }}</div>
         </div>
-        <div>
-          <h2 class="section-title">Slack Notifications</h2>
-          <p class="section-sub">Get notified in Slack when a hot lead or new lead is captured.</p>
-        </div>
-        <div class="status-badge" :class="intForm.slack_webhook_url ? 'active' : 'inactive'">{{ intForm.slack_webhook_url ? 'Connected' : 'Not connected' }}</div>
       </div>
       <div class="form-grid">
         <div class="field" style="grid-column:1/-1">
@@ -1076,14 +1081,16 @@
       </div>
     <div class="section-card">
       <div class="section-header">
-        <div class="section-icon" style="background:#ff620020">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ff6200" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        <div class="section-title-row">
+          <div class="channel-icon" style="background:rgba(245,158,11,0.14);color:#f59e0b">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          </div>
+          <div>
+            <h2 class="section-title">Outbound Webhook (Zapier / n8n)</h2>
+            <p class="section-sub">POST event data to an external URL when key events occur.</p>
+          </div>
+          <div class="status-badge" :class="intForm.outbound_webhook_url ? 'active' : 'inactive'">{{ intForm.outbound_webhook_url ? 'Active' : 'Not set' }}</div>
         </div>
-        <div>
-          <h2 class="section-title">Outbound Webhook (Zapier / n8n)</h2>
-          <p class="section-sub">POST event data to an external URL when key events occur.</p>
-        </div>
-        <div class="status-badge" :class="intForm.outbound_webhook_url ? 'active' : 'inactive'">{{ intForm.outbound_webhook_url ? 'Active' : 'Not set' }}</div>
       </div>
       <div class="form-grid">
         <div class="field" style="grid-column:1/-1">
@@ -1906,13 +1913,6 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 
 .tab-content { display: flex; flex-direction: column; gap: 16px; }
 
-/* Integrations: 2-column tile grid so connectors sit side-by-side instead of a
-   long single-column scroll. Each gate-wrap is a self-contained tile. */
-.int-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
-.int-grid > .gate-wrap { min-width: 0; }
-.int-grid .section-card { height: 100%; }
-@media (max-width: 900px) { .int-grid { grid-template-columns: 1fr; } }
-
 /* Section cards */
 .section-card {
   background: var(--cf-bg-surface-raised);
@@ -1951,7 +1951,6 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 }
 
 .web-icon { background: rgba(99,102,241,0.12); color: #a5b4fc; }
-.messenger-icon { background: rgba(0,132,255,0.1); }
 
 .section-title { font-size: 15px; font-weight: 600; color: var(--cf-text-primary); }
 .section-sub { font-size: 12px; color: var(--cf-text-muted); margin-top: 3px; }
