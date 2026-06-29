@@ -152,6 +152,20 @@ class TestWidgetConfigProactive:
         # behavior_prompt must NOT leak to the public widget config
         assert all('behavior_prompt' not in r for r in data['page_rules'])
 
+    def test_per_page_timeout_and_autoclose_exposed(self, anon_client, client_obj):
+        client_obj.page_rules = [{
+            'label': 'Cart', 'match_type': 'contains', 'pattern': '/cart', 'page_type': 'cart',
+            'priority': 55, 'enabled_widget': True, 'greeting_enabled': True,
+            'greeting_message': 'Cart help', 'behavior_prompt': 'be helpful',
+            'notification_timeout': 30, 'auto_close': 120,
+        }]
+        client_obj.save()
+        data = anon_client.get(f'/api/chat/widget-config/{client_obj.id}/').json()
+        cart = next(r for r in data['page_rules'] if r.get('pattern') == '/cart')
+        assert cart['notification_timeout'] == 30
+        assert cart['auto_close'] == 120
+        assert 'behavior_prompt' not in cart  # still server-only
+
 
 # ─── admin site-pages endpoint ────────────────────────────────────────────────
 

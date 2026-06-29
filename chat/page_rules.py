@@ -110,7 +110,9 @@ DEFAULT_PAGE_RULES = [
 
 # Public-safe rule keys shipped to the widget (NEVER expose behavior_prompt).
 _PUBLIC_KEYS = ('id', 'label', 'match_type', 'pattern', 'page_type', 'priority',
-                'enabled_widget', 'greeting_enabled', 'greeting_message')
+                'enabled_widget', 'greeting_enabled', 'greeting_message',
+                # Per-page overrides for widget behavior (blank → use global).
+                'notification_timeout', 'auto_close')
 
 
 def _path_of(url):

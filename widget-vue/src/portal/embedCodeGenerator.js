@@ -673,6 +673,8 @@ function newMsgId(){return 'u_'+Date.now()+'_'+Math.random().toString(36).slice(
 // widget can show greetings INSTANTLY (no LLM, no blocking round-trip); the
 // server re-derives authoritatively when we persist for the inbox.
 var pageRules=[],assistantIntro='',proactiveEnabled=true,notifTimeout=20,autoCloseSeconds=0;
+// Global defaults from config; per-page overrides (page_rules) win when present.
+var cfgNotifTimeout=20,cfgAutoClose=0;
 var cfgReady=false,widgetHidden=false;
 var UNREAD_KEY='cf_unread_'+sid,GREET_KEY='cf_greeted_'+sid,INTRO_KEY='cf_intro_'+sid,DND_KEY='cf_dnd_'+C;
 
@@ -789,7 +791,20 @@ setInterval(function(){
 function cfOnNav(){
   if(!cfgReady)return;
   applyVisibility();
+  applyPageOverrides();
   maybeGreet();
+}
+// Effective notification-timeout + auto-close: per-page override (page_rules)
+// when the current page has one, otherwise the global default.
+function applyPageOverrides(){
+  notifTimeout=cfgNotifTimeout; autoCloseSeconds=cfgAutoClose;
+  var rule=cfMatchRule(pageRules,location.pathname||'/');
+  if(rule){
+    var nt=rule.notification_timeout;
+    if(nt!==undefined&&nt!==null&&nt!=='')notifTimeout=Number(nt)||cfgNotifTimeout;
+    var ac=rule.auto_close;
+    if(ac!==undefined&&ac!==null&&ac!=='')autoCloseSeconds=Number(ac)||0;
+  }
 }
 (function(){
   try{
@@ -828,9 +843,10 @@ function applyConfig(cfg){
   if(Array.isArray(cfg.page_rules))pageRules=cfg.page_rules;
   if(typeof cfg.assistant_intro==='string')assistantIntro=cfg.assistant_intro;
   if(typeof cfg.proactive_enabled!=='undefined')proactiveEnabled=!!cfg.proactive_enabled;
-  if(cfg.notification_timeout_seconds)notifTimeout=cfg.notification_timeout_seconds;
-  if(typeof cfg.auto_close_seconds!=='undefined')autoCloseSeconds=cfg.auto_close_seconds||0;
+  if(cfg.notification_timeout_seconds)cfgNotifTimeout=cfg.notification_timeout_seconds;
+  if(typeof cfg.auto_close_seconds!=='undefined')cfgAutoClose=cfg.auto_close_seconds||0;
   cfgReady=true;
+  applyPageOverrides();
   applyVisibility();
   renderBadge();
   maybeGreet();

@@ -433,6 +433,19 @@
                   <textarea class="input" v-model="r.behavior_prompt" rows="2"
                     placeholder="e.g. Focus on sizing &amp; materials; don't push discounts here"></textarea>
                 </div>
+                <div class="pg-overrides">
+                  <div class="pg-field">
+                    <label>Notification timeout (sec)</label>
+                    <input class="input" type="number" min="3" max="300" v-model="r.notification_timeout"
+                      :placeholder="'Default: ' + (pForm.notification_timeout_seconds || 20)" />
+                  </div>
+                  <div class="pg-field">
+                    <label>Auto-close after idle (sec)</label>
+                    <input class="input" type="number" min="0" max="3600" v-model="r.auto_close"
+                      :placeholder="'Default: ' + (pForm.auto_close_seconds || 0) + ' (0 = never)'" />
+                  </div>
+                </div>
+                <p class="pg-override-hint">Leave blank to use the global defaults from “Proactive notifications” above.</p>
               </div>
             </div>
           </div>
@@ -1387,6 +1400,8 @@ function buildRows(pages) {
       greeting_message: ex ? (ex.greeting_message || typeGreeting(p.page_type)) : typeGreeting(p.page_type),
       behavior_prompt: ex ? (ex.behavior_prompt || '') : '',
       widget_visible: ex ? (ex.enabled_widget !== false) : true,
+      notification_timeout: ex && ex.notification_timeout != null ? ex.notification_timeout : '',
+      auto_close: ex && ex.auto_close != null ? ex.auto_close : '',
       custom: false, _open: false,
     }
   })
@@ -1397,7 +1412,10 @@ function buildRows(pages) {
     rows.push({
       path: r.pattern, url: '', title: r.label || '', page_type: r.page_type || 'fallback',
       greeting_on: r.greeting_enabled !== false, greeting_message: r.greeting_message || '',
-      behavior_prompt: r.behavior_prompt || '', widget_visible: r.enabled_widget !== false, custom: true, _open: false,
+      behavior_prompt: r.behavior_prompt || '', widget_visible: r.enabled_widget !== false,
+      notification_timeout: r.notification_timeout != null ? r.notification_timeout : '',
+      auto_close: r.auto_close != null ? r.auto_close : '',
+      custom: true, _open: false,
     })
   })
   pageRows.value = rows
@@ -1433,7 +1451,8 @@ async function syncPages() {
 function addRow() {
   pageRows.value.push({
     path: '/', url: '', title: 'Custom', page_type: 'fallback',
-    greeting_on: true, greeting_message: '', behavior_prompt: '', widget_visible: true, custom: true, _open: true,
+    greeting_on: true, greeting_message: '', behavior_prompt: '', widget_visible: true,
+    notification_timeout: '', auto_close: '', custom: true, _open: true,
   })
 }
 
@@ -1460,12 +1479,14 @@ async function savePageRules() {
     pageRows.value.forEach(r => {
       const path = (r.path || '').trim()
       if (!path) return
+      const nt = (r.notification_timeout ?? '').toString().trim()
+      const ac = (r.auto_close ?? '').toString().trim()
       // A row produces a rule if it customizes anything: greeting on, widget
-      // hidden, or a behavior prompt. Pure-default rows are left to fallback.
-      const active = r.greeting_on || !r.widget_visible || (r.behavior_prompt || '').trim()
+      // hidden, behavior prompt, or a per-page timeout/auto-close override.
+      const active = r.greeting_on || !r.widget_visible || (r.behavior_prompt || '').trim() || nt !== '' || ac !== ''
       if (!active) return
       const isProduct = r.page_type === 'product'
-      rules.push({
+      const rule = {
         label: r.title || r.path,
         page_type: r.page_type || 'fallback',
         match_type: isProduct ? 'contains' : 'exact',
@@ -1475,7 +1496,11 @@ async function savePageRules() {
         enabled_widget: r.widget_visible !== false,
         greeting_message: r.greeting_on ? (r.greeting_message || typeGreeting(r.page_type)) : '',
         behavior_prompt: (r.behavior_prompt || '').trim(),
-      })
+      }
+      // Per-page overrides — only persisted when set (blank → global default).
+      if (nt !== '') rule.notification_timeout = Math.max(3, Math.min(300, Number(nt) || 20))
+      if (ac !== '') rule.auto_close = Math.max(0, Math.min(3600, Number(ac) || 0))
+      rules.push(rule)
     })
     // Q2: pages the tenant didn't enable get a generic fallback greeting.
     rules.push({
@@ -2840,6 +2865,9 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .pg-field label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cf-text-muted); }
 .pg-field textarea { resize: vertical; font-family: inherit; }
 .pg-field textarea:disabled { opacity: 0.5; }
+.pg-overrides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pg-override-hint { font-size: 11.5px; color: var(--cf-text-muted); margin: 0; }
+@media (max-width: 640px) { .pg-overrides { grid-template-columns: 1fr; } }
 .pg-del { background: none; border: none; color: var(--cf-text-muted); font-size: 18px; line-height: 1;
   cursor: pointer; padding: 0 2px; flex-shrink: 0; }
 .pg-del:hover { color: #ef4444; }
