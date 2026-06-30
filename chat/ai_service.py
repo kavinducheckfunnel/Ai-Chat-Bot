@@ -574,6 +574,37 @@ def _recompute_heat_score(session) -> float:
     return round(min(score, 100), 1)
 
 
+def compute_kanban_stage(session) -> str:
+    """Return the kanban stage a session SHOULD be in, derived purely from its
+    metrics (the same heat/intent matrix the dashboard shows). Used by the
+    `recompute_kanban_states` backfill to move every lead to its correct column.
+
+    Terminal / explicitly-advanced stages are preserved (never auto-reverted):
+      CONVERTED, LOST, READY_TO_BUY.
+    Otherwise, most-advanced wins:
+      heat>=75 or (intent>=0.8 & urgency>=0.7) → HOT_LEAD
+      intent>=0.6                              → QUALIFIED
+      has >=1 visitor message                  → ENGAGED
+      else                                     → NEW
+    """
+    cur = (session.kanban_state or '').upper()
+    if cur in ('CONVERTED', 'LOST', 'READY_TO_BUY'):
+        return cur
+    intent = session.current_intent_ema or 0
+    urgency = session.current_urgency_ema or 0
+    budget = session.current_budget_ema or 0
+    heat = (intent * 0.45 + budget * 0.30 + urgency * 0.25) * 100
+    if (session.conversation_state or '').upper() == 'READY_TO_BUY':
+        return 'READY_TO_BUY'
+    if heat >= 75 or (intent >= 0.8 and urgency >= 0.7):
+        return 'HOT_LEAD'
+    if intent >= 0.6:
+        return 'QUALIFIED'
+    if (session.message_count or 0) >= 1:
+        return 'ENGAGED'
+    return 'NEW'
+
+
 def _maybe_promote_kanban(session) -> bool:
     """
     Auto-promote the kanban_state to HOT_LEAD or QUALIFIED when the
