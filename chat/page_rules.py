@@ -115,6 +115,50 @@ _PUBLIC_KEYS = ('id', 'label', 'match_type', 'pattern', 'page_type', 'priority',
                 'notification_timeout', 'auto_close')
 
 
+# Dynamic tags available per page type. Surfaced in the portal so tenants know
+# which {placeholders} they can drop into a greeting / behavior prompt. The
+# widget fills them client-side from the live page (no LLM); the server
+# re-derives from the request + client for persistence. Unknown values degrade
+# gracefully — a tag never leaks literally as "{product_name}".
+PAGE_TAGS = {
+    'home':       [{'tag': '{store_name}', 'label': 'Store name'}],
+    'collection': [{'tag': '{category_name}', 'label': 'Category name'}, {'tag': '{store_name}', 'label': 'Store name'}],
+    'product':    [{'tag': '{product_name}', 'label': 'Product name'}, {'tag': '{store_name}', 'label': 'Store name'}],
+    'cart':       [{'tag': '{cart_item_count}', 'label': 'Items in cart'}, {'tag': '{cart_total}', 'label': 'Cart total'}, {'tag': '{store_name}', 'label': 'Store name'}],
+    'checkout':   [{'tag': '{checkout_step}', 'label': 'Checkout step'}, {'tag': '{store_name}', 'label': 'Store name'}],
+    'contact':    [{'tag': '{store_name}', 'label': 'Store name'}],
+    'about':      [{'tag': '{store_name}', 'label': 'Store name'}],
+    'track':      [{'tag': '{store_name}', 'label': 'Store name'}],
+    'offers':     [{'tag': '{store_name}', 'label': 'Store name'}],
+    'faq':        [{'tag': '{store_name}', 'label': 'Store name'}],
+    'fallback':   [{'tag': '{store_name}', 'label': 'Store name'}],
+}
+
+# Generic word substituted when a tag's value is unknown at render time.
+_TAG_FALLBACKS = {
+    'product_name': 'this product',
+    'category_name': 'this collection',
+    'store_name': 'our store',
+    'cart_item_count': 'some',
+    'cart_total': '',
+    'checkout_step': 'this',
+}
+# "the {tag}" reads wrong with a generic noun ("the this product"), so soften
+# the article away when the value is missing.
+_TAG_SOFTEN = {
+    'product_name': 'this product',
+    'category_name': 'this collection',
+    'store_name': 'our store',
+}
+
+_TAG_RE = re.compile(r'\{([a-z_]+)\}')
+
+
+def page_tags(page_type):
+    """Public list of {tag,label} dynamic placeholders valid for a page type."""
+    return PAGE_TAGS.get(page_type or 'fallback', PAGE_TAGS['fallback'])
+
+
 def _path_of(url):
     """Extract the path portion from a full URL or a bare path."""
     if not url:
@@ -166,26 +210,75 @@ def get_rules(client):
 
 
 def match_rule(rules, url):
-    """Return the highest-priority rule matching the URL/path, or None."""
+    """Return the best rule matching the URL/path, or None.
+
+    Ranked by (priority desc, pattern-length desc) so a MORE SPECIFIC rule wins
+    over a generic one at the same priority. This is what lets a sub-page
+    inherit its nearest ancestor: a custom rule for ``/products/tshirts`` beats
+    the generic ``/products/`` template on ``/products/tshirts/polo`` because
+    its pattern is longer.
+    """
     path = _path_of(url)
-    ranked = sorted(rules or [], key=lambda r: r.get('priority', 0), reverse=True)
+    ranked = sorted(
+        rules or [],
+        key=lambda r: ((r.get('priority', 0) or 0), len(r.get('pattern') or '')),
+        reverse=True,
+    )
     for r in ranked:
         if _rule_matches(r, path):
             return r
     return None
 
 
-def resolve_greeting_text(rule, product_name=None):
-    """Fill {product_name} in a rule's greeting message, degrading gracefully."""
+def resolve_greeting_text(rule, product_name=None, values=None, keep_unknown=False):
+    """Fill dynamic {tags} in a rule's greeting message, degrading gracefully.
+
+    ``values`` is a dict of tag → value (e.g. {'product_name': 'Blue Hoodie',
+    'store_name': 'Acme'}). For backward compatibility the 2nd positional arg
+    may be a bare product_name string OR a values dict.
+
+    ``keep_unknown`` — when True, ONLY tags we have a value for are substituted;
+    every other ``{placeholder}`` (a known tag with no value, or any word the
+    tenant happened to wrap in braces) is left untouched. Use this for free-form
+    AI behaviour prompts so incidental ``{...}`` prose isn't silently deleted.
+    The default (False) is the customer-facing greeting mode: missing tags fall
+    back to a generic word so a literal "{product_name}" never reaches a visitor.
+    """
     msg = (rule.get('greeting_message') or '').strip()
-    if '{product_name}' in msg:
-        name = (product_name or '').strip()
-        if name:
-            msg = msg.replace('{product_name}', name)
-        else:
-            # No name available — soften "the {product_name}" → "this product".
-            msg = msg.replace('the {product_name}', 'this product').replace('{product_name}', 'this product')
-    return msg
+    if not msg:
+        return msg
+
+    vals = {}
+    if isinstance(product_name, dict):
+        vals.update(product_name)
+    elif product_name:
+        vals['product_name'] = product_name
+    if isinstance(values, dict):
+        vals.update(values)
+    # Normalise everything to trimmed strings.
+    vals = {k: ('' if v is None else str(v).strip()) for k, v in vals.items()}
+
+    # Soften "the {tag}" first when the value is missing (avoids "the this …").
+    # Greeting mode only — in keep_unknown mode we never substitute a fallback.
+    if not keep_unknown:
+        for key, soft in _TAG_SOFTEN.items():
+            if not vals.get(key):
+                msg = msg.replace('the {' + key + '}', soft)
+
+    def _repl(m):
+        key = m.group(1)
+        v = vals.get(key)
+        if v:
+            return v
+        if keep_unknown:
+            return m.group(0)  # leave the literal placeholder intact
+        return _TAG_FALLBACKS.get(key, '')
+
+    msg = _TAG_RE.sub(_repl, msg)
+    if keep_unknown:
+        return msg
+    # Tidy any double space a dropped tag left behind.
+    return re.sub(r'\s{2,}', ' ', msg).strip()
 
 
 def public_rules(client):

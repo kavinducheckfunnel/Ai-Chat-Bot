@@ -64,6 +64,19 @@ class TestMatchRule:
         rule = pr.match_rule(rules, '/products/abc')
         assert rule['page_type'] == 'product'
 
+    def test_more_specific_pattern_wins_at_equal_priority(self):
+        # A custom rule for /products/tshirts must beat the generic /products/
+        # template on a deeper sub-page, so /products/tshirts/polo INHERITS the
+        # nearest ancestor's greeting/behaviour.
+        rules = [
+            {'page_type': 'product', 'match_type': 'contains', 'pattern': '/products/', 'priority': 60,
+             'greeting_message': 'generic', 'greeting_enabled': True, 'enabled_widget': True},
+            {'page_type': 'product', 'match_type': 'contains', 'pattern': '/products/tshirts', 'priority': 60,
+             'greeting_message': 'tshirt', 'greeting_enabled': True, 'enabled_widget': True},
+        ]
+        rule = pr.match_rule(rules, 'https://s.com/products/tshirts/polo-tshirt')
+        assert rule['greeting_message'] == 'tshirt'
+
 
 class TestResolveGreeting:
     def test_product_name_interpolation(self):
@@ -73,6 +86,47 @@ class TestResolveGreeting:
     def test_graceful_without_name(self):
         rule = {'greeting_message': 'Interested in the {product_name}?'}
         assert pr.resolve_greeting_text(rule, '') == 'Interested in this product?'
+
+    def test_values_dict_fills_product(self):
+        rule = {'greeting_message': 'Interested in the {product_name}?'}
+        assert pr.resolve_greeting_text(rule, values={'product_name': 'Hat'}) == 'Interested in the Hat?'
+
+    def test_store_name_filled_and_softened(self):
+        rule = {'greeting_message': 'Welcome to {store_name}!'}
+        assert pr.resolve_greeting_text(rule, values={'store_name': 'Acme'}) == 'Welcome to Acme!'
+        # Missing → generic fallback, never the literal tag.
+        out = pr.resolve_greeting_text(rule, values={})
+        assert '{store_name}' not in out and 'our store' in out
+
+    def test_category_name_softens_article(self):
+        rule = {'greeting_message': 'Need help with the {category_name}?'}
+        assert pr.resolve_greeting_text(rule, values={}) == 'Need help with this collection?'
+
+    def test_unknown_cart_tag_dropped_not_leaked(self):
+        rule = {'greeting_message': 'Your cart total is {cart_total} now.'}
+        out = pr.resolve_greeting_text(rule, values={})
+        assert '{cart_total}' not in out
+
+    def test_page_tags_lookup(self):
+        assert any(t['tag'] == '{product_name}' for t in pr.page_tags('product'))
+        assert any(t['tag'] == '{store_name}' for t in pr.page_tags('home'))
+        # Unknown type → fallback tag set (store_name).
+        assert any(t['tag'] == '{store_name}' for t in pr.page_tags('zzz'))
+
+    def test_keep_unknown_preserves_freeform_prompt_tags(self):
+        # AI behaviour prompts must NOT have incidental {placeholders} stripped.
+        rule = {'greeting_message': 'Use {product_name} naturally; greet by their {name}; reply in {language}.'}
+        out = pr.resolve_greeting_text(
+            rule, values={'product_name': 'Polo Tee'}, keep_unknown=True)
+        assert 'Polo Tee' in out          # known tag with a value → filled
+        assert '{name}' in out            # unknown tag → left intact
+        assert '{language}' in out        # unknown tag → left intact
+
+    def test_keep_unknown_leaves_known_tag_without_value(self):
+        rule = {'greeting_message': 'Focus on {product_name} details.'}
+        # No value provided + keep_unknown → leave the placeholder (don't fabricate).
+        out = pr.resolve_greeting_text(rule, values={}, keep_unknown=True)
+        assert out == 'Focus on {product_name} details.'
 
 
 # ─── page-message endpoint ────────────────────────────────────────────────────
@@ -166,6 +220,15 @@ class TestWidgetConfigProactive:
         assert cart['auto_close'] == 120
         assert 'behavior_prompt' not in cart  # still server-only
 
+    def test_config_includes_static_nudges_and_store(self, anon_client, client_obj):
+        client_obj.idle_message = 'Still there?'
+        client_obj.exit_message = "Don't go!"
+        client_obj.save()
+        data = anon_client.get(f'/api/chat/widget-config/{client_obj.id}/').json()
+        assert data['idle_message'] == 'Still there?'
+        assert data['exit_message'] == "Don't go!"
+        assert data['store_name'] == client_obj.name
+
 
 # ─── admin site-pages endpoint ────────────────────────────────────────────────
 
@@ -178,6 +241,9 @@ class TestSitePagesEndpoint:
         data = tenant_client.get(f'/api/admin/clients/{client_obj.id}/site-pages/').json()
         assert any(p['page_type'] == 'product' for p in data['pages'])
         assert data['default_rules']
+        # Dynamic tags for the Pages UI.
+        assert 'page_tags' in data
+        assert any(t['tag'] == '{product_name}' for t in data['page_tags']['product'])
 
     def test_other_tenant_blocked(self, tenant_client2, client_obj):
         resp = tenant_client2.get(f'/api/admin/clients/{client_obj.id}/site-pages/')

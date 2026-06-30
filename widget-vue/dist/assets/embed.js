@@ -1,4 +1,4 @@
-(function(){"use strict";function f(i,n,o,s,l){if(!i||!n)return"";const r=n.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),d=`<style>
+(function(){"use strict";function f(i,r,o,s,d){if(!i||!r)return"";const n=r.replace(/\/widget\/widget\.js.*$/,"").replace(/\/$/,""),e=(s||"AI Assistant").replace(/'/g,"\\'"),l=`<style>
 #cf-w {
   --cf-accent: ${o||"#6366f1"};
   --cf-bg: #111111;
@@ -549,7 +549,7 @@
 </div>
 </div>`,a=`<script>
 (function(){
-var C='${i}',B='${r}';
+var C='${i}',B='${n}';
 
 // ── Identity persistence ─────────────────────────────────────────────
 // session_id (sid)  → a FIRST-PARTY COOKIE (primary) + localStorage (mirror)
@@ -642,6 +642,8 @@ function newMsgId(){return 'u_'+Date.now()+'_'+Math.random().toString(36).slice(
 // widget can show greetings INSTANTLY (no LLM, no blocking round-trip); the
 // server re-derives authoritatively when we persist for the inbox.
 var pageRules=[],assistantIntro='',proactiveEnabled=true,notifTimeout=20,autoCloseSeconds=0;
+// Store/brand name + manual static nudges (no LLM).
+var storeName='',idleMessage='',exitMessage='';
 // Global defaults from config; per-page overrides (page_rules) win when present.
 var cfgNotifTimeout=20,cfgAutoClose=0;
 var cfgReady=false,widgetHidden=false;
@@ -674,18 +676,77 @@ function cfMatches(rule,path){
   return !!pt&&cfClassify(path)===pt;
 }
 function cfMatchRule(rules,path){
-  var ranked=(rules||[]).slice().sort(function(a,b){return(b.priority||0)-(a.priority||0)});
+  // Rank by (priority desc, pattern-length desc) so a MORE SPECIFIC rule wins
+  // at the same priority — this is what lets /products/tshirts/polo inherit a
+  // custom /products/tshirts rule over the generic /products/ template.
+  var ranked=(rules||[]).slice().sort(function(a,b){
+    var pa=a.priority||0,pb=b.priority||0;
+    if(pb!==pa)return pb-pa;
+    return (b.pattern||'').length-(a.pattern||'').length;
+  });
   for(var i=0;i<ranked.length;i++){if(cfMatches(ranked[i],path))return ranked[i]}
   return null;
 }
-function cfGreetText(rule,pname){
-  var m=rule.greeting_message||'';
-  if(m.indexOf('{product_name}')>=0){
-    var n=(pname||'').trim();
-    if(n)m=m.split('{product_name}').join(n);
-    else m=m.split('the {product_name}').join('this product').split('{product_name}').join('this product');
+// Dynamic-tag resolution — mirrors chat/page_rules.py so the bubble fills
+// {product_name}/{store_name}/{category_name}/{cart_*}/{checkout_step} the same
+// way the server does. Unknown values degrade gracefully (never leak literally).
+var CF_TAG_FALLBACKS={product_name:'this product',category_name:'this collection',
+  store_name:'our store',cart_item_count:'some',cart_total:'',checkout_step:'this'};
+var CF_TAG_SOFTEN={product_name:'this product',category_name:'this collection',store_name:'our store'};
+function cfFillTags(msg,vals){
+  if(!msg)return msg;
+  vals=vals||{};
+  for(var k in CF_TAG_SOFTEN){
+    if(!vals[k])msg=msg.split('the {'+k+'}').join(CF_TAG_SOFTEN[k]);
   }
-  return m;
+  msg=msg.replace(/\\{([a-z_]+)\\}/g,function(m,key){
+    var v=vals[key];
+    if(v!==undefined&&v!==null&&String(v).trim()!=='')return String(v).trim();
+    return Object.prototype.hasOwnProperty.call(CF_TAG_FALLBACKS,key)?CF_TAG_FALLBACKS[key]:'';
+  });
+  return msg.replace(/\\s{2,}/g,' ').trim();
+}
+function cfGreetText(rule,vals){return cfFillTags(rule.greeting_message||'',vals||{})}
+// Best-effort category name (collection pages).
+function cfCategoryName(){
+  try{
+    var h=document.querySelector('h1');
+    if(h&&(h.textContent||'').trim())return h.textContent.trim().slice(0,80);
+    var og=document.querySelector('meta[property="og:title"]');
+    if(og&&og.content)return og.content.split('|')[0].split('\\u2013')[0].trim().slice(0,80);
+    if(document.title)return document.title.split('|')[0].split('-')[0].trim().slice(0,80);
+  }catch(e){}
+  return'';
+}
+// Best-effort cart count + total (Shopify/Woo common selectors).
+function cfCart(){
+  var out={count:'',total:''};
+  try{
+    var c=document.querySelector('[data-cart-count],.cart-count-bubble,.cart-count,#CartCount,.cart-link__bubble-num');
+    if(c){var n=((c.getAttribute&&c.getAttribute('data-cart-count'))||c.textContent||'').replace(/[^0-9]/g,'');if(n)out.count=n}
+    var t=document.querySelector('[data-cart-total],.totals__total-value,.cart__subtotal,.cart-subtotal,.cart_totals .amount');
+    if(t){var s=((t.getAttribute&&t.getAttribute('data-cart-total'))||t.textContent||'').trim();if(s)out.total=s.slice(0,24)}
+  }catch(e){}
+  return out;
+}
+// Best-effort checkout step from the URL.
+function cfCheckoutStep(){
+  try{var p=(location.pathname||'').toLowerCase();
+    if(p.indexOf('payment')>=0)return'payment';
+    if(p.indexOf('shipping')>=0)return'shipping';
+    if(p.indexOf('information')>=0||p.indexOf('contact')>=0)return'information';
+    if(p.indexOf('review')>=0)return'review';
+  }catch(e){}
+  return'';
+}
+// Assemble the value bag for the current page type.
+function cfPageValues(pt){
+  var v={store_name:storeName};
+  if(pt==='product')v.product_name=cfProductName();
+  else if(pt==='collection')v.category_name=cfCategoryName();
+  else if(pt==='cart'){var c=cfCart();v.cart_item_count=c.count;v.cart_total=c.total}
+  else if(pt==='checkout')v.checkout_step=cfCheckoutStep();
+  return v;
 }
 function cfProductName(){
   try{
@@ -725,23 +786,38 @@ function showNote(text){
   noteTimer=setTimeout(hideNote,(notifTimeout||20)*1000);
 }
 function hideNote(){var n=$('cf-note');if(n)n.classList.remove('show');if(noteTimer){clearTimeout(noteTimer);noteTimer=null}}
-// Core: decide + show + persist the page greeting (one per page_type / session)
+// Core: decide + show + persist the page greeting.
+// The bubble is STATIC (no LLM), so it re-shows on EVERY page arrival —
+// including revisiting a page or another page of the same type. We only avoid
+// re-firing on the SAME path back-to-back (lastGreetPath) so a single load /
+// SPA route doesn't double-pop. Persistence to the inbox stays de-duped to one
+// per page_type per session (markGreeted + server-side dedupe) so the
+// conversation history isn't flooded with repeats.
+var lastGreetPath=null;
 function maybeGreet(){
-  if(!cfgReady||widgetHidden||!proactiveEnabled||isOpen)return;
+  if(!cfgReady||widgetHidden||!proactiveEnabled||isOpen||isDnd())return;
   var path=location.pathname||'/';
+  if(path===lastGreetPath)return;        // already greeted THIS page; re-fires on nav
   var rule=cfMatchRule(pageRules,path);
   if(!rule||rule.greeting_enabled===false||!rule.greeting_message)return;
   var pt=rule.page_type||cfClassify(path);
-  if(greetedTypes().indexOf(pt)>=0)return;
-  markGreeted(pt);
-  var pname=(pt==='product')?cfProductName():'';
-  var text=cfGreetText(rule,pname);
+  lastGreetPath=path;
+  var vals=cfPageValues(pt);
+  var text=cfGreetText(rule,vals);
+  if(!text)return;
   var introDone=false;try{introDone=localStorage.getItem(INTRO_KEY)==='1'}catch(e){}
   if(!introDone&&assistantIntro){text=assistantIntro+' '+text;try{localStorage.setItem(INTRO_KEY,'1')}catch(e){}}
   bumpUnread();
   showNote(text);
-  try{fetch(B+'/api/chat/page-message/',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({session_id:sid,client_id:C,page_url:location.href,page_type:pt,product_name:pname})}).catch(function(){})}catch(e){}
+  // Persist to the inbox ONCE per page_type per session (server also dedupes).
+  if(greetedTypes().indexOf(pt)<0){
+    markGreeted(pt);
+    try{fetch(B+'/api/chat/page-message/',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({session_id:sid,client_id:C,page_url:location.href,page_type:pt,
+        product_name:vals.product_name||'',category_name:vals.category_name||'',
+        cart_item_count:vals.cart_item_count||'',cart_total:vals.cart_total||'',
+        checkout_step:vals.checkout_step||''})}).catch(function(){})}catch(e){}
+  }
 }
 // Re-fetch the server transcript so persisted greetings appear when opened.
 function refreshTranscript(){
@@ -814,6 +890,11 @@ function applyConfig(cfg){
   if(typeof cfg.proactive_enabled!=='undefined')proactiveEnabled=!!cfg.proactive_enabled;
   if(cfg.notification_timeout_seconds)cfgNotifTimeout=cfg.notification_timeout_seconds;
   if(typeof cfg.auto_close_seconds!=='undefined')cfgAutoClose=cfg.auto_close_seconds||0;
+  // Store name (fills {store_name}) + manual static nudges.
+  if(typeof cfg.store_name==='string'&&cfg.store_name)storeName=cfg.store_name;
+  else if(cfg.chatbot_name)storeName=cfg.chatbot_name;
+  if(typeof cfg.idle_message==='string')idleMessage=cfg.idle_message;
+  if(typeof cfg.exit_message==='string')exitMessage=cfg.exit_message;
   cfgReady=true;
   applyPageOverrides();
   applyVisibility();
@@ -1417,7 +1498,16 @@ document.addEventListener('play',function(){behavior.videoPlays++},true);
 // previously dead on phones. Shared gate: timeOnSite>=10, once per session.
 function _fireExitIntent(source){
   if(behavior.exitIntentFired||behavior.timeOnSite<10)return;
-  behavior.exitIntentFired=true;flush(true);fireTrigger('exit_intent');
+  behavior.exitIntentFired=true;flush(true);
+  // Manual exit message → STATIC bubble (no LLM, no tokens). When the tenant
+  // hasn't set one, fall back to the AI/CTA exit_intent flow as before.
+  if(exitMessage){
+    if(proactiveEnabled&&!isOpen&&!widgetHidden&&!isDnd()){
+      bumpUnread();showNote(cfFillTags(exitMessage,{store_name:storeName}));
+    }
+    return;
+  }
+  fireTrigger('exit_intent');
 }
 document.addEventListener('mouseleave',function(e){
   if(e.clientY>20)return;
@@ -1438,6 +1528,26 @@ document.addEventListener('visibilitychange',function(){
 });
 // pagehide = a genuine navigation away → fire immediately.
 window.addEventListener('pagehide',function(){_fireExitIntent('pagehide')});
+
+// ── Idle nudge — manual static message after the visitor goes quiet ──────
+// Fires once per session when the chat is closed and the visitor has been
+// inactive for IDLE_NUDGE_SECONDS. Static (no LLM). Blank message = disabled.
+var IDLE_NUDGE_SECONDS=45;
+var lastPageActivity=Date.now();
+var IDLE_FLAG='cf_idle_'+sid;
+function _idleFired(){try{return sessionStorage.getItem(IDLE_FLAG)==='1'}catch(e){return false}}
+function _setIdleFired(){try{sessionStorage.setItem(IDLE_FLAG,'1')}catch(e){}}
+['mousemove','keydown','scroll','touchstart','pointerdown'].forEach(function(ev){
+  document.addEventListener(ev,function(){lastPageActivity=Date.now()},{passive:true});
+});
+setInterval(function(){
+  if(!idleMessage||_idleFired())return;
+  if(!cfgReady||!proactiveEnabled||isOpen||widgetHidden||isDnd())return;
+  if((Date.now()-lastPageActivity)/1000>=IDLE_NUDGE_SECONDS){
+    _setIdleFired();
+    bumpUnread();showNote(cfFillTags(idleMessage,{store_name:storeName}));
+  }
+},3000);
 
 // Time on site + deep engagement trigger
 // C7 — lowered from scrollDepth>=75 + timeOnSite>=90 to scrollDepth>=50 + timeOnSite>=30
@@ -1551,7 +1661,7 @@ if($('cf-lead-ph')){
 })();
 })();
 <\/script>`;return`<!-- Start of Checkfunnel code -->
-`+d+`
+`+l+`
 `+t+`
 `+a+`
-<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=r;var d=Array.prototype.slice.call(c.childNodes);d.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var n=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=n+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",l=window.__CF_NAME__||"AI Assistant",r=f(i,o,s,l,"html");if(!r)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();
+<!-- End of Checkfunnel code -->`}(function(){try{let e=function(){if(!document.getElementById("cf-w")){var c=document.createElement("div");c.innerHTML=n;var l=Array.prototype.slice.call(c.childNodes);l.forEach(function(t){if(t.tagName==="SCRIPT"){var a=document.createElement("script");t.src?a.src=t.src:a.textContent=t.textContent,document.body.appendChild(a)}else document.body.appendChild(t)})}};if(document.getElementById("cf-w"))return;var i=window.__CF_CLIENT_ID__;if(!i)return;var r=(window.__CF_BACKEND_URL__||window.location.origin).replace(/\/$/,""),o=r+"/widget/widget.js",s=window.__CF_COLOR__||"#6366f1",d=window.__CF_NAME__||"AI Assistant",n=f(i,o,s,d,"html");if(!n)return;document.body?e():document.addEventListener("DOMContentLoaded",e)}catch(e){window.console&&console.error&&console.error("[CF embed]",e)}})()})();

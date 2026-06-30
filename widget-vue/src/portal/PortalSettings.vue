@@ -363,6 +363,14 @@
             <label>Auto-close chat after idle (seconds, 0 = never)</label>
             <input class="input" type="number" min="0" max="3600" v-model.number="pForm.auto_close_seconds" />
           </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Idle nudge message <span class="field-hint">— shown as a bubble after ~45s of inactivity. Leave blank to disable. {store_name} allowed.</span></label>
+            <input class="input" type="text" v-model="pForm.idle_message" maxlength="200" placeholder="Still there? I'm here if you need any help 👋" />
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Exit-intent message <span class="field-hint">— shown when a visitor is about to leave. Static, no AI tokens. Blank uses your CTA strategy. {store_name} allowed.</span></label>
+            <input class="input" type="text" v-model="pForm.exit_message" maxlength="200" placeholder="Wait — don't leave yet! Can I help you find what you're looking for?" />
+          </div>
         </div>
         <div class="save-row">
           <button class="btn-save" @click="saveProactive" :disabled="pSaving">{{ pSaving ? 'Saving…' : pSaved ? '✓ Saved' : 'Save settings' }}</button>
@@ -427,11 +435,18 @@
                   <label>Greeting message</label>
                   <textarea class="input" v-model="r.greeting_message" rows="2" :disabled="!r.greeting_on"
                     :placeholder="r.page_type==='product' ? 'Greeting — use {product_name} here' : 'Greeting message for this page'"></textarea>
+                  <div class="pg-tags" v-if="pageTags(r.page_type).length">
+                    <span class="pg-tags-lbl">Tags:</span>
+                    <button v-for="t in pageTags(r.page_type)" :key="t.tag" type="button" class="pg-tag"
+                      :disabled="!r.greeting_on" :title="'Insert ' + t.label + ' — click to add to the greeting'"
+                      @click="insertTag(r, t.tag)">{{ t.tag }}</button>
+                  </div>
                 </div>
                 <div class="pg-field">
                   <label>AI behaviour on this page (optional)</label>
                   <textarea class="input" v-model="r.behavior_prompt" rows="2"
                     placeholder="e.g. Focus on sizing &amp; materials; don't push discounts here"></textarea>
+                  <p class="pg-tags-note" v-if="pageTags(r.page_type).length">You can use the same tags here — e.g. <code>Use {{ pageTags(r.page_type)[0].tag }} naturally.</code></p>
                 </div>
                 <div class="pg-overrides">
                   <div class="pg-field">
@@ -1363,6 +1378,8 @@ watch(() => props.client, (c) => {
   pForm.value.assistant_intro = c.assistant_intro || "Hi! I'm your AI Shopping Assistant."
   pForm.value.notification_timeout_seconds = c.notification_timeout_seconds || 20
   pForm.value.auto_close_seconds = c.auto_close_seconds || 0
+  pForm.value.idle_message = c.idle_message || ''
+  pForm.value.exit_message = c.exit_message || ''
   offers.value = Array.isArray(c.active_offers) ? c.active_offers.map(o => ({ ...o, id: o.id || offId() })) : []
   loadSitePages()
   // After client loads, fetch live Telegram webhook health so the user
@@ -1378,12 +1395,25 @@ const pForm = ref({
   assistant_intro: "Hi! I'm your AI Shopping Assistant.",
   notification_timeout_seconds: 20,
   auto_close_seconds: 0,
+  idle_message: '',
+  exit_message: '',
 })
 // Table rows are DERIVED from the pages we detected when crawling the site
 // (different per site), merged with any rules the tenant already saved.
 const pageRows = ref([])
 const defaultRules = ref([])
+const pageTagMap = ref({})
 const genericFallback = ref('How can I help you with your shopping today?')
+
+// Dynamic {tags} valid for a page type (Product → product_name, …). Sourced
+// from the backend (chat/page_rules.PAGE_TAGS) so there's one source of truth.
+function pageTags(pt) {
+  return pageTagMap.value[pt] || pageTagMap.value['fallback'] || []
+}
+function insertTag(r, tag) {
+  const cur = r.greeting_message || ''
+  r.greeting_message = cur ? (cur + (cur.endsWith(' ') ? '' : ' ') + tag) : tag
+}
 const pSaving = ref(false)
 const pSaved = ref(false)
 const prSaved = ref(false)
@@ -1437,14 +1467,24 @@ function toggleAll() {
   pageRows.value.forEach(r => { r._open = open })
 }
 
+let _autoSyncTried = false
 async function loadSitePages() {
   if (!props.client) return
   try {
     const data = await api.getSitePages(props.client.id)
     defaultRules.value = data?.default_rules || []
+    pageTagMap.value = data?.page_tags || {}
     const fb = defaultRules.value.find(x => x.page_type === 'fallback')
     if (fb) genericFallback.value = fb.greeting_message
-    buildRows(data?.pages || [])
+    const pages = data?.pages || []
+    buildRows(pages)
+    // Persist-across-refresh: detected pages live in the DB, so they should
+    // reappear on reload. If none were detected yet but a knowledge base
+    // exists, auto-detect once so the tenant never has to click "Sync".
+    if (!pages.length && !_autoSyncTried && (props.client.total_pages_ingested || 0) > 0) {
+      _autoSyncTried = true
+      await syncPages()
+    }
   } catch { /* non-fatal */ }
 }
 
@@ -1474,6 +1514,8 @@ async function saveProactive() {
       assistant_intro: pForm.value.assistant_intro,
       notification_timeout_seconds: pForm.value.notification_timeout_seconds,
       auto_close_seconds: pForm.value.auto_close_seconds,
+      idle_message: pForm.value.idle_message,
+      exit_message: pForm.value.exit_message,
     })
     emit('client-updated', updated)
     pSaved.value = true; setTimeout(() => { pSaved.value = false }, 3000)
@@ -2869,6 +2911,17 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
 .pg-overrides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pg-override-hint { font-size: 11.5px; color: var(--cf-text-muted); margin: 0; }
 @media (max-width: 640px) { .pg-overrides { grid-template-columns: 1fr; } }
+/* Dynamic-tag chips under the greeting field (portal accent = #6366f1) */
+.pg-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 2px; }
+.pg-tags-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cf-text-muted); }
+.pg-tag { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: #6366f1;
+  background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.35);
+  border-radius: 6px; padding: 2px 8px; cursor: pointer; transition: background 0.12s, transform 0.05s; }
+.pg-tag:hover:not(:disabled) { background: rgba(99,102,241,0.22); }
+.pg-tag:active:not(:disabled) { transform: translateY(1px); }
+.pg-tag:disabled { opacity: 0.45; cursor: not-allowed; }
+.pg-tags-note { font-size: 11.5px; color: var(--cf-text-muted); margin: 0; }
+.pg-tags-note code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; background: var(--cf-bg-surface-raised); padding: 1px 5px; border-radius: 4px; }
 .pg-del { background: none; border: none; color: var(--cf-text-muted); font-size: 18px; line-height: 1;
   cursor: pointer; padding: 0 2px; flex-shrink: 0; }
 .pg-del:hover { color: #ef4444; }

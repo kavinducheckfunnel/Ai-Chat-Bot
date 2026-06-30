@@ -894,10 +894,22 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
         visits = session.page_visits or []
         if visits and session.client_id:
             from . import page_rules as _pr
-            last_url = (visits[-1] or {}).get('url') or ''
+            last = visits[-1] or {}
+            last_url = last.get('url') or ''
             rule = _pr.match_rule(_pr.get_rules(session.client), last_url)
             bp = (rule or {}).get('behavior_prompt', '').strip() if rule else ''
             if bp:
+                # Resolve any dynamic {tags} in the behaviour prompt with the
+                # context we have server-side (page title ≈ product/category
+                # name, client name = store name). Degrades gracefully.
+                tag_values = {
+                    'store_name': (session.client.name or session.client.chatbot_name or '').strip(),
+                    'product_name': (last.get('title') or '').strip(),
+                    'category_name': (last.get('title') or '').strip(),
+                }
+                # keep_unknown=True: fill {store_name}/{product_name}/… but leave
+                # any other {placeholder} prose in the tenant's instruction intact.
+                bp = _pr.resolve_greeting_text({'greeting_message': bp}, values=tag_values, keep_unknown=True)
                 page_block = (
                     f"\n\nPAGE CONTEXT — the visitor is currently on the "
                     f"\"{rule.get('label', 'page')}\" page. {bp}"

@@ -202,6 +202,9 @@ def widget_config(request, client_id):
             'fomo_offer_text': None,
             'fomo_countdown_seconds': 600,
             'discount_code': None,
+            'store_name': '',
+            'idle_message': '',
+            'exit_message': '',
         })
 
     return Response({
@@ -223,6 +226,11 @@ def widget_config(request, client_id):
         'proactive_enabled': bool(client.proactive_notifications_enabled) and getattr(client, 'cta_mode', 'ai') != 'off',
         'notification_timeout_seconds': client.notification_timeout_seconds,
         'auto_close_seconds': client.auto_close_seconds,
+        # Store/brand name → fills the {store_name} dynamic tag in greetings.
+        'store_name': client.name,
+        # Manual, static (no-LLM) nudges. Blank → feature off / use CTA strategy.
+        'idle_message': client.idle_message,
+        'exit_message': client.exit_message,
         'page_rules': _page_rules.public_rules(client),
     })
 
@@ -486,12 +494,16 @@ def page_message(request):
     (authoritative), prepend the first-touch intro once, and de-dupe one
     greeting per page_type per session.
 
-    Body: { session_id, client_id, page_url, page_type?, product_name? }
+    Body: { session_id, client_id, page_url, page_type?, product_name?,
+            category_name?, cart_item_count?, cart_total?, checkout_step? }
     Returns: { status, message?, msg_id? }
     """
+    def _field(name, cap=160):
+        return str(request.data.get(name) or '').strip()[:cap]
+
     session_id = (request.data.get('session_id') or '').strip()
     page_url = (request.data.get('page_url') or '').strip()
-    product_name = (request.data.get('product_name') or '').strip()[:160]
+    product_name = _field('product_name')
 
     if not session_id:
         return Response({'status': 'ignored', 'reason': 'no session'}, status=status.HTTP_202_ACCEPTED)
@@ -528,7 +540,18 @@ def page_message(request):
     # when they move to a different page type. We DO stamp last_proactive_at below
     # so behavioral CTAs won't pile on top of a greeting.
 
-    text = _page_rules.resolve_greeting_text(rule, product_name)
+    # Dynamic tag values: product_name etc. come from the widget (live page);
+    # store_name is the tenant's business name. Resolution degrades gracefully
+    # so an unfilled tag never leaks as a literal "{cart_total}".
+    tag_values = {
+        'product_name': product_name,
+        'store_name': (client.name or client.chatbot_name or '').strip(),
+        'category_name': _field('category_name'),
+        'cart_item_count': _field('cart_item_count', 32),
+        'cart_total': _field('cart_total', 32),
+        'checkout_step': _field('checkout_step', 64),
+    }
+    text = _page_rules.resolve_greeting_text(rule, values=tag_values)
     if not text:
         return Response({'status': 'ignored', 'reason': 'empty'}, status=status.HTTP_202_ACCEPTED)
 

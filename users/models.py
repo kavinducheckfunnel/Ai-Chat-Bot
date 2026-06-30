@@ -248,6 +248,14 @@ class Client(models.Model):
     notification_timeout_seconds = models.IntegerField(default=20)
     # Auto-close the open chat window after N seconds idle. 0 = never.
     auto_close_seconds = models.IntegerField(default=0)
+    # Manual, STATIC (no-LLM) nudge messages. Blank = disabled.
+    #   idle_message → shown as a suggestion bubble when the visitor goes quiet
+    #                  (chat closed) for ~45s. Fires once per session.
+    #   exit_message → shown on exit-intent ("don't leave yet…"). When set it
+    #                  REPLACES the AI-generated exit_intent CTA, so no tokens
+    #                  are spent. Blank → fall back to the cta_mode strategy.
+    idle_message = models.CharField(max_length=200, blank=True, default='')
+    exit_message = models.CharField(max_length=200, blank=True, default='')
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
