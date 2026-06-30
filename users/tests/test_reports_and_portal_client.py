@@ -27,13 +27,25 @@ class TestUniqueVisitorsMetric:
         assert body['unique_visitors']['value'] == 2
         assert body['total_sessions']['value'] == 3
 
-    def test_unlinked_sessions_count_individually(self, tenant_client, client_obj):
-        # Sessions with no Visitor link each count as their own unique visitor
-        # (can't merge them), so 2 unlinked → 2 unique.
+    def test_unlinked_sessions_not_counted(self, tenant_client, client_obj):
+        # Anonymous sessions with no Visitor row are NOT counted as unique
+        # visitors — the metric counts real Visitor identities only, so it
+        # tallies exactly with the Audience page (which lists Visitor rows).
         ChatSession.objects.create(client=client_obj, visitor_id='', message_count=1)
         ChatSession.objects.create(client=client_obj, visitor_id='', message_count=1)
         resp = tenant_client.get(self._url(client_obj.id))
-        assert resp.json()['unique_visitors']['value'] == 2
+        assert resp.json()['unique_visitors']['value'] == 0
+
+    def test_tallies_with_visitor_table(self, tenant_client, client_obj):
+        # unique_visitors must equal the distinct Visitor count (the Audience
+        # total), regardless of how many sessions or unlinked ghosts exist.
+        v1 = Visitor.objects.create(visitor_uid='vt-1', client=client_obj)
+        v2 = Visitor.objects.create(visitor_uid='vt-2', client=client_obj)
+        ChatSession.objects.create(client=client_obj, visitor_obj=v1, message_count=2)
+        ChatSession.objects.create(client=client_obj, visitor_obj=v2, message_count=1)
+        ChatSession.objects.create(client=client_obj, visitor_id='', message_count=1)  # unlinked ghost
+        resp = tenant_client.get(self._url(client_obj.id))
+        assert resp.json()['unique_visitors']['value'] == Visitor.objects.filter(client=client_obj).count() == 2
 
     def test_opened_no_message_and_answered_exposed(self, tenant_client, client_obj):
         ChatSession.objects.create(client=client_obj, message_count=0)   # ghost

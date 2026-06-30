@@ -214,14 +214,15 @@
                 <span class="brk-pct" :style="{ color: s.color }">{{ s.value }}%</span>
               </div>
             </div>
-          </div>
-          <div class="card">
-            <h3 class="card-title">Heat Distribution &amp; Pipeline</h3>
-            <div class="heat-seg-row">
+            <!-- Heat distribution chips live here now (moved from the pipeline card) -->
+            <div class="heat-seg-row" style="margin-top:18px">
               <div class="heat-seg hot" :style="{ flex: Math.max(heatDist.hot,1) }"><b>{{ heatDist.hot }}</b><span>HOT</span></div>
               <div class="heat-seg warm" :style="{ flex: Math.max(heatDist.warm,1) }"><b>{{ heatDist.warm }}</b><span>WARM</span></div>
               <div class="heat-seg cold" :style="{ flex: Math.max(heatDist.cold,1) }"><b>{{ heatDist.cold }}</b><span>COLD</span></div>
             </div>
+          </div>
+          <div class="card">
+            <h3 class="card-title">Lead Pipeline</h3>
             <div class="avg-heat-line"><span>Avg Heat Score</span><b>{{ analytics.avg_heat_score || 0 }}%</b></div>
             <div class="pipe-list">
               <div class="pipe-row" v-for="k in kanbanBreakdown" :key="k.key">
@@ -399,13 +400,15 @@ const leadFunnel = computed(() => {
 })
 const intentStates = computed(() => {
   const f = analytics.value.funnel || {}
+  // Objection / Recovery are transient states the bot rarely lands in; when
+  // they're empty they just add noise, so we drop any zero-count row.
   return [
     { label: 'Research', count: f.RESEARCH || 0, color: '#3b82f6' },
     { label: 'Evaluation', count: f.EVALUATION || 0, color: '#6366f1' },
     { label: 'Objection', count: f.OBJECTION || 0, color: '#f59e0b' },
     { label: 'Recovery', count: f.RECOVERY || 0, color: '#ef4444' },
     { label: 'Ready to buy', count: f.READY_TO_BUY || 0, color: '#22c55e' },
-  ]
+  ].filter(s => s.count > 0)
 })
 const intentTotal = computed(() => intentStates.value.reduce((a, s) => a + s.count, 0))
 const intentMax = computed(() => Math.max(...intentStates.value.map(s => s.count), 1))
@@ -491,7 +494,16 @@ function buildChart(rows, series) {
   })
   const step = Math.max(1, Math.floor(n / 6))
   const labels = rows.map((r, i) => ({ left: (x(i) / W * 100), text: r.date })).filter((_, i) => i % step === 0 || i === n - 1)
-  return { empty: false, W, H, padBottom, lines, labels, gridYs: [padTop, padTop + (H - padTop - padBottom) / 2, H - padBottom] }
+  // Y-axis ticks: max (top), midpoint, 0 (bottom). `y` is in viewBox units which
+  // map 1:1 to pixels (svg height = H px, viewBox height = H). Used to label the
+  // gridlines so the chart's vertical scale is readable.
+  const midY = padTop + (H - padTop - padBottom) / 2
+  const yTicks = [
+    { y: padTop, val: max },
+    { y: midY, val: Math.round(max / 2) },
+    { y: H - padBottom, val: 0 },
+  ]
+  return { empty: false, W, H, padBottom, lines, labels, gridYs: [padTop, midY, H - padBottom], yTicks }
 }
 const dailyConvChart = computed(() => buildChart(analytics.value.daily_trend, [{ key: 'count', color: '#6366f1', area: true }]))
 const chatVolumeChart = computed(() => buildChart(analytics.value.daily_trend, [{ key: 'ai', color: '#6366f1', area: true }, { key: 'human', color: '#22c55e' }, { key: 'missed', color: '#f59e0b' }]))
@@ -508,7 +520,17 @@ const LineChart = {
       // because this is a render-function component whose elements don't receive
       // PortalReports' scoped-style attribute — so the scoped `position:absolute`
       // never applied and the x-axis labels collapsed inline (bunched together).
-      return h('div', { class: 'chart-wrap', style: { position: 'relative' } }, [
+      // Left gutter (32px) holds the y-axis value labels; the svg + x-axis sit
+      // in the remaining width so labels never overlap the plot.
+      return h('div', { class: 'chart-wrap', style: { position: 'relative', paddingLeft: '32px' } }, [
+        ...(c.yTicks || []).map(t => h('span', {
+          class: 'chart-y',
+          style: {
+            position: 'absolute', left: '0', width: '28px', textAlign: 'right',
+            top: (t.y - 6) + 'px', fontSize: '10.5px', color: 'var(--cf-text-muted)',
+            whiteSpace: 'nowrap',
+          },
+        }, String(t.val))),
         h('svg', { class: 'line-svg', viewBox: `0 0 ${c.W} ${c.H}`, preserveAspectRatio: 'none',
           style: { width: '100%', height: '180px', display: 'block', color: 'var(--cf-border-subtle)' } }, [
           ...c.gridYs.map(gy => h('line', { x1: 0, y1: gy, x2: c.W, y2: gy, stroke: 'currentColor', 'stroke-width': 0.5 })),

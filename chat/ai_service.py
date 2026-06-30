@@ -590,13 +590,22 @@ def _maybe_promote_kanban(session) -> bool:
     urgency = session.current_urgency_ema or 0
     heat    = session.heat_score or 0
 
-    HOT_STATES_REACHABLE = {'NEW', 'CONTACTED', 'QUALIFIED'}
+    # ENGAGED is included so an active chatter can still climb to QUALIFIED/HOT;
+    # otherwise the new NEW→ENGAGED auto-move below would trap it in ENGAGED.
+    HOT_STATES_REACHABLE = {'NEW', 'ENGAGED', 'CONTACTED', 'QUALIFIED'}
 
     if (heat >= 75 or (intent >= 0.8 and urgency >= 0.7)) and current in HOT_STATES_REACHABLE:
         session.kanban_state = 'HOT_LEAD'
         return True
-    if intent >= 0.6 and current == 'NEW':
+    if intent >= 0.6 and current in ('', 'NEW', 'ENGAGED'):
         session.kanban_state = 'QUALIFIED'
+        return True
+    # The visitor has engaged (this runs in the AI-reply path) but hasn't hit the
+    # qualify/hot thresholds yet → move out of NEW into ENGAGED automatically so
+    # active chatters don't pile up in the New column. Only NEW (or unset) sessions
+    # are touched; never demotes a further stage.
+    if current in ('', 'NEW') and (session.message_count or 0) >= 1:
+        session.kanban_state = 'ENGAGED'
         return True
     return False
 

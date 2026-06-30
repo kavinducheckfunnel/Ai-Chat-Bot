@@ -1839,12 +1839,15 @@ def client_analytics(request, client_id):
         # We count distinct visitor_obj for linked sessions PLUS distinct
         # session_id for any session with no Visitor link, so neither double-
         # counts nor collapses.
-        linked_visitors = (
+        # Count DISTINCT real identities (Visitor rows) only — this is exactly
+        # what the Audience page lists, so the two pages now tally. We deliberately
+        # do NOT add unlinked sessions: those are anonymous ghost sessions with no
+        # Visitor record, and counting each as its own "visitor" inflated this
+        # number above the Audience total.
+        unique_visitors = (
             qs.exclude(visitor_obj__isnull=True)
               .values('visitor_obj_id').distinct().count()
         )
-        unlinked_sessions = qs.filter(visitor_obj__isnull=True).count()
-        unique_visitors = linked_visitors + unlinked_sessions
         ai_handled = active.filter(taken_over_by__isnull=True).count()
         manual_handled = active.filter(taken_over_by__isnull=False).count()
         # "Opened, no message" — sessions where the widget opened but the
@@ -1980,7 +1983,13 @@ def client_analytics(request, client_id):
     )
 
     kanban_raw = sessions.values('kanban_state').annotate(count=Count('session_id'))
-    kanban_breakdown = {item['kanban_state']: item['count'] for item in kanban_raw}
+    # Fold null / empty / unknown states into NEW so the dashboard pipeline
+    # matches the Leads board, which normalizes the same way (PortalKanban).
+    _KANBAN_COLS = {'NEW', 'ENGAGED', 'QUALIFIED', 'HOT_LEAD', 'READY_TO_BUY', 'CONVERTED', 'LOST'}
+    kanban_breakdown = {}
+    for item in kanban_raw:
+        st = item['kanban_state'] if item['kanban_state'] in _KANBAN_COLS else 'NEW'
+        kanban_breakdown[st] = kanban_breakdown.get(st, 0) + item['count']
 
     # ── Daily trend (total + AI / Human / Missed split) ───────────────────────
     today = now.date()
@@ -2198,10 +2207,12 @@ def client_analytics(request, client_id):
             'READY_TO_BUY': funnel.get('READY_TO_BUY', 0),
         },
         # Lead pipeline funnel (kanban-stage based) for the Leads/Overview funnel viz.
+        # hot_lead is the kanban HOT_LEAD STAGE (curr['hot_lead']) so the funnel
+        # tallies with the Leads board — NOT curr['hot'] which is heat>=70.
         'lead_funnel': {
             'chat_started': curr['active_total'],
             'qualified':    curr['qualified'],
-            'hot_lead':     curr['hot'],
+            'hot_lead':     curr['hot_lead'],
             'ready_to_buy': curr['ready_to_buy'],
             'converted':    curr['converted'],
         },

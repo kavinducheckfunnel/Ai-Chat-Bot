@@ -14,7 +14,7 @@
     <!-- Tabs -->
     <div class="tabs">
       <button class="tab" :class="{ active: activeTab === 'all' }" @click="activeTab = 'all'">
-        All leads <span class="tab-count">{{ activeTab === 'all' ? totalCount : leads.length }}</span>
+        All leads <span class="tab-count">{{ allLeadsCount }}</span>
       </button>
       <button class="tab" :class="{ active: activeTab === 'hot' }" @click="activeTab = 'hot'">
         Hot leads <span class="tab-count hot" v-if="hotLeads.length">{{ hotLeads.length }}</span>
@@ -138,8 +138,26 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 
-const props = defineProps({ client: Object, embedded: Boolean })
+const props = defineProps({ client: Object, embedded: Boolean, dateRange: Object })
 const api = useAdminApi()
+
+// Client-side date filter (matches PortalDateFilter output {period,dateFrom,dateTo}).
+function inDateRange(l) {
+  const dr = props.dateRange
+  if (!dr || !dr.period || dr.period === 'all') return true
+  const ts = new Date(l.created_at || 0).getTime()
+  if (!ts) return true
+  if (dr.period === 'custom') {
+    const from = dr.dateFrom ? new Date(dr.dateFrom + 'T00:00:00').getTime() : -Infinity
+    const to = dr.dateTo ? new Date(dr.dateTo + 'T23:59:59').getTime() : Infinity
+    return ts >= from && ts <= to
+  }
+  const days = { today: 1, '7d': 7, '30d': 30, '90d': 90 }[dr.period] || 30
+  const start = dr.period === 'today'
+    ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
+    : Date.now() - days * 86400000
+  return ts >= start
+}
 
 const leads = ref([])
 const totalCount = ref(0)
@@ -157,7 +175,14 @@ const sentinel = ref(null)
 const PAGE = 100
 let observer = null
 
-const hotLeads = computed(() => leads.value.filter(l => l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD'))
+// True when no date window is applied — only then is the server-side totalCount
+// (which is never date-scoped) a correct "All leads" badge.
+const isAllTime = computed(() => {
+  const p = props.dateRange && props.dateRange.period
+  return !p || p === 'all'
+})
+// Badge counts respect the date filter so they always match the table rows.
+const hotLeads = computed(() => leads.value.filter(l => inDateRange(l) && (l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD')))
 
 // A converted lead = one that handed over BOTH email and phone (the
 // conversion event for this funnel). We also include anything already marked
@@ -165,12 +190,14 @@ const hotLeads = computed(() => leads.value.filter(l => l.heat_score >= 75 || l.
 function isConverted(l) {
   return !!((l.lead_email && l.lead_phone) || l.kanban_state === 'CONVERTED')
 }
-const convertedLeads = computed(() => leads.value.filter(isConverted))
+const convertedLeads = computed(() => leads.value.filter(l => inDateRange(l) && isConverted(l)))
+// "All leads" count: server total when all-time, else the date-scoped loaded set.
+const allLeadsCount = computed(() => isAllTime.value ? totalCount.value : leads.value.filter(inDateRange).length)
 
 const filtered = computed(() => {
-  let list = leads.value
-  if (activeTab.value === 'hot') list = hotLeads.value
-  if (activeTab.value === 'converted') list = convertedLeads.value
+  let list = leads.value.filter(inDateRange)
+  if (activeTab.value === 'hot') list = list.filter(l => l.heat_score >= 75 || l.kanban_state === 'HOT_LEAD')
+  if (activeTab.value === 'converted') list = list.filter(isConverted)
   if (search.value) {
     const q = search.value.toLowerCase()
     list = list.filter(l => (l.lead_email || '').toLowerCase().includes(q) || (l.kanban_state || '').toLowerCase().includes(q))

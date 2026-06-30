@@ -152,9 +152,29 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useAdminApi } from '../composables/useAdminApi'
 import { timeAgo } from '../composables/useFormat'
 
-const props = defineProps({ client: Object, embedded: Boolean })
+const props = defineProps({ client: Object, embedded: Boolean, dateRange: Object })
 const api = useAdminApi()
 const sessions = ref([])
+
+// Client-side date filter (matches PortalDateFilter output {period,dateFrom,dateTo}).
+// The board loads the full session set; we scope it here so the column counts
+// reflect the selected window and tally with the dashboard pipeline.
+function inDateRange(s) {
+  const dr = props.dateRange
+  if (!dr || !dr.period || dr.period === 'all') return true
+  const ts = new Date(s.created_at || s.updated_at || 0).getTime()
+  if (!ts) return true
+  if (dr.period === 'custom') {
+    const from = dr.dateFrom ? new Date(dr.dateFrom + 'T00:00:00').getTime() : -Infinity
+    const to = dr.dateTo ? new Date(dr.dateTo + 'T23:59:59').getTime() : Infinity
+    return ts >= from && ts <= to
+  }
+  const days = { today: 1, '7d': 7, '30d': 30, '90d': 90 }[dr.period] || 30
+  const start = dr.period === 'today'
+    ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
+    : Date.now() - days * 86400000
+  return ts >= start
+}
 const loading = ref(false)
 const dragSession = ref(null)
 const dragOverCol = ref(null)
@@ -183,7 +203,7 @@ function normalizeState(s) {
 }
 
 function columnSessions(key) {
-  return sessions.value.filter(s => normalizeState(s) === key)
+  return sessions.value.filter(s => inDateRange(s) && normalizeState(s) === key)
 }
 
 async function loadData() {
