@@ -1009,12 +1009,14 @@
           <input class="input" type="password" v-model="intForm.telegram_bot_token" placeholder="123456:ABCdef..." autocomplete="off" />
           <span class="field-hint">Get a bot token from <strong>@BotFather</strong> on Telegram. We register the webhook with Telegram automatically when you save.</span>
         </div>
-        <div class="field toggle-field" style="grid-column:1/-1">
-          <label class="toggle-label">
-            <input type="checkbox" v-model="intForm.telegram_enabled" class="toggle-input" />
-            <span class="toggle-slider"></span>
-            Enable Telegram channel
-          </label>
+        <div class="field" style="grid-column:1/-1">
+          <label>Enable Telegram</label>
+          <div class="toggle-row">
+            <button class="toggle-btn" :class="{ on: intForm.telegram_enabled }" @click="intForm.telegram_enabled = !intForm.telegram_enabled">
+              <span class="toggle-knob"></span>
+            </button>
+            <span class="toggle-lbl">{{ intForm.telegram_enabled ? 'Enabled — AI will reply to Telegram messages' : 'Disabled' }}</span>
+          </div>
         </div>
         <div v-if="telegramWebhookInfo" class="field" style="grid-column:1/-1">
           <div class="tg-status-card" :class="telegramWebhookInfo.healthy ? 'ok' : 'err'">

@@ -504,9 +504,14 @@ const LineChart = {
     return () => {
       const c = p.chart
       if (!c || c.empty) return h('div', { class: 'chart-empty' }, 'Not enough data yet.')
-      return h('div', { class: 'chart-wrap' }, [
-        h('svg', { class: 'line-svg', viewBox: `0 0 ${c.W} ${c.H}`, preserveAspectRatio: 'none' }, [
-          ...c.gridYs.map(gy => h('line', { x1: 0, y1: gy, x2: c.W, y2: gy, stroke: 'currentColor', 'stroke-width': 0.5, class: 'grid-line' })),
+      // IMPORTANT: positioning is set INLINE (not via the scoped .chart-x CSS),
+      // because this is a render-function component whose elements don't receive
+      // PortalReports' scoped-style attribute — so the scoped `position:absolute`
+      // never applied and the x-axis labels collapsed inline (bunched together).
+      return h('div', { class: 'chart-wrap', style: { position: 'relative' } }, [
+        h('svg', { class: 'line-svg', viewBox: `0 0 ${c.W} ${c.H}`, preserveAspectRatio: 'none',
+          style: { width: '100%', height: '180px', display: 'block', color: 'var(--cf-border-subtle)' } }, [
+          ...c.gridYs.map(gy => h('line', { x1: 0, y1: gy, x2: c.W, y2: gy, stroke: 'currentColor', 'stroke-width': 0.5 })),
           ...c.lines.flatMap(ln => {
             const nodes = []
             if (ln.area) nodes.push(h('polygon', { points: ln.area, fill: ln.color, 'fill-opacity': 0.12 }))
@@ -515,14 +520,17 @@ const LineChart = {
             return nodes
           }),
         ]),
-        h('div', { class: 'chart-x' }, c.labels.map(l => h('span', {
-          style: {
-            left: l.left + '%',
-            // Center each label on its dot; pin the edge labels inside so they
-            // don't clip off the chart.
-            transform: l.left <= 4 ? 'translateX(0)' : (l.left >= 96 ? 'translateX(-100%)' : 'translateX(-50%)'),
-          },
-        }, l.text))),
+        h('div', { class: 'chart-x', style: { position: 'relative', height: '18px', marginTop: '4px' } },
+          c.labels.map(l => h('span', {
+            style: {
+              position: 'absolute',
+              left: l.left + '%',
+              transform: l.left <= 4 ? 'translateX(0)' : (l.left >= 96 ? 'translateX(-100%)' : 'translateX(-50%)'),
+              fontSize: '10.5px',
+              color: 'var(--cf-text-muted)',
+              whiteSpace: 'nowrap',
+            },
+          }, l.text))),
       ])
     }
   },
