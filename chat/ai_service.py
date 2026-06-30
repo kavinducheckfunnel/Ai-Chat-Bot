@@ -983,6 +983,45 @@ def generate_ai_response(session, user_message, behavior_matrix, image_data=None
     except Exception as e:
         logger.warning(f'[ai] offers injection failed: {e}')
 
+    # ── Invalid contact-detail correction ────────────────────────────────────
+    # If the visitor just TRIED to share an email/phone but it doesn't validate
+    # (e.g. "kavindugmail.com" with no @, or an 8-digit phone), the inline
+    # capture below will correctly NOT save it — but without this the LLM still
+    # cheerfully replies "thanks, passed to the team", confirming a capture that
+    # never happened. We detect the failed attempt and instruct the bot to point
+    # it out gently and ask the visitor to re-type it.
+    try:
+        if user_message:
+            from .phone_utils import detect_invalid_contact
+            country = getattr(session.client, 'lead_country', None) or 'LK'
+            # Did the bot's last message ask for contact details? Used to treat a
+            # bare digit run in the reply as a phone attempt.
+            asked = False
+            for _msg in reversed(session.chat_history or []):
+                if (_msg.get('role') or '') in ('ai', 'assistant'):
+                    _t = (_msg.get('message') or _msg.get('content') or '').lower()
+                    asked = any(k in _t for k in ('email', 'phone', 'number', 'contact', 'reach you', 'details'))
+                    break
+            bad_email, bad_phone = detect_invalid_contact(user_message, country, asked_for_contact=asked)
+            if bad_email or bad_phone:
+                parts = []
+                if bad_email:
+                    parts.append("their email looks incomplete (make sure it includes an '@', e.g. name@gmail.com)")
+                if bad_phone:
+                    parts.append("their phone number isn't valid — we need a Sri Lankan mobile like 077 123 4567 or +94 77 123 4567")
+                contact_block = (
+                    "\n\nCONTACT CORRECTION (IMPORTANT): the visitor just tried to share their "
+                    "contact details but they are NOT valid, so nothing was saved. Do NOT thank "
+                    "them for the details and do NOT say you've passed anything to the team. "
+                    "Instead, in ONE warm, friendly, apologetic-light sentence, point out that "
+                    + " and ".join(parts) +
+                    ", and ask them to re-type it. Keep it gentle — never make them feel bad."
+                )
+                system_prompt += contact_block
+                dynamic_system += contact_block
+    except Exception as e:
+        logger.warning(f'[ai] invalid-contact detection failed: {e}')
+
     # JSON-mode tail-prompt — used for text-only turns. Vision turns get a
     # plain-text instruction instead: image-capable models reliably break
     # strict-JSON output when an image is also in the request, so forcing

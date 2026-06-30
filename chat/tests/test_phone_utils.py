@@ -3,7 +3,7 @@ import pytest
 
 from chat.phone_utils import (
     normalize_lk_phone, normalize_phone, extract_lk_phone,
-    extract_phone, extract_email, is_valid_email,
+    extract_phone, extract_email, is_valid_email, detect_invalid_contact,
 )
 
 
@@ -95,6 +95,31 @@ class TestEmailValidation:
     def test_extract_email_rejects_garbage(self):
         assert extract_email('email me at jo@x.com please') == 'jo@x.com'
         assert extract_email('contact a@b..com') is None
+
+
+class TestDetectInvalidContact:
+    def test_reported_case_both_invalid(self):
+        # The exact failing message: 8-digit phone + email with no '@'.
+        be, bp = detect_invalid_contact(
+            '72168140 and email is kavindugmail.com', country='LK', asked_for_contact=True)
+        assert be is True and bp is True
+
+    def test_valid_contact_not_flagged(self):
+        assert detect_invalid_contact('my email is jo@x.com', country='LK') == (False, False)
+        assert detect_invalid_contact('call me on 0771234567', country='LK') == (False, False)
+        assert detect_invalid_contact('+94 77 123 4567', country='LK', asked_for_contact=True) == (False, False)
+
+    def test_invalid_email_only(self):
+        be, bp = detect_invalid_contact('my email is kavindugmail.com', country='LK')
+        assert be is True and bp is False
+
+    def test_invalid_phone_only_when_asked(self):
+        be, bp = detect_invalid_contact('72168140', country='LK', asked_for_contact=True)
+        assert be is False and bp is True
+
+    def test_short_number_not_flagged_as_phone(self):
+        # A price / quantity reply must not be mistaken for a phone attempt.
+        assert detect_invalid_contact('I want 2 of them for 500', country='LK', asked_for_contact=True) == (False, False)
 
 
 class TestExtractLkPhone:

@@ -143,6 +143,46 @@ def extract_email(text):
     return email if is_valid_email(email) else None
 
 
+def detect_invalid_contact(message, country=DEFAULT_COUNTRY, asked_for_contact=False):
+    """Detect when a visitor is TRYING to share contact details but they don't
+    validate, so the bot can gently ask them to re-type instead of falsely
+    confirming a capture.
+
+    Returns (invalid_email, invalid_phone):
+      • invalid_email — looks like an email attempt ('@' present, or an
+        email phrase + a domain token) but extract_email() rejects it.
+      • invalid_phone — looks like a phone attempt (a phone phrase + digits, or
+        the bot just asked for contact and the reply has a digit run, or a long
+        >=9-digit run) but extract_phone() rejects it.
+
+    Conservative on purpose: a short number ("I want 2") or a price won't trip
+    it — only genuine contact attempts do.
+    """
+    if not message or not isinstance(message, str):
+        return False, False
+    m = message.lower()
+
+    # ── Email attempt ──
+    has_at = '@' in message
+    email_phrase = ('email' in m or 'e-mail' in m or 'gmail' in m
+                    or 'mail id' in m or 'mail address' in m)
+    domain_token = re.search(r'\b[\w.+\-]+\.(?:com|net|org|lk|io|co|edu|gov|me|info)\b', m) is not None
+    looks_email = has_at or (email_phrase and domain_token)
+    invalid_email = bool(looks_email) and (extract_email(message) is None)
+
+    # ── Phone attempt ──
+    phone_phrase = re.search(
+        r'\b(phone|mobile|whats\s?app|call me|reach me|contact me|my number|number is|tel)\b', m
+    ) is not None
+    # A "run" of at least 6 phone-ish characters (digits/space/dash/parens).
+    digit_runs = re.findall(r'\d[\d\s\-()]{4,}\d', message)
+    long_run = any(len(re.sub(r'\D', '', r)) >= 9 for r in digit_runs)
+    looks_phone = bool(digit_runs) and (phone_phrase or asked_for_contact or long_run)
+    invalid_phone = bool(looks_phone) and (extract_phone(message, country) is None)
+
+    return invalid_email, invalid_phone
+
+
 def extract_phone(text, country=DEFAULT_COUNTRY):
     """
     Find and normalise the first phone number in free text (QA #13 inline
