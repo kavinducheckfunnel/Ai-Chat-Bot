@@ -9,7 +9,7 @@ from chat.ai_service import compute_kanban_stage
 
 
 def _s(kanban_state='NEW', intent=0.0, budget=0.0, urgency=0.0,
-       message_count=0, conversation_state='RESEARCH'):
+       message_count=0, conversation_state='RESEARCH', lead_email='', lead_phone=''):
     return SimpleNamespace(
         kanban_state=kanban_state,
         current_intent_ema=intent,
@@ -17,6 +17,8 @@ def _s(kanban_state='NEW', intent=0.0, budget=0.0, urgency=0.0,
         current_urgency_ema=urgency,
         message_count=message_count,
         conversation_state=conversation_state,
+        lead_email=lead_email,
+        lead_phone=lead_phone,
     )
 
 
@@ -53,5 +55,12 @@ def test_terminal_states_preserved():
 
 
 def test_can_demote_overstated_stage():
-    # A card sitting in HOT_LEAD with no supporting metrics recomputes down.
+    # A card sitting in HOT_LEAD with no supporting metrics (and no captured
+    # contact) recomputes down.
     assert compute_kanban_stage(_s(kanban_state='HOT_LEAD', message_count=1, intent=0.1)) == 'ENGAGED'
+
+
+def test_captured_contact_floors_at_hot_lead():
+    # A cooled-off lead that handed over a contact stays a hot lead, not demoted.
+    assert compute_kanban_stage(_s(kanban_state='HOT_LEAD', message_count=1, intent=0.1, lead_email='a@b.com')) == 'HOT_LEAD'
+    assert compute_kanban_stage(_s(kanban_state='QUALIFIED', message_count=2, intent=0.2, lead_phone='123')) == 'HOT_LEAD'

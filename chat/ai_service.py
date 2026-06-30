@@ -594,9 +594,16 @@ def compute_kanban_stage(session) -> str:
     urgency = session.current_urgency_ema or 0
     budget = session.current_budget_ema or 0
     heat = (intent * 0.45 + budget * 0.30 + urgency * 0.25) * 100
+    email = (getattr(session, 'lead_email', '') or '').strip()
+    phone = (getattr(session, 'lead_phone', '') or '').strip()
     if (session.conversation_state or '').upper() == 'READY_TO_BUY':
         return 'READY_TO_BUY'
     if heat >= 75 or (intent >= 0.8 and urgency >= 0.7):
+        return 'HOT_LEAD'
+    # A captured contact (email or phone) is a strong buying signal — keep these
+    # as hot leads even if the EMA scores have since cooled, so real leads don't
+    # sink back into the pile.
+    if email or phone:
         return 'HOT_LEAD'
     if intent >= 0.6:
         return 'QUALIFIED'
