@@ -66,21 +66,20 @@ def normalize_lk_phone(raw):
 
 def normalize_phone(raw, country=DEFAULT_COUNTRY):
     """
-    Country-dispatching entry point. Today only 'LK' is enforced; any other
-    country falls through to a permissive pass (kept as-is, marked valid if
-    it has a plausible length) so non-LK tenants aren't blocked.
+    Country-dispatching entry point.
+
+    For 'LK' this is STRICT — only a valid Sri Lankan mobile is accepted
+    (+94 followed by a 9-digit subscriber starting with 7, i.e. 0XXXXXXXXX /
+    +94XXXXXXXXX / 0094... forms). We deliberately do NOT fall back to the
+    permissive international path: LK tenants asked for clean LK-only numbers
+    so the CRM never fills with malformed junk.
+
+    Any other country uses a light-touch permissive pass (plausible length)
+    so non-LK tenants aren't blocked.
     """
     country = (country or DEFAULT_COUNTRY).upper()
     if country == 'LK':
-        norm, ok = normalize_lk_phone(raw)
-        if ok:
-            return norm, ok
-        # Keep +94 as the DEFAULT (bare local numbers normalise above), but
-        # don't reject an international visitor who typed a non-LK number into
-        # the lead form — fall through to the permissive path below so the
-        # lead is still captured. (Free-text extraction stays strict via
-        # extract_lk_phone, so this leniency only applies to explicit form
-        # input.)
+        return normalize_lk_phone(raw)
 
     # Generic fallback for other markets / international numbers — light
     # touch, don't over-reject.
@@ -112,34 +111,53 @@ def extract_lk_phone(text):
 _EMAIL_RE = re.compile(r'\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b')
 
 
+def is_valid_email(email):
+    """True if `email` is a structurally valid address.
+
+    Uses Django's EmailValidator (the same one model fields use) on top of a
+    cheap double-dot guard, so junk like ``a@@b``, ``a@b``, ``a@b..com`` or
+    ``foo@bar`` is rejected before it ever reaches the CRM.
+    """
+    if not email or not isinstance(email, str):
+        return False
+    email = email.strip()
+    if not email or '..' in email or email.startswith('.') or '@' not in email:
+        return False
+    from django.core.validators import validate_email as _dj_validate
+    from django.core.exceptions import ValidationError as _DjValidationError
+    try:
+        _dj_validate(email)
+        return True
+    except _DjValidationError:
+        return False
+
+
 def extract_email(text):
-    """Return the first valid-looking email address in free text, or None."""
+    """Return the first VALID email address in free text, or None."""
     if not text:
         return None
     m = _EMAIL_RE.search(text)
     if not m:
         return None
     email = m.group(0).strip('.').lower()
-    # Guard against trailing-dot / double-dot garbage.
-    if '..' in email or email.startswith('.') or email.endswith('.'):
-        return None
-    return email
+    return email if is_valid_email(email) else None
 
 
 def extract_phone(text, country=DEFAULT_COUNTRY):
     """
     Find and normalise the first phone number in free text (QA #13 inline
-    capture). Tries the country rules first (strict for LK), then falls back to
-    a permissive international match so non-LK tenants still capture numbers.
-    Returns the normalized string or None.
+    capture).
+
+    For 'LK' this is STRICT — only a valid Sri Lankan mobile is returned, so a
+    random run of digits (an order number, a price, a year) is never
+    mis-captured as a phone lead. Other countries use a permissive international
+    match so non-LK tenants still capture numbers.
     """
     if not text:
         return None
     country = (country or DEFAULT_COUNTRY).upper()
     if country == 'LK':
-        lk = extract_lk_phone(text)
-        if lk:
-            return lk
+        return extract_lk_phone(text)
     # International fallback: a run of 8–15 digits (optionally +-prefixed) that
     # isn't obviously something else. Require at least 8 digits to avoid years,
     # prices, order numbers, etc.

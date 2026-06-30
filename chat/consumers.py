@@ -181,7 +181,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def _maybe_prompt_lead_capture(self, session):
         """
         Push a 'lead_capture_required' event to the widget when ALL of:
-          • visitor has NOT given email yet
+          • visitor has NOT given a contact yet (neither email NOR phone)
           • EITHER conversation_state is READY_TO_BUY
             OR heat_score >= 75
             OR kanban_state == 'HOT_LEAD'
@@ -193,8 +193,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         "contact capture incomplete" — by the time it fires the buying
         moment has passed.
         """
-        has_email = bool((session.lead_email or '').strip())
-        if has_email:
+        # A single captured contact (email OR phone) is enough — don't keep
+        # prompting once we already have one.
+        has_contact = bool((session.lead_email or '').strip() or (session.lead_phone or '').strip())
+        if has_contact:
             return
         if getattr(session, 'lead_capture_prompted', False):
             return

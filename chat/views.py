@@ -648,53 +648,67 @@ def capture_lead(request):
     """
     session_id = request.data.get('session_id')
     email = (request.data.get('email') or '').strip()
-
-    if not session_id or not email:
-        return Response({'error': 'session_id and email required'}, status=status.HTTP_400_BAD_REQUEST)
-
     phone = (request.data.get('phone') or '').strip()
+
+    # EITHER a valid email OR a valid phone is enough to capture a lead — we no
+    # longer require both. session_id is always required.
+    if not session_id or not (email or phone):
+        return Response({'error': 'session_id and at least an email or phone required'},
+                        status=status.HTTP_400_BAD_REQUEST)
 
     try:
         session = ChatSession.objects.select_related('client').get(session_id=session_id)
     except ChatSession.DoesNotExist:
         return Response({'error': 'session not found'}, status=status.HTTP_404_NOT_FOUND)
 
-    # ── Phone validation + normalisation (Sri Lankan +94 standard) ─────────
-    # Reject malformed numbers up front so the CRM never fills with junk like
-    # "12345" or "call me later". Valid inputs (0771234567, 771234567,
-    # +94771234567, with spaces/dashes) all normalise to +94771234567.
+    from chat.phone_utils import normalize_phone, is_valid_email
+
+    # ── Validate each field INDEPENDENTLY ─────────────────────────────────
+    # We CAPTURE whatever is valid and DROP whatever is malformed, so:
+    #   • a valid email is never lost just because the phone was bad (and v.v.)
+    #   • junk ("12345", "abc", a non-LK number) never reaches the CRM.
+    # Only when NEITHER field is valid do we reject the whole submission.
+    email_ok = bool(email) and is_valid_email(email)
+    phone_norm, phone_ok = None, False
     if phone:
-        from chat.phone_utils import normalize_phone
         country = getattr(session.client, 'lead_country', None) or 'LK'
-        normalized, ok = normalize_phone(phone, country=country)
-        if not ok:
+        phone_norm, phone_ok = normalize_phone(phone, country=country)
+
+    if not (email_ok or phone_ok):
+        # Tailor the error to what they actually tried to submit.
+        if phone and not email:
             return Response(
                 {'error': 'invalid_phone',
                  'detail': 'Please enter a valid Sri Lankan mobile number (e.g. +94 77 123 4567).'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        phone = normalized
+        if email and not phone:
+            return Response(
+                {'error': 'invalid_email', 'detail': 'Please enter a valid email address.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {'error': 'invalid_contact', 'detail': 'Please enter a valid email or phone number.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    session.lead_email = email
-    if phone:
-        session.lead_phone = phone
+    if email_ok:
+        session.lead_email = email
+    if phone_ok:
+        session.lead_phone = phone_norm
 
     # ── Kanban promotion on lead capture ──────────────────────────────────
-    # A fully-captured lead (BOTH email and phone) is treated as Converted —
-    # the visitor handed over their contact details, which is the conversion
-    # event for this funnel. This is what surfaces them in the Customers
-    # "Converted" tab and the dashboard funnel's Converted bucket.
-    # A partial capture (only one of email/phone) with strong intent/heat is
-    # promoted to HOT_LEAD instead so the tenant still sees it prioritised.
+    # BOTH email + phone → CONVERTED (the conversion event for this funnel).
+    # A single valid contact (email OR phone) is itself a strong buying signal,
+    # so it's promoted straight to HOT_LEAD — a captured contact is a real,
+    # qualified lead regardless of the current heat score.
     promoted = False
     cur_state = (session.kanban_state or '').upper()
-    has_full_contact = bool(session.lead_email and session.lead_phone)
-    heat = session.heat_score or 0
-    intent = session.current_intent_ema or 0
+    has_full_contact = bool((session.lead_email or '').strip() and (session.lead_phone or '').strip())
     if has_full_contact and cur_state not in {'CONVERTED', 'LOST'}:
         session.kanban_state = 'CONVERTED'
         promoted = True
-    elif (heat >= 60 or intent >= 0.6) and cur_state in {'NEW', 'ENGAGED', 'CONTACTED', 'QUALIFIED'}:
+    elif cur_state in {'NEW', 'ENGAGED', 'CONTACTED', 'QUALIFIED'}:
         session.kanban_state = 'HOT_LEAD'
         promoted = True
 

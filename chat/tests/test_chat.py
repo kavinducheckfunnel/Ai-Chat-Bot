@@ -240,11 +240,24 @@ class TestCaptureLead:
 
     @patch('chat.utils.fire_slack_notification', return_value=None)
     @patch('chat.utils.fire_outbound_webhook', return_value=None)
-    def test_capture_lead_invalid_phone_rejected(self, mock_wh, mock_slack, anon_client, chat_session):
+    def test_capture_lead_valid_email_bad_phone_keeps_email(self, mock_wh, mock_slack, anon_client, chat_session):
+        # Valid email + malformed phone → capture the email, DROP the bad phone.
+        # A good lead is never lost over a bad secondary field.
         resp = anon_client.post(LEAD_URL, {
             'session_id': str(chat_session.session_id),
             'email': 'lead@example.com',
             'phone': '12345',  # not a valid LK mobile
+        }, format='json')
+        assert resp.status_code == 200
+        chat_session.refresh_from_db()
+        assert chat_session.lead_email == 'lead@example.com'
+        assert not (chat_session.lead_phone or '')  # junk dropped, not stored
+
+    def test_capture_lead_phone_only_invalid_rejected(self, anon_client, chat_session):
+        # Nothing valid (bad phone, no email) → reject.
+        resp = anon_client.post(LEAD_URL, {
+            'session_id': str(chat_session.session_id),
+            'phone': '12345',
         }, format='json')
         assert resp.status_code == 400
         assert resp.json()['error'] == 'invalid_phone'
@@ -262,7 +275,31 @@ class TestCaptureLead:
         chat_session.refresh_from_db()
         assert chat_session.lead_email == 'lead@example.com'
 
-    def test_capture_lead_missing_email(self, anon_client, chat_session):
+    @patch('chat.utils.fire_slack_notification', return_value=None)
+    @patch('chat.utils.fire_outbound_webhook', return_value=None)
+    def test_capture_lead_phone_only_ok(self, mock_wh, mock_slack, anon_client, chat_session):
+        # Phone alone (no email) is now a valid lead.
+        resp = anon_client.post(LEAD_URL, {
+            'session_id': str(chat_session.session_id),
+            'phone': '0771234567',
+        }, format='json')
+        assert resp.status_code == 200
+        chat_session.refresh_from_db()
+        assert chat_session.lead_phone == '+94771234567'
+        assert not (chat_session.lead_email or '')
+        # A single captured contact promotes the lead to HOT_LEAD.
+        assert chat_session.kanban_state == 'HOT_LEAD'
+
+    def test_capture_lead_invalid_email_rejected(self, anon_client, chat_session):
+        resp = anon_client.post(LEAD_URL, {
+            'session_id': str(chat_session.session_id),
+            'email': 'not-an-email',
+        }, format='json')
+        assert resp.status_code == 400
+        assert resp.json()['error'] == 'invalid_email'
+
+    def test_capture_lead_missing_contact(self, anon_client, chat_session):
+        # Neither email nor phone → rejected.
         resp = anon_client.post(LEAD_URL, {
             'session_id': str(chat_session.session_id),
         }, format='json')

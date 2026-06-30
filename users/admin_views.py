@@ -703,7 +703,10 @@ def client_sessions(request, client_id):
     qs, _ = apply_period_filter(qs, request)
 
     if request.query_params.get('has_lead') == 'true':
-        qs = qs.exclude(lead_email='').exclude(lead_email__isnull=True)
+        # A lead = captured EITHER a non-empty email OR a non-empty phone.
+        _he = Q(lead_email__isnull=False) & ~Q(lead_email='')
+        _hp = Q(lead_phone__isnull=False) & ~Q(lead_phone='')
+        qs = qs.filter(_he | _hp)
 
     q = request.query_params.get('q', '').strip()
     if q:
@@ -1864,9 +1867,11 @@ def client_analytics(request, client_id):
         avg_dur_s = max(0, int(avg_dur_td.total_seconds())) if avg_dur_td else 0
         total_dur_s = max(0, int(total_dur_td.total_seconds())) if total_dur_td else 0
 
+        # A lead = captured EITHER a non-empty email OR a non-empty phone.
         leads = qs.filter(
-            Q(lead_email__isnull=False) | Q(lead_phone__isnull=False)
-        ).exclude(lead_email='').count()
+            (Q(lead_email__isnull=False) & ~Q(lead_email='')) |
+            (Q(lead_phone__isnull=False) & ~Q(lead_phone=''))
+        ).count()
 
         annotated = qs.annotate(heat=heat_expr)
         hot = annotated.filter(heat__gte=70).count()
@@ -2108,8 +2113,10 @@ def client_analytics(request, client_id):
         })
 
     # ── Recent leads (Leads tab table) ────────────────────────────────────────
-    lead_rows = (sessions.filter(Q(lead_email__isnull=False) | Q(lead_phone__isnull=False))
-                 .exclude(lead_email='').order_by('-created_at')[:25])
+    lead_rows = (sessions.filter(
+                     (Q(lead_email__isnull=False) & ~Q(lead_email='')) |
+                     (Q(lead_phone__isnull=False) & ~Q(lead_phone='')))
+                 .order_by('-created_at')[:25])
     recent_leads = []
     for s in lead_rows:
         email = (s.lead_email or '').strip()
@@ -2124,7 +2131,7 @@ def client_analytics(request, client_id):
             source = (s.channel or 'website').title()
         recent_leads.append({
             'session_id': str(s.session_id),
-            'visitor': s.lead_email or ('Visitor #' + str(s.session_id)[:6]),
+            'visitor': email or phone or ('Visitor #' + str(s.session_id)[:6]),
             'stage': s.kanban_state,
             'source': source,
             'contact': contact,
@@ -2561,7 +2568,10 @@ def platform_stats(request):
     # ── Lead capture + engagement aggregates (cross-client) ───────────────
     # Used by /admin/insights to give super admin a single view of platform
     # health without needing to drill into each tenant's analytics tab.
-    leads_captured = sessions_qs.exclude(lead_email='').exclude(lead_email__isnull=True).count()
+    leads_captured = sessions_qs.filter(
+        (Q(lead_email__isnull=False) & ~Q(lead_email='')) |
+        (Q(lead_phone__isnull=False) & ~Q(lead_phone=''))
+    ).count()
 
     msg_agg = sessions_qs.aggregate(
         total_messages=Coalesce(Sum('message_count'), 0),
@@ -2591,7 +2601,9 @@ def platform_stats(request):
         .annotate(
             sessions=Count('session_id'),
             hot=Count('session_id', filter=Q(current_intent_ema__gte=0.5)),
-            leads=Count('session_id', filter=~Q(lead_email='') & ~Q(lead_email__isnull=True)),
+            leads=Count('session_id', filter=(
+                (Q(lead_email__isnull=False) & ~Q(lead_email='')) |
+                (Q(lead_phone__isnull=False) & ~Q(lead_phone='')))),
         )
         .order_by('-sessions')[:10]
     )

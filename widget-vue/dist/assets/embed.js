@@ -497,11 +497,11 @@
   <div class="cf-lead-head">
     <div class="cf-lead-titles">
       <span class="cf-lead-ttl">Get a personalised follow-up</span>
-      <span class="cf-lead-sub">Leave your details and our team will reach out.</span>
+      <span class="cf-lead-sub">Share your email or phone — either one is enough.</span>
     </div>
     <button id="cf-lead-cls" aria-label="Dismiss">&#10005;</button>
   </div>
-  <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="you@email.com"/>
+  <input class="cf-lead-inp" id="cf-lead-em" type="email" placeholder="you@email.com (optional)"/>
   <div class="cf-lead-phone">
     <span class="cf-lead-cc">+94</span>
     <input class="cf-lead-inp cf-lead-ph" id="cf-lead-ph" type="tel" inputmode="tel" maxlength="20" placeholder="Phone number (optional)"/>
@@ -960,25 +960,31 @@ function normalizePhone(raw){
 function setLeadErr(msg){var e=$('cf-lead-err');if(e)e.textContent=msg||''}
 function submitLead(){
   var em=($('cf-lead-em').value||'').trim();
-  if(!em){setLeadErr('Please enter your email.');return}
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(em)){setLeadErr('Please enter a valid email.');return}
-  // Phone is optional. Accepts a local LK number (defaults to +94) or any
-  // international number.
   var phRaw=($('cf-lead-ph')?$('cf-lead-ph').value:'')||'';
+  var phTyped=phRaw.trim();
+  // Either an email OR a phone is enough — require at least one.
+  if(!em&&!phTyped){setLeadErr('Please enter your email or phone number.');return}
+  if(em&&!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(em)){setLeadErr('Please enter a valid email.');return}
   var phone=null;
-  if(phRaw.trim()){
+  if(phTyped){
     phone=normalizePhone(phRaw);
-    if(!phone){setLeadErr('Please enter a valid phone number (e.g. 77 123 4567 or +1 555 123 4567).');return}
+    if(!phone){setLeadErr('Please enter a valid phone number (e.g. 077 123 4567 or +94 77 123 4567).');return}
   }
   setLeadErr('');
   $('cf-lead-sb').disabled=true;$('cf-lead-sb').textContent='…';
   fetch(B+'/api/chat/lead/',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({session_id:sid,email:em,phone:phone})
+    body:JSON.stringify({session_id:sid,email:em||null,phone:phone})
   }).then(function(r){
     if(r&&!r.ok&&r.status===400){
-      // Backend rejected the phone — surface it and let them fix.
+      // Surface the SPECIFIC field the backend rejected (email vs phone) so the
+      // visitor fixes the right thing instead of a generic phone error.
       $('cf-lead-sb').disabled=false;$('cf-lead-sb').textContent='Send my details';
-      setLeadErr('Please enter a valid phone number.');
+      r.json().then(function(j){
+        var code=(j&&j.error)||'';
+        if(code==='invalid_email')setLeadErr('Please enter a valid email.');
+        else if(code==='invalid_phone')setLeadErr('Please enter a valid phone number.');
+        else setLeadErr((j&&j.detail)||'Please enter a valid email or phone number.');
+      }).catch(function(){setLeadErr('Please check your details and try again.');});
       throw new Error('invalid');
     }
     // Just hide the form. We do NOT post a local "we'll be in touch" bubble

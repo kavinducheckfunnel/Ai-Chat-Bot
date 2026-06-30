@@ -653,18 +653,20 @@ def _promote_lead_on_capture(session):
 
     Mirrors the explicit lead-modal logic, minus the injected confirmation
     message (the AI already replied conversationally):
-      • BOTH email + phone  → CONVERTED (the conversion event for this funnel)
-      • partial + warm/intent → HOT_LEAD
+      • BOTH email + phone     → CONVERTED (the conversion event for this funnel)
+      • a SINGLE valid contact → HOT_LEAD (a captured email OR phone is a real,
+                                 qualified lead on its own — no heat gate)
     Never demotes. Saves the session if it changed.
     """
     cur = (session.kanban_state or '').upper()
-    has_full_contact = bool((session.lead_email or '').strip() and (session.lead_phone or '').strip())
-    heat = session.heat_score or 0
-    intent = session.current_intent_ema or 0
+    has_email = bool((session.lead_email or '').strip())
+    has_phone = bool((session.lead_phone or '').strip())
+    if not (has_email or has_phone):
+        return
     new_state = None
-    if has_full_contact and cur not in {'CONVERTED', 'LOST'}:
+    if has_email and has_phone and cur not in {'CONVERTED', 'LOST'}:
         new_state = 'CONVERTED'
-    elif (heat >= 60 or intent >= 0.6) and cur in {'NEW', 'ENGAGED', 'CONTACTED', 'QUALIFIED'}:
+    elif cur in {'NEW', 'ENGAGED', 'CONTACTED', 'QUALIFIED'}:
         new_state = 'HOT_LEAD'
     if new_state and new_state != cur:
         session.kanban_state = new_state
