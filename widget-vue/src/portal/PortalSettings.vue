@@ -411,7 +411,7 @@
                 <svg class="pg-caret" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                 <span class="pg-path" :title="r.url || r.path">{{ r.path }}</span>
                 <span class="pg-type">{{ r.page_type }}</span>
-                <span class="pg-preview">{{ r.greeting_on ? (r.greeting_message || '(default greeting)') : 'No greeting' }}</span>
+                <span class="pg-spacer"></span>
                 <div class="pg-switches" @click.stop>
                   <label class="cf-toggle" :class="{ on: r.greeting_on }" title="Send a welcome message on this page">
                     <span class="cf-toggle-cap">Greeting</span>
@@ -1331,8 +1331,15 @@ async function suggestCtaFromBehavior() {
   }
 }
 
-// Sync form with client prop
-watch(() => props.client, (c) => {
+// Sync form with the client prop. The INITIAL run is deferred to onMounted
+// (below) rather than using { immediate: true }, because an immediate watch
+// fires synchronously DURING setup — before the refs declared further down
+// (pForm, pageRows, defaultRules, pageTagMap, offers, cannedResponses) exist.
+// When the parent passes the client synchronously, the old immediate watch hit
+// those refs in their temporal dead zone, threw, and silently skipped
+// loadSitePages() — which is why the Pages list looked empty until a manual
+// "Sync pages" click. Running from onMounted guarantees every ref is ready.
+function applyClient(c) {
   if (!c) return
   form.value.chatbot_name = c.chatbot_name || ''
   form.value.chatbot_color = c.chatbot_color || '#6366F1'
@@ -1387,7 +1394,9 @@ watch(() => props.client, (c) => {
   if (c.telegram_enabled && c.telegram_bot_token) {
     loadTelegramWebhookStatus()
   }
-}, { immediate: true })
+}
+watch(() => props.client, applyClient)
+onMounted(() => applyClient(props.client))
 
 // ── Proactive & pages ─────────────────────────────────────────────────────────
 const pForm = ref({
@@ -2890,8 +2899,7 @@ watch(() => props.client, (c) => { if (c) loadWebhookData() }, { immediate: true
   flex-shrink: 0; max-width: 210px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pg-type { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
   padding: 2px 7px; border-radius: 20px; background: rgba(99,102,241,0.12); color: #a5b4fc; flex-shrink: 0; }
-.pg-preview { flex: 1; min-width: 0; font-size: 12px; color: var(--cf-text-muted);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-spacer { flex: 1; min-width: 8px; }
 .pg-switches { display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
 .pg-sw-wrap { display: inline-flex; align-items: center; gap: 6px; }
 .pg-sw-label { font-size: 11px; font-weight: 600; color: var(--cf-text-muted); }
