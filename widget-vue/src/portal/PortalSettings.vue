@@ -1406,9 +1406,25 @@ const pageTagMap = ref({})
 const genericFallback = ref('How can I help you with your shopping today?')
 
 // Dynamic {tags} valid for a page type (Product → product_name, …). Sourced
-// from the backend (chat/page_rules.PAGE_TAGS) so there's one source of truth.
+// from the backend (chat/page_rules.PAGE_TAGS) so there's one source of truth,
+// with a local fallback so the chips always render even if the API response
+// hasn't loaded page_tags yet (must mirror chat/page_rules.PAGE_TAGS).
+const FALLBACK_PAGE_TAGS = {
+  home:       [{ tag: '{store_name}', label: 'Store name' }],
+  collection: [{ tag: '{category_name}', label: 'Category name' }, { tag: '{store_name}', label: 'Store name' }],
+  product:    [{ tag: '{product_name}', label: 'Product name' }, { tag: '{store_name}', label: 'Store name' }],
+  cart:       [{ tag: '{cart_item_count}', label: 'Items in cart' }, { tag: '{cart_total}', label: 'Cart total' }, { tag: '{store_name}', label: 'Store name' }],
+  checkout:   [{ tag: '{checkout_step}', label: 'Checkout step' }, { tag: '{store_name}', label: 'Store name' }],
+  contact:    [{ tag: '{store_name}', label: 'Store name' }],
+  about:      [{ tag: '{store_name}', label: 'Store name' }],
+  track:      [{ tag: '{store_name}', label: 'Store name' }],
+  offers:     [{ tag: '{store_name}', label: 'Store name' }],
+  faq:        [{ tag: '{store_name}', label: 'Store name' }],
+  fallback:   [{ tag: '{store_name}', label: 'Store name' }],
+}
 function pageTags(pt) {
-  return pageTagMap.value[pt] || pageTagMap.value['fallback'] || []
+  const m = (pageTagMap.value && Object.keys(pageTagMap.value).length) ? pageTagMap.value : FALLBACK_PAGE_TAGS
+  return m[pt] || m['fallback'] || FALLBACK_PAGE_TAGS['fallback']
 }
 function insertTag(r, tag) {
   const cur = r.greeting_message || ''
