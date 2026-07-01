@@ -190,6 +190,18 @@ class TestPageMessageEndpoint:
         b = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/b'), format='json')
         assert b.json()['status'] == 'sent'
 
+    def test_greeting_self_heals_if_lost(self, anon_client, chat_session):
+        # If a greeting is ever lost from history (e.g. clobbered by a concurrent
+        # chat save), a revisit RE-persists it — dedupe is against the real
+        # history, not a permanent flag.
+        r1 = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/a'), format='json')
+        assert r1.json()['status'] == 'sent'
+        chat_session.refresh_from_db()
+        chat_session.chat_history = [m for m in (chat_session.chat_history or []) if m.get('page') != '/products/a']
+        chat_session.save(update_fields=['chat_history'])
+        r2 = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/a'), format='json')
+        assert r2.json()['status'] == 'sent'  # re-persisted, not permanently 'duplicate'
+
     def test_product_name_used(self, anon_client, chat_session):
         r = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/x', product_name='Yamaha Cap'), format='json')
         assert 'Yamaha Cap' in r.json()['message']
@@ -252,6 +264,12 @@ class TestWidgetConfigProactive:
         assert data['idle_message'] == 'Still there?'
         assert data['exit_message'] == "Don't go!"
         assert data['store_name'] == client_obj.name
+
+    def test_config_includes_notification_delay(self, anon_client, client_obj):
+        client_obj.notification_delay_seconds = 5
+        client_obj.save()
+        data = anon_client.get(f'/api/chat/widget-config/{client_obj.id}/').json()
+        assert data['notification_delay_seconds'] == 5
 
 
 # ─── admin site-pages endpoint ────────────────────────────────────────────────

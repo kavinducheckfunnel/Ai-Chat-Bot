@@ -248,6 +248,9 @@ class Client(models.Model):
     notification_timeout_seconds = models.IntegerField(default=20)
     # Auto-close the open chat window after N seconds idle. 0 = never.
     auto_close_seconds = models.IntegerField(default=0)
+    # Delay (seconds) before the page-greeting popup appears after a visitor
+    # lands on a page. 0 = show immediately.
+    notification_delay_seconds = models.IntegerField(default=0)
     # Manual, STATIC (no-LLM) nudge messages. Blank = disabled.
     #   idle_message → shown as a suggestion bubble when the visitor goes quiet
     #                  (chat closed) for ~45s. Fires once per session.

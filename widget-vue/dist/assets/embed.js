@@ -30,9 +30,11 @@
   background: rgba(17,17,17,0.97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.10); border-radius: 16px; border-bottom-right-radius: 6px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.5); color: #e7e9ee; font-size: 13px; line-height: 1.45;
-  position: relative; cursor: pointer; user-select: none;
-  animation: cf-pi .3s cubic-bezier(.34,1.56,.64,1) forwards; }
-#cf-note.show { display: block; }
+  position: relative; cursor: pointer; user-select: none; }
+/* Animate on SHOW, not on the base rule — iOS Safari mishandles an animation
+   that starts while the element is display:none (the forwards end-state is not
+   applied, so the note stayed at opacity:0 and never appeared on iPhone). */
+#cf-note.show { display: block; animation: cf-pi .3s cubic-bezier(.34,1.56,.64,1) both; }
 #cf-note-tx { display: block; padding-right: 16px; }
 #cf-note-x { position: absolute; top: 5px; right: 7px; background: none; border: none; color: #94a3b8;
   font-size: 15px; line-height: 1; cursor: pointer; padding: 2px; }
@@ -641,11 +643,11 @@ function newMsgId(){return 'u_'+Date.now()+'_'+Math.random().toString(36).slice(
 // State + helpers. Matching/classification mirrors chat/page_rules.py so the
 // widget can show greetings INSTANTLY (no LLM, no blocking round-trip); the
 // server re-derives authoritatively when we persist for the inbox.
-var pageRules=[],assistantIntro='',proactiveEnabled=true,notifTimeout=20,autoCloseSeconds=0;
+var pageRules=[],assistantIntro='',proactiveEnabled=true,notifTimeout=20,autoCloseSeconds=0,notifDelay=0;
 // Store/brand name + manual static nudges (no LLM).
 var storeName='',idleMessage='',exitMessage='';
 // Global defaults from config; per-page overrides (page_rules) win when present.
-var cfgNotifTimeout=20,cfgAutoClose=0;
+var cfgNotifTimeout=20,cfgAutoClose=0,cfgNotifDelay=0;
 var cfgReady=false,widgetHidden=false;
 var UNREAD_KEY='cf_unread_'+sid,GREET_KEY='cf_greeted_'+sid,INTRO_KEY='cf_intro_'+sid,DND_KEY='cf_dnd_'+C;
 
@@ -812,27 +814,31 @@ function maybeGreet(){
   var vals=cfPageValues(pt);
   var text=cfGreetText(rule,vals);
   if(!text)return;
-  // First-touch intro — shown as its OWN first bubble (notification #1), then the
-  // page greeting follows a few seconds later. Once per session.
-  var introDone=false;try{introDone=localStorage.getItem(INTRO_KEY)==='1'}catch(e){}
-  if(!introDone&&assistantIntro){
-    try{localStorage.setItem(INTRO_KEY,'1')}catch(e){}
-    bumpUnread();showNote(assistantIntro);
-    setTimeout(function(){if(!isOpen&&!isDnd()&&!widgetHidden){bumpUnread();showNote(text)}},3000);
-  }else{
-    bumpUnread();showNote(text);
-  }
-  // Persist to the inbox ONCE per distinct PATH per session (server dedupes per
-  // path too), so every distinct page becomes its own history entry. The server
-  // prepends the intro as the first message on first-touch.
-  if(greetedPaths().indexOf(path)<0){
-    markGreetedPath(path);
+  // Fire the greeting after the (per-page or global) notification delay. Re-check
+  // the visitor is still on this page and hasn't opened/dismissed the chat.
+  var fire=function(){
+    if((location.pathname||'/')!==path||isOpen||isDnd()||widgetHidden)return;
+    // First-touch intro — its OWN first bubble (notification #1), then the page
+    // greeting a few seconds later. Once per session.
+    var introDone=false;try{introDone=localStorage.getItem(INTRO_KEY)==='1'}catch(e){}
+    if(!introDone&&assistantIntro){
+      try{localStorage.setItem(INTRO_KEY,'1')}catch(e){}
+      bumpUnread();showNote(assistantIntro);
+      setTimeout(function(){if(!isOpen&&!isDnd()&&!widgetHidden){bumpUnread();showNote(text)}},3000);
+    }else{
+      bumpUnread();showNote(text);
+    }
+    // ALWAYS POST — the server de-dupes per path against the real chat history
+    // and self-heals if an earlier greeting was ever lost (e.g. after a chat),
+    // so every distinct page is captured exactly once.
     try{fetch(B+'/api/chat/page-message/',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({session_id:sid,client_id:C,page_url:location.href,page_type:pt,
         product_name:vals.product_name||'',category_name:vals.category_name||'',
         cart_item_count:vals.cart_item_count||'',cart_total:vals.cart_total||'',
         checkout_step:vals.checkout_step||''})}).catch(function(){})}catch(e){}
-  }
+  };
+  var d=(notifDelay||0)*1000;
+  if(d>0)setTimeout(fire,d);else fire();
 }
 // Re-fetch the server transcript so persisted greetings appear when opened.
 function refreshTranscript(){
@@ -857,13 +863,15 @@ function cfOnNav(){
 // Effective notification-timeout + auto-close: per-page override (page_rules)
 // when the current page has one, otherwise the global default.
 function applyPageOverrides(){
-  notifTimeout=cfgNotifTimeout; autoCloseSeconds=cfgAutoClose;
+  notifTimeout=cfgNotifTimeout; autoCloseSeconds=cfgAutoClose; notifDelay=cfgNotifDelay;
   var rule=cfMatchRule(pageRules,location.pathname||'/');
   if(rule){
     var nt=rule.notification_timeout;
     if(nt!==undefined&&nt!==null&&nt!=='')notifTimeout=Number(nt)||cfgNotifTimeout;
     var ac=rule.auto_close;
     if(ac!==undefined&&ac!==null&&ac!=='')autoCloseSeconds=Number(ac)||0;
+    var nd=rule.notification_delay;
+    if(nd!==undefined&&nd!==null&&nd!=='')notifDelay=Number(nd)||0;
   }
 }
 (function(){
@@ -904,6 +912,7 @@ function applyConfig(cfg){
   if(typeof cfg.assistant_intro==='string')assistantIntro=cfg.assistant_intro;
   if(typeof cfg.proactive_enabled!=='undefined')proactiveEnabled=!!cfg.proactive_enabled;
   if(cfg.notification_timeout_seconds)cfgNotifTimeout=cfg.notification_timeout_seconds;
+  if(typeof cfg.notification_delay_seconds!=='undefined')cfgNotifDelay=cfg.notification_delay_seconds||0;
   if(typeof cfg.auto_close_seconds!=='undefined')cfgAutoClose=cfg.auto_close_seconds||0;
   // Store name (fills {store_name}) + manual static nudges.
   if(typeof cfg.store_name==='string'&&cfg.store_name)storeName=cfg.store_name;

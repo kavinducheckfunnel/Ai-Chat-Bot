@@ -34,7 +34,7 @@ class ClientSerializer(serializers.ModelSerializer):
             'outbound_webhook_url', 'outbound_webhook_events',
             'canned_responses',
             'page_rules', 'assistant_intro', 'proactive_notifications_enabled',
-            'notification_timeout_seconds', 'auto_close_seconds',
+            'notification_timeout_seconds', 'auto_close_seconds', 'notification_delay_seconds',
             'idle_message', 'exit_message',
             'active_offers',
         ]

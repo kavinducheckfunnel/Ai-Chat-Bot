@@ -356,6 +356,10 @@
             <input class="input" type="text" v-model="pForm.assistant_intro" maxlength="200" placeholder="Hi! I'm your AI Shopping Assistant." />
           </div>
           <div class="field">
+            <label>Notification delay (seconds) <span class="field-hint">— wait this long after a visitor lands on a page before showing the popup. 0 = instant.</span></label>
+            <input class="input" type="number" min="0" max="120" v-model.number="pForm.notification_delay_seconds" />
+          </div>
+          <div class="field">
             <label>Notification timeout (seconds)</label>
             <input class="input" type="number" min="3" max="120" v-model.number="pForm.notification_timeout_seconds" />
           </div>
@@ -449,6 +453,11 @@
                   <p class="pg-tags-note" v-if="pageTags(r.page_type).length">You can use the same tags here — e.g. <code>Use {{ pageTags(r.page_type)[0].tag }} naturally.</code></p>
                 </div>
                 <div class="pg-overrides">
+                  <div class="pg-field">
+                    <label>Notification delay (sec)</label>
+                    <input class="input" type="number" min="0" max="120" v-model="r.notification_delay"
+                      :placeholder="'Default: ' + (pForm.notification_delay_seconds || 0)" />
+                  </div>
                   <div class="pg-field">
                     <label>Notification timeout (sec)</label>
                     <input class="input" type="number" min="3" max="300" v-model="r.notification_timeout"
@@ -1385,6 +1394,7 @@ function applyClient(c) {
   pForm.value.assistant_intro = c.assistant_intro || "Hi! I'm your AI Shopping Assistant."
   pForm.value.notification_timeout_seconds = c.notification_timeout_seconds || 20
   pForm.value.auto_close_seconds = c.auto_close_seconds || 0
+  pForm.value.notification_delay_seconds = c.notification_delay_seconds || 0
   pForm.value.idle_message = c.idle_message || ''
   pForm.value.exit_message = c.exit_message || ''
   offers.value = Array.isArray(c.active_offers) ? c.active_offers.map(o => ({ ...o, id: o.id || offId() })) : []
@@ -1404,6 +1414,7 @@ const pForm = ref({
   assistant_intro: "Hi! I'm your AI Shopping Assistant.",
   notification_timeout_seconds: 20,
   auto_close_seconds: 0,
+  notification_delay_seconds: 0,
   idle_message: '',
   exit_message: '',
 })
@@ -1466,6 +1477,7 @@ function buildRows(pages) {
       widget_visible: ex ? (ex.enabled_widget !== false) : true,
       notification_timeout: ex && ex.notification_timeout != null ? ex.notification_timeout : '',
       auto_close: ex && ex.auto_close != null ? ex.auto_close : '',
+      notification_delay: ex && ex.notification_delay != null ? ex.notification_delay : '',
       custom: false, _open: false,
     }
   })
@@ -1479,6 +1491,7 @@ function buildRows(pages) {
       behavior_prompt: r.behavior_prompt || '', widget_visible: r.enabled_widget !== false,
       notification_timeout: r.notification_timeout != null ? r.notification_timeout : '',
       auto_close: r.auto_close != null ? r.auto_close : '',
+      notification_delay: r.notification_delay != null ? r.notification_delay : '',
       custom: true, _open: false,
     })
   })
@@ -1535,7 +1548,7 @@ function addRow() {
   pageRows.value.push({
     path: '/', url: '', title: 'Custom', page_type: 'fallback',
     greeting_on: true, greeting_message: '', behavior_prompt: '', widget_visible: true,
-    notification_timeout: '', auto_close: '', custom: true, _open: true,
+    notification_timeout: '', auto_close: '', notification_delay: '', custom: true, _open: true,
   })
 }
 
@@ -1548,6 +1561,7 @@ async function saveProactive() {
       assistant_intro: pForm.value.assistant_intro,
       notification_timeout_seconds: pForm.value.notification_timeout_seconds,
       auto_close_seconds: pForm.value.auto_close_seconds,
+      notification_delay_seconds: pForm.value.notification_delay_seconds,
       idle_message: pForm.value.idle_message,
       exit_message: pForm.value.exit_message,
     })
@@ -1566,9 +1580,10 @@ async function savePageRules() {
       if (!path) return
       const nt = (r.notification_timeout ?? '').toString().trim()
       const ac = (r.auto_close ?? '').toString().trim()
+      const nd = (r.notification_delay ?? '').toString().trim()
       // A row produces a rule if it customizes anything: greeting on, widget
-      // hidden, behavior prompt, or a per-page timeout/auto-close override.
-      const active = r.greeting_on || !r.widget_visible || (r.behavior_prompt || '').trim() || nt !== '' || ac !== ''
+      // hidden, behavior prompt, or a per-page timeout/delay/auto-close override.
+      const active = r.greeting_on || !r.widget_visible || (r.behavior_prompt || '').trim() || nt !== '' || ac !== '' || nd !== ''
       if (!active) return
       const isProduct = r.page_type === 'product'
       const rule = {
@@ -1585,6 +1600,7 @@ async function savePageRules() {
       // Per-page overrides — only persisted when set (blank → global default).
       if (nt !== '') rule.notification_timeout = Math.max(3, Math.min(300, Number(nt) || 20))
       if (ac !== '') rule.auto_close = Math.max(0, Math.min(3600, Number(ac) || 0))
+      if (nd !== '') rule.notification_delay = Math.max(0, Math.min(120, Number(nd) || 0))
       rules.push(rule)
     })
     // Q2: pages the tenant didn't enable get a generic fallback greeting.

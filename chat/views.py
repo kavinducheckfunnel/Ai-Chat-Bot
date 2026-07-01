@@ -226,6 +226,7 @@ def widget_config(request, client_id):
         'proactive_enabled': bool(client.proactive_notifications_enabled) and getattr(client, 'cta_mode', 'ai') != 'off',
         'notification_timeout_seconds': client.notification_timeout_seconds,
         'auto_close_seconds': client.auto_close_seconds,
+        'notification_delay_seconds': client.notification_delay_seconds,
         # Store/brand name → fills the {store_name} dynamic tag in greetings.
         'store_name': client.name,
         # Manual, static (no-LLM) nudges. Blank → feature off / use CTA strategy.
@@ -529,17 +530,7 @@ def page_message(request):
         return Response({'status': 'ignored', 'reason': 'no greeting for page'}, status=status.HTTP_202_ACCEPTED)
 
     page_type = rule.get('page_type') or _page_rules.classify_path(page_url)
-
-    # De-dupe by PATH (not page_type) so EVERY distinct page the visitor lands on
-    # gets its own notification in the chat history — visit 5 pages → 5 greetings.
-    # Revisiting the SAME page won't duplicate it. Governed by this per-path key,
-    # NOT the time-gap; we still stamp last_proactive_at so behavioral CTAs don't
-    # pile on top of a greeting.
-    from django.core.cache import cache
     dpath = _page_rules._path_of(page_url)
-    dedupe_key = f'pg_{session_id}_{dpath}'
-    if cache.get(dedupe_key):
-        return Response({'status': 'duplicate'}, status=status.HTTP_202_ACCEPTED)
 
     # Dynamic tag values: product_name etc. come from the widget (live page);
     # store_name is the tenant's business name. Resolution degrades gracefully
@@ -556,28 +547,38 @@ def page_message(request):
     if not text:
         return Response({'status': 'ignored', 'reason': 'empty'}, status=status.HTTP_202_ACCEPTED)
 
-    from django.db.models import F
-    history = session.chat_history or []
-
-    # First-touch intro — persisted as its OWN first message (once per session),
-    # so the chat history reads: intro, then each page's greeting.
+    # ── Persist atomically, de-duped per PATH against the ACTUAL history ──────
+    # The widget POSTs on every page arrival; we lock the row and check the real
+    # chat_history (tagged with 'page'). This is AUTHORITATIVE — it survives cache
+    # eviction/restarts AND self-heals: if an earlier greeting was ever lost (e.g.
+    # a concurrent chat save clobbered it), the next visit re-persists it. Every
+    # distinct page therefore lands in the history exactly once.
+    from django.db import transaction
     intro_text = ''
-    if not session.greeting_intro_sent:
-        intro_text = (client.assistant_intro or '').strip()
-        if intro_text:
-            history.append({'role': 'ai', 'message': intro_text,
-                            'source': 'page_greeting', 'msg_id': f'pg_{uuid.uuid4().hex[:12]}'})
+    with transaction.atomic():
+        locked = ChatSession.objects.select_for_update().get(session_id=session_id)
+        history = locked.chat_history or []
+        for _m in history:
+            if _m.get('source') == 'page_greeting' and _m.get('page') == dpath:
+                return Response({'status': 'duplicate'}, status=status.HTTP_202_ACCEPTED)
 
-    msg_id = f'pg_{uuid.uuid4().hex[:12]}'
-    history.append({'role': 'ai', 'message': text, 'source': 'page_greeting', 'msg_id': msg_id})
-    ChatSession.objects.filter(session_id=session_id).update(
-        chat_history=history,
-        last_message_at=timezone.now(),
-        greeting_intro_sent=True,
-        last_proactive_at=timezone.now(),
-        proactive_count=F('proactive_count') + 1,
-    )
-    cache.set(dedupe_key, '1', 2 * 60 * 60)  # 2h ~ session lifetime
+        # First-touch intro — its OWN first message (once per session).
+        if not locked.greeting_intro_sent:
+            intro_text = (client.assistant_intro or '').strip()
+            if intro_text:
+                history.append({'role': 'ai', 'message': intro_text, 'source': 'page_greeting',
+                                'msg_id': f'pg_{uuid.uuid4().hex[:12]}', 'page': '__intro__'})
+
+        msg_id = f'pg_{uuid.uuid4().hex[:12]}'
+        history.append({'role': 'ai', 'message': text, 'source': 'page_greeting',
+                        'msg_id': msg_id, 'page': dpath})
+        locked.chat_history = history
+        locked.last_message_at = timezone.now()
+        locked.greeting_intro_sent = True
+        locked.last_proactive_at = timezone.now()
+        locked.proactive_count = (locked.proactive_count or 0) + 1
+        locked.save(update_fields=['chat_history', 'last_message_at', 'greeting_intro_sent',
+                                   'last_proactive_at', 'proactive_count'])
 
     # `intro` (if any) is returned so the widget can show it as the first bubble.
     return Response({'status': 'sent', 'message': text, 'msg_id': msg_id,

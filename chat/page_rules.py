@@ -112,7 +112,7 @@ DEFAULT_PAGE_RULES = [
 _PUBLIC_KEYS = ('id', 'label', 'match_type', 'pattern', 'page_type', 'priority',
                 'enabled_widget', 'greeting_enabled', 'greeting_message',
                 # Per-page overrides for widget behavior (blank → use global).
-                'notification_timeout', 'auto_close')
+                'notification_timeout', 'auto_close', 'notification_delay')
 
 
 # Dynamic tags available per page type. Surfaced in the portal so tenants know
