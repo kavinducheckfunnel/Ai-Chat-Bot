@@ -64,6 +64,23 @@ class TestMatchRule:
         rule = pr.match_rule(rules, '/products/abc')
         assert rule['page_type'] == 'product'
 
+    def test_fallback_typed_page_is_not_catch_all(self):
+        # A page that CLASSIFIES as 'fallback' (e.g. /hello-world) but has a
+        # specific pattern must NOT hijack other paths — only the empty-pattern
+        # fallback is a catch-all. This is the "home page not working" bug.
+        rules = [
+            {'page_type': 'home', 'match_type': 'exact', 'pattern': '/', 'priority': 15,
+             'greeting_message': 'home', 'greeting_enabled': True, 'enabled_widget': True},
+            {'page_type': 'fallback', 'match_type': 'exact', 'pattern': '/hello-world', 'priority': 50,
+             'greeting_message': 'hw', 'greeting_enabled': True, 'enabled_widget': True},
+            {'page_type': 'fallback', 'match_type': 'contains', 'pattern': '', 'priority': 0,
+             'greeting_message': 'fb', 'greeting_enabled': True, 'enabled_widget': True},
+        ]
+        assert pr.match_rule(rules, 'https://s.com/')['page_type'] == 'home'
+        assert pr.match_rule(rules, 'https://s.com/hello-world')['greeting_message'] == 'hw'
+        # An unmapped path falls to the empty-pattern fallback, not /hello-world.
+        assert pr.match_rule(rules, 'https://s.com/random-xyz')['greeting_message'] == 'fb'
+
     def test_more_specific_pattern_wins_at_equal_priority(self):
         # A custom rule for /products/tshirts must beat the generic /products/
         # template on a deeper sub-page, so /products/tshirts/polo INHERITS the
@@ -141,30 +158,37 @@ class TestPageMessageEndpoint:
         return {'session_id': str(session.session_id), 'client_id': str(session.client_id),
                 'page_url': page_url, **extra}
 
-    def test_first_touch_prepends_intro_once(self, anon_client, chat_session, client_obj):
+    def test_first_touch_intro_is_separate_first_message(self, anon_client, chat_session, client_obj):
         client_obj.assistant_intro = "Hi! I'm your AI Shopping Assistant."
         client_obj.save()
-        # First greeting (home) → intro prepended
+        # First greeting (home): intro returned SEPARATELY, greeting NOT prefixed.
         r1 = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/'), format='json')
         assert r1.status_code in (200, 202)
         assert r1.json()['status'] == 'sent'
-        assert r1.json()['message'].startswith("Hi! I'm your AI Shopping Assistant.")
+        assert r1.json()['intro'] == "Hi! I'm your AI Shopping Assistant."
+        assert not r1.json()['message'].startswith("Hi! I'm your AI Shopping Assistant.")
 
-        # Second greeting on a DIFFERENT page type (product) → NO intro repeat
+        # Second greeting on a different page → NO intro repeat
         r2 = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/x'), format='json')
         assert r2.json()['status'] == 'sent'
-        assert not r2.json()['message'].startswith("Hi! I'm your AI Shopping Assistant.")
+        assert r2.json()['intro'] == ''
 
         chat_session.refresh_from_db()
         assert chat_session.greeting_intro_sent is True
         greetings = [m for m in chat_session.chat_history if m.get('source') == 'page_greeting']
-        assert len(greetings) == 2
+        # intro + home greeting + product greeting = 3, and the intro is FIRST.
+        assert len(greetings) == 3
+        assert greetings[0]['message'] == "Hi! I'm your AI Shopping Assistant."
 
-    def test_dedupe_same_page_type(self, anon_client, chat_session):
+    def test_dedupe_same_path(self, anon_client, chat_session):
+        # Same PATH twice → duplicate; a DIFFERENT path (even same page_type) →
+        # sent, so every distinct page lands in the history.
         a = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/a'), format='json')
         assert a.json()['status'] == 'sent'
+        a2 = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/a'), format='json')
+        assert a2.json()['status'] == 'duplicate'
         b = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/b'), format='json')
-        assert b.json()['status'] == 'duplicate'
+        assert b.json()['status'] == 'sent'
 
     def test_product_name_used(self, anon_client, chat_session):
         r = anon_client.post(pm_url(), self._body(chat_session, 'https://s.com/products/x', product_name='Yamaha Cap'), format='json')

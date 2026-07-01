@@ -664,16 +664,18 @@ function cfClassify(path){
   return'fallback';
 }
 function cfMatches(rule,path){
-  var pt=rule.page_type||'';
-  if(pt==='fallback')return true;
-  var mt=rule.match_type||'contains',pat=rule.pattern||'';
+  var pt=rule.page_type||'',mt=rule.match_type||'contains',pat=rule.pattern||'';
+  // Only the designated fallback (empty pattern) is a true catch-all; a page
+  // that merely classifies as 'fallback' (/hello-world) must match its own
+  // pattern only — else it hijacks every page incl. home.
+  if(pt==='fallback'&&!pat)return true;
   if(pat){try{
     if(mt==='exact'){if(path===pat||path.replace(/\\/+$/,'')===pat.replace(/\\/+$/,''))return true}
     else if(mt==='prefix'){if(path.indexOf(pat)===0)return true}
     else if(mt==='regex'){if(new RegExp(pat).test(path))return true}
     else{if(path.toLowerCase().indexOf(pat.toLowerCase())>=0)return true}
   }catch(e){}}
-  return !!pt&&cfClassify(path)===pt;
+  return !!pt&&pt!=='fallback'&&cfClassify(path)===pt;
 }
 function cfMatchRule(rules,path){
   // Rank by (priority desc, pattern-length desc) so a MORE SPECIFIC rule wins
@@ -776,6 +778,11 @@ function isDnd(){try{return sessionStorage.getItem(DND_KEY)==='1'}catch(e){retur
 function setDnd(){try{sessionStorage.setItem(DND_KEY,'1')}catch(e){}}
 function greetedTypes(){try{return JSON.parse(localStorage.getItem(GREET_KEY)||'[]')||[]}catch(e){return[]}}
 function markGreeted(t){var a=greetedTypes();if(a.indexOf(t)<0){a.push(t);try{localStorage.setItem(GREET_KEY,JSON.stringify(a))}catch(e){}}}
+// Per-PATH persistence guard — POST each distinct page once so every page the
+// visitor lands on gets its own history entry (visit 5 pages → 5 greetings).
+var GREETP_KEY='cf_greetedp_'+sid;
+function greetedPaths(){try{return JSON.parse(localStorage.getItem(GREETP_KEY)||'[]')||[]}catch(e){return[]}}
+function markGreetedPath(p){var a=greetedPaths();if(a.indexOf(p)<0){a.push(p);try{localStorage.setItem(GREETP_KEY,JSON.stringify(a))}catch(e){}}}
 // Suggestion bubble
 var noteTimer=null;
 function showNote(text){
@@ -805,13 +812,21 @@ function maybeGreet(){
   var vals=cfPageValues(pt);
   var text=cfGreetText(rule,vals);
   if(!text)return;
+  // First-touch intro — shown as its OWN first bubble (notification #1), then the
+  // page greeting follows a few seconds later. Once per session.
   var introDone=false;try{introDone=localStorage.getItem(INTRO_KEY)==='1'}catch(e){}
-  if(!introDone&&assistantIntro){text=assistantIntro+' '+text;try{localStorage.setItem(INTRO_KEY,'1')}catch(e){}}
-  bumpUnread();
-  showNote(text);
-  // Persist to the inbox ONCE per page_type per session (server also dedupes).
-  if(greetedTypes().indexOf(pt)<0){
-    markGreeted(pt);
+  if(!introDone&&assistantIntro){
+    try{localStorage.setItem(INTRO_KEY,'1')}catch(e){}
+    bumpUnread();showNote(assistantIntro);
+    setTimeout(function(){if(!isOpen&&!isDnd()&&!widgetHidden){bumpUnread();showNote(text)}},3000);
+  }else{
+    bumpUnread();showNote(text);
+  }
+  // Persist to the inbox ONCE per distinct PATH per session (server dedupes per
+  // path too), so every distinct page becomes its own history entry. The server
+  // prepends the intro as the first message on first-touch.
+  if(greetedPaths().indexOf(path)<0){
+    markGreetedPath(path);
     try{fetch(B+'/api/chat/page-message/',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({session_id:sid,client_id:C,page_url:location.href,page_type:pt,
         product_name:vals.product_name||'',category_name:vals.category_name||'',

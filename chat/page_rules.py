@@ -191,14 +191,21 @@ def _pattern_matches(rule, path):
 
 
 def _rule_matches(rule, path):
-    if (rule.get('page_type') or '') == 'fallback':
-        return True  # catch-all
+    pt = (rule.get('page_type') or '')
+    pat = rule.get('pattern') or ''
+    # The designated fallback (NO pattern) is the ONLY true catch-all. A page
+    # that merely CLASSIFIES as 'fallback' (e.g. /hello-world, /sample-page on
+    # WordPress) must match its own pattern only — otherwise it acts as a
+    # catch-all and hijacks every other page, incl. home. (This was the
+    # "home page not working" bug.)
+    if pt == 'fallback' and not pat:
+        return True
     if _pattern_matches(rule, path):
         return True
-    # Robust fallback: classify the path and match by canonical page_type so
-    # Shopify/Woo variants (/category/, /contact-us/, /help/, …) still hit.
-    pt = rule.get('page_type')
-    return bool(pt) and classify_path(path) == pt
+    # Robust classify fallback for Shopify/Woo variants (/category/, /contact-us/,
+    # /help/, …) — but NEVER for 'fallback': every unmatched path classifies as
+    # fallback, so allowing it here would re-introduce the catch-all hijack.
+    return bool(pt) and pt != 'fallback' and classify_path(path) == pt
 
 
 def get_rules(client):

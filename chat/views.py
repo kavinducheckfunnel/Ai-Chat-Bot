@@ -530,15 +530,16 @@ def page_message(request):
 
     page_type = rule.get('page_type') or _page_rules.classify_path(page_url)
 
-    # De-dupe: one greeting per page_type per session (decision: avoid spam).
+    # De-dupe by PATH (not page_type) so EVERY distinct page the visitor lands on
+    # gets its own notification in the chat history — visit 5 pages → 5 greetings.
+    # Revisiting the SAME page won't duplicate it. Governed by this per-path key,
+    # NOT the time-gap; we still stamp last_proactive_at so behavioral CTAs don't
+    # pile on top of a greeting.
     from django.core.cache import cache
-    dedupe_key = f'pg_{session_id}_{page_type}'
+    dpath = _page_rules._path_of(page_url)
+    dedupe_key = f'pg_{session_id}_{dpath}'
     if cache.get(dedupe_key):
         return Response({'status': 'duplicate'}, status=status.HTTP_202_ACCEPTED)
-    # Page greetings are governed by the per-type dedupe above (one per page type
-    # per session) — NOT the time-gap, so a visitor still gets a distinct greeting
-    # when they move to a different page type. We DO stamp last_proactive_at below
-    # so behavioral CTAs won't pile on top of a greeting.
 
     # Dynamic tag values: product_name etc. come from the widget (live page);
     # store_name is the tenant's business name. Resolution degrades gracefully
@@ -555,15 +556,19 @@ def page_message(request):
     if not text:
         return Response({'status': 'ignored', 'reason': 'empty'}, status=status.HTTP_202_ACCEPTED)
 
-    # First-touch intro prepend (once per session).
-    if not session.greeting_intro_sent:
-        intro = (client.assistant_intro or '').strip()
-        if intro:
-            text = f'{intro} {text}'
-
     from django.db.models import F
-    msg_id = f'pg_{uuid.uuid4().hex[:12]}'
     history = session.chat_history or []
+
+    # First-touch intro — persisted as its OWN first message (once per session),
+    # so the chat history reads: intro, then each page's greeting.
+    intro_text = ''
+    if not session.greeting_intro_sent:
+        intro_text = (client.assistant_intro or '').strip()
+        if intro_text:
+            history.append({'role': 'ai', 'message': intro_text,
+                            'source': 'page_greeting', 'msg_id': f'pg_{uuid.uuid4().hex[:12]}'})
+
+    msg_id = f'pg_{uuid.uuid4().hex[:12]}'
     history.append({'role': 'ai', 'message': text, 'source': 'page_greeting', 'msg_id': msg_id})
     ChatSession.objects.filter(session_id=session_id).update(
         chat_history=history,
@@ -574,7 +579,9 @@ def page_message(request):
     )
     cache.set(dedupe_key, '1', 2 * 60 * 60)  # 2h ~ session lifetime
 
-    return Response({'status': 'sent', 'message': text, 'msg_id': msg_id, 'page_type': page_type})
+    # `intro` (if any) is returned so the widget can show it as the first bubble.
+    return Response({'status': 'sent', 'message': text, 'msg_id': msg_id,
+                     'page_type': page_type, 'intro': intro_text})
 
 
 @api_view(['POST'])

@@ -1493,6 +1493,7 @@ function toggleAll() {
 }
 
 let _autoSyncTried = false
+let _rowsBuilt = false
 async function loadSitePages() {
   if (!props.client) return
   try {
@@ -1502,7 +1503,14 @@ async function loadSitePages() {
     const fb = defaultRules.value.find(x => x.page_type === 'fallback')
     if (fb) genericFallback.value = fb.greeting_message
     const pages = data?.pages || []
-    buildRows(pages)
+    // Build the editable rows ONCE (first load / explicit sync). We must NOT
+    // rebuild on every props.client change (e.g. after "Save settings" or a
+    // background client refresh) or we'd wipe the tenant's UNSAVED page edits —
+    // that was the "sometimes it won't save / won't update" bug.
+    if (!_rowsBuilt) {
+      buildRows(pages)
+      _rowsBuilt = true
+    }
     // Persist-across-refresh: detected pages live in the DB, so they should
     // reappear on reload. If none were detected yet but a knowledge base
     // exists, auto-detect once so the tenant never has to click "Sync".
@@ -1518,7 +1526,8 @@ async function syncPages() {
   pSyncing.value = true
   try {
     const data = await api.syncSitePages(props.client.id)
-    buildRows(data?.pages || [])
+    buildRows(data?.pages || [])   // explicit user action → rebuild is intended
+    _rowsBuilt = true
   } catch {} finally { pSyncing.value = false }
 }
 
