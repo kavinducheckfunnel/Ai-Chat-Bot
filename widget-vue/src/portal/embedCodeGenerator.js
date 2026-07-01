@@ -639,6 +639,10 @@ var msgCount=0,liveCtaMsg=null;
 var LEAD_KEY='cf_lead_'+C;
 var leadDone=!!localStorage.getItem(LEAD_KEY);
 var $=function(id){return document.getElementById(id)};
+// Apply the LAST-KNOWN style/theme/colour synchronously on load (cached from a
+// prior visit) so returning visitors never see a 1s flash of the default
+// Style-1/dark widget before the live config arrives.
+try{var _ui=JSON.parse(localStorage.getItem('cf_ui_'+C)||'null');if(_ui){var _uw=$('cf-w');if(_uw){if(_ui.s)_uw.setAttribute('data-cf-style',_ui.s);if(_ui.t)_uw.setAttribute('data-cf-theme',_ui.t);if(_ui.c)_uw.style.setProperty('--cf-accent',_ui.c)}}}catch(e){}
 
 // ── Chat history persistence ─────────────────────────────────────────
 // Stored in localStorage keyed by the current sid so the transcript is
@@ -861,8 +865,12 @@ function maybeGreet(){
     }
     // ALWAYS POST — the server de-dupes per path against the real chat history
     // and self-heals if an earlier greeting was ever lost (e.g. after a chat),
-    // so every distinct page is captured exactly once.
-    try{fetch(B+'/api/chat/page-message/',{method:'POST',headers:{'Content-Type':'application/json'},
+    // so every distinct page is captured exactly once. keepalive:true lets the
+    // request COMPLETE even if the visitor clicks a link and the page starts
+    // unloading right after the bubble shows — without it the browser aborts the
+    // in-flight fetch on navigation, which is why some greetings weren't saved.
+    // (keepalive fetch does a proper cross-origin request, unlike sendBeacon.)
+    try{fetch(B+'/api/chat/page-message/',{method:'POST',headers:{'Content-Type':'application/json'},keepalive:true,
       body:JSON.stringify({session_id:sid,client_id:C,page_url:location.href,page_type:pt,
         product_name:vals.product_name||'',category_name:vals.category_name||'',
         cart_item_count:vals.cart_item_count||'',cart_total:vals.cart_total||'',
@@ -933,6 +941,9 @@ function applyConfig(cfg){
   // Widget style (Style 1 'classic' pill · Style 2 'assistant' card)
   var styleA=(cfg.widget_style==='assistant');
   if(w)w.setAttribute('data-cf-style',styleA?'assistant':'classic');
+  // Cache style/theme/colour so the NEXT page load applies them instantly
+  // (no flash of the default Style-1/dark widget before this config arrives).
+  try{localStorage.setItem('cf_ui_'+C,JSON.stringify({s:styleA?'assistant':'classic',t:cfg.chatbot_theme||'dark',c:cfg.chatbot_color||''}))}catch(e){}
   if(cfg.voice_input_enabled)$('cf-vb').style.display='flex';else $('cf-vb').style.display='none';
   // Image attach: classic uses #cf-ib, Style 2 uses #cf-mediab — never both.
   if(cfg.image_input_enabled&&!styleA)$('cf-ib').style.display='flex';else $('cf-ib').style.display='none';
@@ -1340,12 +1351,37 @@ function handleFile(f){if(!f)return;var r=new FileReader();r.onload=function(ev)
 
 // ── Voice ────────────────────────────────────────────────────────────
 function toggleVoice(){
-  if(recording){if(recognition)recognition.stop();recording=false;$('cf-vb').classList.remove('rec');$('cf-inp').placeholder='Type a message…';return}
-  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return;
-  recognition=new SR();recognition.continuous=false;recognition.interimResults=false;recognition.lang='en-US';
-  recognition.onresult=function(e){$('cf-inp').value=e.results[0][0].transcript;$('cf-sb').disabled=!$('cf-inp').value.trim();recording=false;$('cf-vb').classList.remove('rec');$('cf-inp').placeholder='Type a message…'};
-  recognition.onerror=recognition.onend=function(){recording=false;$('cf-vb').classList.remove('rec');$('cf-inp').placeholder='Type a message…'};
-  recognition.start();recording=true;$('cf-vb').classList.add('rec');$('cf-inp').placeholder='\\uD83C\\uDFA4 Listening...'}
+  if(recording){try{if(recognition)recognition.stop()}catch(e){}return}
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  var inp=$('cf-inp');
+  if(!SR){inp.placeholder='Voice input not supported here';setTimeout(function(){inp.placeholder='Type a message…'},2500);return}
+  try{recognition=new SR()}catch(e){return}
+  // interimResults=true is the key reliability fix: we capture the partial
+  // transcript as the visitor speaks, so a flaky/absent FINAL result no longer
+  // means nothing gets captured. We keep the best text seen (final preferred).
+  recognition.continuous=false;recognition.interimResults=true;recognition.lang='en-US';recognition.maxAlternatives=1;
+  var got='';
+  recognition.onresult=function(e){
+    var fin='',itm='';
+    for(var i=0;i<e.results.length;i++){var t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t;else itm+=t}
+    var txt=(fin||itm).trim();
+    if(txt){got=txt;inp.value=txt;$('cf-sb').disabled=!txt&&!pendingImg}
+  };
+  recognition.onerror=function(ev){
+    recording=false;$('cf-vb').classList.remove('rec');
+    var er=(ev&&ev.error)||'';
+    inp.placeholder=(er==='not-allowed'||er==='service-not-allowed')?'Allow microphone access to use voice':(er==='no-speech'?'No speech detected. Tap and try again.':'Type a message…');
+    setTimeout(function(){if(!recording)inp.placeholder='Type a message…'},2800);
+  };
+  recognition.onend=function(){
+    recording=false;$('cf-vb').classList.remove('rec');
+    if((inp.placeholder||'').indexOf('Listening')>=0){
+      inp.placeholder=got?'Type a message…':'No speech detected. Tap and try again.';
+      if(!got)setTimeout(function(){if(!recording)inp.placeholder='Type a message…'},2800);
+    }
+    if(got){try{inp.focus()}catch(e){}}
+  };
+  try{recognition.start();recording=true;$('cf-vb').classList.add('rec');inp.placeholder='\\uD83C\\uDFA4 Listening…'}catch(e){recording=false;$('cf-vb').classList.remove('rec')}}
 
 // ── Toggle ───────────────────────────────────────────────────────────
 function toggleOpen(){
